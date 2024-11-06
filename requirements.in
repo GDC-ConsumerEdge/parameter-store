@@ -2,3 +2,5 @@ Django==5.1.2
 Jinja2==3.1.4
 psycopg==3.2.3
 psycopg-binary==3.2.3
+django-unfold==0.40.0
+django-jsonforms==1.1.2
