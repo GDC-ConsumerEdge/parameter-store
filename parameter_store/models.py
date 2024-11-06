@@ -77,7 +77,8 @@ class ClusterIntent(models.Model):
 
 class ClusterFleetLabel(models.Model):
     cluster = models.ForeignKey(Cluster, on_delete=models.CASCADE)
-    label = models.CharField(max_length=63, blank=False, null=False)
+    key = models.CharField(max_length=63, blank=False, null=False)
+    value = models.CharField(max_length=63, blank=False, null=False)
 
     class Meta:
         verbose_name = 'Cluster Fleet Label'
