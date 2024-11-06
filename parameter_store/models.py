@@ -2,7 +2,7 @@ from django.db import models
 
 
 class Group(models.Model):
-    name = models.CharField(max_length=30, unique=True, null=False)
+    name = models.CharField(max_length=30, blank=False, unique=True, null=False)
     description = models.CharField(max_length=255, null=True, blank=True)
 
     def __str__(self):
@@ -10,7 +10,7 @@ class Group(models.Model):
 
 
 class Cluster(models.Model):
-    name = models.CharField(max_length=30, unique=True, null=False)
+    name = models.CharField(max_length=30, blank=False, unique=True, null=False)
     description = models.CharField(max_length=255, null=True, blank=True)
     group = models.ForeignKey(Group, on_delete=models.DO_NOTHING)
     data = models.JSONField(null=True, blank=True, default=dict)
@@ -25,7 +25,7 @@ class Cluster(models.Model):
 
 
 class Tag(models.Model):
-    name = models.CharField(max_length=30, unique=True, null=False)
+    name = models.CharField(max_length=30, blank=False, unique=True, null=False)
     description = models.CharField(max_length=255, null=True, blank=True)
 
     def __str__(self):
@@ -38,6 +38,10 @@ class ClusterTag(models.Model):
 
     def __str__(self):
         return f'{self.cluster.name} - {self.tag.name}'
+
+    class Meta:
+        verbose_name = 'Cluster Tag'
+        verbose_name_plural = 'Cluster Tags'
 
 
 class ClusterIntent(models.Model):
@@ -73,7 +77,11 @@ class ClusterIntent(models.Model):
 
 class ClusterFleetLabel(models.Model):
     cluster = models.ForeignKey(Cluster, on_delete=models.CASCADE)
-    label = models.CharField(max_length=63, null=False)
+    label = models.CharField(max_length=63, blank=False, null=False)
+
+    class Meta:
+        verbose_name = 'Cluster Fleet Label'
+        verbose_name_plural = 'Cluster Fleet Labels'
 
     def __str__(self):
         return f'{self.cluster.name} - {self.label}'
