@@ -42,6 +42,12 @@ class ClusterAdmin(uadmin.ModelAdmin):
     ordering = ['group', 'name']
 
 
+class ClusterFleetLabelAdmin(uadmin.ModelAdmin):
+    list_display = ['cluster', 'key', 'value']
+    sortable_by = ['cluster', 'key', 'value']
+    ordering = ['cluster', 'key']
+
+
 class ParamStoreAdmin(usites.UnfoldAdminSite):
     site_header = 'Parameter Store'
     site_title = 'Parameter Store Admin'
@@ -75,6 +81,7 @@ class ParamStoreAdmin(usites.UnfoldAdminSite):
 param_admin_site = ParamStoreAdmin('param_admin')
 
 param_admin_site.register(Cluster, ClusterAdmin)
+param_admin_site.register(ClusterFleetLabel, ClusterFleetLabelAdmin)
 
 for model_name, model in app.models.items():
     try:

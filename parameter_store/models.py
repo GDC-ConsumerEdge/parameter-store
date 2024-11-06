@@ -84,8 +84,13 @@ class ClusterFleetLabel(models.Model):
         verbose_name = 'Cluster Fleet Label'
         verbose_name_plural = 'Cluster Fleet Labels'
 
+        constraints = [
+            models.UniqueConstraint(fields=['cluster', 'key'], name='unique_cluster_key')
+        ]
+
+
     def __str__(self):
-        return f'{self.cluster.name} - {self.label}'
+        return f'{self.cluster.name} - "{self.key}" = "{self.value}"'
 
 # class Role(models.Model):
 #     member = models.CharField(max_length=100, null=False)
