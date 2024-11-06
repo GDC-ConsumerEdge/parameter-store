@@ -25,7 +25,8 @@ class Cluster(models.Model):
 
 
 class Tag(models.Model):
-    name = models.CharField(max_length=30, blank=False, unique=True, null=False)
+    name = models.CharField(max_length=30, blank=False, unique=True, null=False,
+                            verbose_name='tag name')
     description = models.CharField(max_length=255, null=True, blank=True)
 
     def __str__(self):
@@ -46,25 +47,34 @@ class ClusterTag(models.Model):
 
 class ClusterIntent(models.Model):
     cluster = models.OneToOneField(Cluster, on_delete=models.CASCADE)
-    zone_id = models.CharField(max_length=30, null=False)
-    zone_name = models.CharField(max_length=100, null=True, blank=True)
-    machine_project_id = models.CharField(max_length=30, null=False)
-    fleet_project_id = models.CharField(max_length=30, null=False)
+    zone_id = models.CharField(max_length=30, null=False, verbose_name='Zone ID')
+    zone_name = models.CharField(max_length=100, null=True, blank=True, )
     location = models.CharField(max_length=30, null=False)
-    node_count = models.IntegerField(null=False, default=3)
-    cluster_ipv4_cidr = models.CharField(max_length=18, null=False)
-    services_ipv4_cidr = models.CharField(max_length=18, null=False)
-    external_load_balancer_ipv4_address_pools = models.CharField(max_length=18, null=False)
-    sync_repo = models.CharField(max_length=128, null=False)
-    sync_branch = models.CharField(max_length=50, null=False)
-    sync_dir = models.CharField(max_length=50, null=False)
+    machine_project_id = models.CharField(max_length=30, null=False,
+                                          verbose_name='Machine Project ID')
+    fleet_project_id = models.CharField(max_length=30, null=False, verbose_name='Fleet Project ID')
     secrets_project_id = models.CharField(max_length=30, null=False)
-    git_token_secrets_manager_name = models.CharField(max_length=255, null=False)
-    cluster_version = models.CharField(max_length=30, null=False)
+    node_count = models.IntegerField(null=False, default=3)
+    cluster_ipv4_cidr = models.CharField(max_length=18, null=False,
+                                         verbose_name='Cluster IPv4 CIDR')
+    services_ipv4_cidr = models.CharField(max_length=18, null=False,
+                                          verbose_name='Services IPv4 CIDR')
+    external_load_balancer_ipv4_address_pools = models.CharField(
+        max_length=18, null=False, verbose_name='External Load Balancer IPv4 Address Pools')
+    sync_repo = models.CharField(max_length=128, null=False, help_text='This is the full URL to a '
+                                                                       'Git repository')
+    sync_branch = models.CharField(max_length=50, null=False, default='main',
+                                   help_text='For; example: "main" or "master"')
+    sync_dir = models.CharField(max_length=50, null=False,
+                                default=f'hydrated/clusters/{cluster.name}', )
+    git_token_secret_manager_name = models.CharField(max_length=255, null=False)
+    cluster_version = models.CharField(max_length=30, null=False,
+                                       help_text='This is the GDCC control plane version, '
+                                                 'i.e. "1.7.1"')
     maintenance_window_start = models.TimeField(null=True, blank=True)
     maintenance_window_end = models.TimeField(null=True, blank=True)
     maintenance_window_recurrence = models.CharField(max_length=128, null=True, blank=True)
-    subnet_vlans = models.CharField(max_length=128, null=False)
+    subnet_vlans = models.CharField(max_length=128, null=True)
     recreate_on_delete = models.BooleanField(default=False)
 
     class Meta:
@@ -87,7 +97,6 @@ class ClusterFleetLabel(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['cluster', 'key'], name='unique_cluster_key')
         ]
-
 
     def __str__(self):
         return f'{self.cluster.name} - "{self.key}" = "{self.value}"'

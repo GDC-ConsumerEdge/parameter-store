@@ -2,50 +2,15 @@ import unfold.admin as uadmin
 import unfold.sites as usites
 from django.apps import apps
 from django.contrib import admin
-from django.contrib.admin.sites import AlreadyRegistered
 
-from .models import Cluster, ClusterIntent, ClusterTag, ClusterFleetLabel
+from .models import Cluster, ClusterIntent, ClusterTag, ClusterFleetLabel, Group, Tag
 
-admin.site.site_header = 'Parameter Store'
-admin.site.site_title = 'Parameter Store Admin'
-admin.site.index_title = 'Parameter Store Admin'
+# admin.site.site_header = 'Parameter Store'
+# admin.site.site_title = 'Parameter Store Admin'
+# admin.site.index_title = 'Parameter Store Admin'
 
 app = apps.get_app_config('parameter_store')
 app.verbose_name = 'Edge Parameter Store'
-
-
-class ClusterIntentInline(uadmin.StackedInline):
-    model = ClusterIntent
-    extra = 1
-
-
-class ClusterTagInline(uadmin.TabularInline):
-    model = ClusterTag
-    extra = 1
-
-
-class ClusterFleetLabels(uadmin.TabularInline):
-    model = ClusterFleetLabel
-    extra = 1
-
-
-class ClusterAdmin(uadmin.ModelAdmin):
-    @admin.display(description='Cluster Tags')
-    def comma_separated_tags(self, obj):
-        tags = obj.tags.all()
-        if tags:
-            return ", ".join(tag.name for tag in tags)
-
-    inlines = [ClusterTagInline, ClusterIntentInline]
-    list_display = ['name', 'group', 'comma_separated_tags']
-    sortable_by = ['name', 'group']
-    ordering = ['group', 'name']
-
-
-class ClusterFleetLabelAdmin(uadmin.ModelAdmin):
-    list_display = ['cluster', 'key', 'value']
-    sortable_by = ['cluster', 'key', 'value']
-    ordering = ['cluster', 'key']
 
 
 class ParamStoreAdmin(usites.UnfoldAdminSite):
@@ -80,11 +45,68 @@ class ParamStoreAdmin(usites.UnfoldAdminSite):
 
 param_admin_site = ParamStoreAdmin('param_admin')
 
-param_admin_site.register(Cluster, ClusterAdmin)
-param_admin_site.register(ClusterFleetLabel, ClusterFleetLabelAdmin)
 
-for model_name, model in app.models.items():
-    try:
-        param_admin_site.register(model)
-    except AlreadyRegistered:
-        pass
+class ClusterIntentInline(uadmin.StackedInline):
+    model = ClusterIntent
+    extra = 1
+
+
+class ClusterTagInline(uadmin.TabularInline):
+    model = ClusterTag
+    extra = 1
+
+
+class ClusterFleetLabels(uadmin.TabularInline):
+    model = ClusterFleetLabel
+    extra = 1
+
+
+@admin.register(Cluster, site=param_admin_site)
+class ClusterAdmin(uadmin.ModelAdmin):
+    @admin.display(description='Cluster Tags')
+    def comma_separated_tags(self, obj):
+        tags = obj.tags.all()
+        if tags:
+            return ", ".join(tag.name for tag in tags)
+
+    inlines = [ClusterTagInline, ClusterIntentInline]
+    list_display = ['name', 'group', 'comma_separated_tags']
+    list_filter = ['name', 'group', 'tags__name']
+    search_fields = ['name', 'group__name', 'tags__name']
+    sortable_by = ['name', 'group']
+    ordering = ['group', 'name']
+
+
+@admin.register(Group, site=param_admin_site)
+class GroupAdmin(uadmin.ModelAdmin):
+    list_display = ['name']
+    sortable_by = ['name']
+    ordering = ['name']
+
+
+@admin.register(Tag, site=param_admin_site)
+class TagAdmin(uadmin.ModelAdmin):
+    list_display = ['name']
+    sortable_by = ['name']
+    ordering = ['name']
+
+
+@admin.register(ClusterFleetLabel, site=param_admin_site)
+class ClusterFleetLabelAdmin(uadmin.ModelAdmin):
+    list_display = ['cluster', 'key', 'value']
+    sortable_by = ['cluster', 'key', 'value']
+    ordering = ['cluster', 'key']
+
+
+@admin.register(ClusterTag, site=param_admin_site)
+class ClusterTagAdmin(uadmin.ModelAdmin):
+    list_display = ['cluster', 'tag']
+    sortable_by = ['cluster', 'tag']
+    ordering = ['cluster', 'tag']
+
+
+@admin.register(ClusterIntent, site=param_admin_site)
+class ClusterIntentAdmin(uadmin.ModelAdmin):
+    list_display = ['cluster', 'zone_id', 'zone_name', 'location']
+    list_filter = ['cluster']
+    ordering = ['cluster']
