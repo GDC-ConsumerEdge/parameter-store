@@ -1,0 +1,32 @@
+services:
+  db: # Name of your database service
+    image: postgres:latest  # Use the official PostgreSQL image
+    environment:
+      - POSTGRES_USER=eps  # Set the database username
+      - POSTGRES_PASSWORD=123456  # Set the database password
+      - POSTGRES_DB=eps  # Set the database name
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U eps -d eps" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+  web:
+    image: gcr.io/daniel-test-proj-411311/parameter-store/parameter-store:latest
+    ports:
+      - "${HOST_PORT}:${DJANGO_PORT}"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+#      - DB_HOST=host.docker.internal
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=eps
+      - DB_PASSWORD=123456
+      - DB_NAME=eps
+      - DJANGO_PORT=${DJANGO_PORT}
+    command:
+      - /opt/venv/bin/gunicorn
+      - --bind
+      - 0.0.0.0:$DJANGO_PORT
+      - parameter_store.wsgi:application

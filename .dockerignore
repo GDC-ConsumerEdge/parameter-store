@@ -1,0 +1,9 @@
+__pycache__
+.cache
+.git
+.gitignore
+.idea
+.venv
+README.md
+docker-compose.yaml
+deployment
