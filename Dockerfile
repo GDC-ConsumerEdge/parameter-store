@@ -15,10 +15,12 @@
 # Use the official Python docker container, slim version, running Debian
 FROM python:3.13.0-slim-bookworm@sha256:450bb2ed2919f9a476c54c19884e200f473d89c2b2d458f07a03ee463026dcb8 as base
 
+# define virtual environment
+ENV VIRTUAL_ENV=/opt/venv
+
 FROM base as builder
 
 # Create a virtual environment
-ENV VIRTUAL_ENV=/opt/venv
 RUN python3 -m venv $VIRTUAL_ENV
 
 # Activate the virtual environment
@@ -27,7 +29,7 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 # Install dependencies.
 COPY requirements.* ./
 RUN pip install --require-hashes -r requirements.txt
-ENV PYTHONPATH="/usr/local/lib/python3.13/site-packages:${PYTHONPATH}"
+#ENV PYTHONPATH="/usr/local/lib/python3.13/site-packages:${PYTHONPATH}"
 
 # Copy your source code
 COPY . /app
@@ -60,16 +62,15 @@ ENV LOG_LEVEL info
 
 # default port of django admin site
 ENV DJANGO_PORT=8080
-EXPOSE $DJANGO_PORT
+EXPOSE ${DJANGO_PORT}
 
 # Add application code.
 COPY manage.py /app/
-COPY parameter_store /app/
+COPY parameter_store /app/parameter_store
 
 RUN chmod 777 /app && chmod 666 /app/*
 RUN chmod 777 /tmp
 
-
 # Start server using gunicorn
 # CMD cat /app/logging.conf && echo $PORT && echo $LOG_LEVEL && gunicorn -b :$PORT --threads 2 --log-config /app/logging.conf --log-level=$LOG_LEVEL "api:create_app()"
-CMD ["gunicorn", "parameter_store.wsgi:application", "--bind", ":$DJANGO_PORT"]
+CMD ["sh", "-c", "gunicorn parameter_store.wsgi:application --bind :${DJANGO_PORT}"]
