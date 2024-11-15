@@ -27,17 +27,15 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 # Install dependencies.
 COPY requirements.* ./
 RUN pip install --require-hashes -r requirements.txt
-# RUN pip install --prefix="/install" -r requirements.txt
 ENV PYTHONPATH="/usr/local/lib/python3.13/site-packages:${PYTHONPATH}"
 
 # Copy your source code
 COPY . /app
-#COPY --from=builder /install /usr/local
 
 # Set working directory
 WORKDIR /app
 
-# Collect static files
+# Collect static files. This will generate a folder named `staticfiles` in working directory
 RUN python3 manage.py collectstatic --noinput
 
 FROM base
@@ -74,4 +72,4 @@ RUN chmod 777 /tmp
 
 # Start server using gunicorn
 # CMD cat /app/logging.conf && echo $PORT && echo $LOG_LEVEL && gunicorn -b :$PORT --threads 2 --log-config /app/logging.conf --log-level=$LOG_LEVEL "api:create_app()"
-CMD ["gunicorn", "parameter_store.wsgi:application", "--bind", "0.0.0.0:$DJANGO_PORT"]
+CMD ["gunicorn", "parameter_store.wsgi:application", "--bind", ":$DJANGO_PORT"]
