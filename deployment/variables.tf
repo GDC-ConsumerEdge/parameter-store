@@ -172,12 +172,6 @@ variable "eps_vpc_access_cidr" {
   }
 }
 
-variable "eps_vpc_access_vpc" {
-  description = "The VPC where the EPS Private VPC Access locates"
-  type = string
-  default = "default"
-}
-
 variable "eps_vpc_access_min_throughput" {
   description = "The Min Throughput of EPS Private VPC Access (Mbps)"
   type = number
@@ -188,4 +182,27 @@ variable "eps_vpc_access_max_throughput" {
   description = "The Max Throughput of EPS Private VPC Access (Mbps)"
   type = number
   default = 1000
+}
+
+variable "eps_db_name" {
+  description = "The name of the Cloud SQL Postgres DB"
+  type = string
+}
+
+variable "vpc_name" {
+  description = "The name of the VPC where the all the resources located"
+  type = string
+  default = "default"
+}
+
+variable "subnet_name" {
+  description = "The name of the subnet in VPC where the all the resources located"
+  type = string
+  default = "default"
+}
+
+variable "eps_cert_name" {
+  description = "The name of the region self signed cert for eps"
+  type = string
+  default = "eps-cert"
 }

@@ -2,8 +2,24 @@ locals {
   project_id_fleet   = coalesce(var.project_id_fleet, var.project_id)
 }
 
+data "google_compute_network" "main" {
+  name    = var.vpc_name
+  project = local.project_id_fleet
+}
+
+data "google_compute_subnetwork" "main" {
+  name    = var.subnet_name
+  region  = var.region
+  project = local.project_id_fleet
+}
+
 data "google_sql_database_instance" "eps_db" {
-  name    = "cloud-sql--daniel-2"
+  name    = var.eps_db_name
+  project = local.project_id_fleet
+}
+
+data "google_compute_ssl_certificate" "eps_cert" {
+  name    = var.eps_cert_name
   project = local.project_id_fleet
 }
 
@@ -11,7 +27,7 @@ resource "google_vpc_access_connector" "eps_vpc_access" {
   name          = "eps-vpc-access"
   region        = var.region # Replace with your region
   ip_cidr_range = var.eps_vpc_access_cidr # Specify a custom IP range
-  network       = var.eps_vpc_access_vpc # Replace with your VPC network name
+  network       = data.google_compute_network.main.name # Replace with your VPC network name
 #   max_instances = 10
 #   min_instances = 2
   min_throughput  = var.eps_vpc_access_min_throughput
@@ -65,4 +81,51 @@ resource "google_cloud_run_v2_service" "eps_web" {
       }
     }
   }
+}
+
+resource "google_compute_region_network_endpoint_group" "eps_neg" {
+  name                  = "eps-neg"
+  region                = var.region
+  network_endpoint_type = "SERVERLESS"
+  cloud_run {
+    service = google_cloud_run_v2_service.eps_web.name
+  }
+}
+
+resource "google_compute_region_backend_service" "eps_lb_backend_svc" {
+  name                  = "eps-lb-backend-service"
+  region                = var.region
+  protocol              = "HTTPS"
+  load_balancing_scheme = "INTERNAL_MANAGED"
+  iap {
+    enabled             = true
+  }
+  backend {
+    group               = google_compute_region_network_endpoint_group.eps_neg.id
+  }
+}
+
+resource "google_compute_region_url_map" "eps_url_map" {
+  name            = "eps-url-map"
+  region          = var.region
+  default_service = google_compute_region_backend_service.eps_lb_backend_svc.id
+}
+
+resource "google_compute_region_target_https_proxy" "eps_https_proxy" {
+  name             = "eps-https-proxy"
+  region           = var.region
+  url_map          = google_compute_region_url_map.eps_url_map.id
+  ssl_certificates = [data.google_compute_ssl_certificate.eps_cert.id]
+}
+
+resource "google_compute_forwarding_rule" "eps_fwd_rule" {
+  name                  = "eps-lb-forwarding-rule"
+  region                = var.region
+  ip_protocol           = "TCP"
+  load_balancing_scheme = "INTERNAL_MANAGED"
+  port_range            = 443
+  allow_global_access   = true
+  target                = google_compute_region_target_https_proxy.eps_https_proxy.id
+  network               = data.google_compute_network.main.id
+  subnetwork            = data.google_compute_subnetwork.main.id
 }
