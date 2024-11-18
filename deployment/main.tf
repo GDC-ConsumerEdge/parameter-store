@@ -18,10 +18,18 @@ data "google_sql_database_instance" "eps_db" {
   project = local.project_id_fleet
 }
 
-data "google_compute_ssl_certificate" "eps_cert" {
-  name    = var.eps_cert_name
-  project = local.project_id_fleet
-}
+# # Seems region is not supported with ssl certifcates
+# data "google_compute_ssl_certificate" "eps_cert" {
+#   name    = var.eps_cert_name
+#   project = local.project_id_fleet
+# }
+
+# # certificate manager certificate not supported yet
+# data "google_certificate_manager_certificate" "eps_cert" {
+#   name      = var.eps_cert_name
+#   project   = local.project_id_fleet
+#   location  = var.region
+# }
 
 resource "google_vpc_access_connector" "eps_vpc_access" {
   name          = "eps-vpc-access"
@@ -115,7 +123,9 @@ resource "google_compute_region_target_https_proxy" "eps_https_proxy" {
   name             = "eps-https-proxy"
   region           = var.region
   url_map          = google_compute_region_url_map.eps_url_map.id
-  ssl_certificates = [data.google_compute_ssl_certificate.eps_cert.id]
+#   ssl_certificates = [data.google_compute_ssl_certificate.eps_cert.id]
+#   ssl_certificates = ["https://certificatemanager.googleapis.com/v1/projects/${local.project_id_fleet}/locations/${var.region}/certificates/${var.eps_cert_name}"]
+  ssl_certificates = ["//www.googleapis.com/compute/beta/projects/${local.project_id_fleet}/regions/${var.region}/sslCertificates/${var.eps_cert_name}"]
 }
 
 resource "google_compute_forwarding_rule" "eps_fwd_rule" {

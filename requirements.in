@@ -6,3 +6,4 @@ django-unfold==0.40.0
 django-jsonforms==1.1.2
 gunicorn==23.0.0
 whitenoise==6.8.2
+PyJWT==2.10.0
