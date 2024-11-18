@@ -78,12 +78,12 @@ class IapJwtMiddleware:
                 login(request, user)
 
             except jwt.DecodeError as err:
-                logger.warning(f'Failed to decode JWT "{iap_jwt}": {err}')
+                logger.error(f'Failed to decode JWT "{iap_jwt}": {err}')
 
             except KeyError:
-                logger.warning(f'No email found in JWT: {json.dumps(decoded_token, indent=4)}')
+                logger.error(f'No email found in JWT: {json.dumps(decoded_token, indent=4)}')
 
             except Exception as err:
-                logger.warning(err)
+                logger.error(err)
 
         return self.get_response(request)

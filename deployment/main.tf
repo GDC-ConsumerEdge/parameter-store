@@ -1,5 +1,6 @@
 locals {
   project_id_fleet   = coalesce(var.project_id_fleet, var.project_id)
+  project_id_secrets = coalesce(var.project_id_secrets, var.project_id)
 }
 
 data "google_compute_network" "main" {
@@ -86,6 +87,34 @@ resource "google_cloud_run_v2_service" "eps_web" {
       env {
         name = "DJANGO_PORT"
         value = var.django_port
+      }
+      env {
+        name = "GOOGLE_CLOUD_PROJECT"
+        value = local.project_id_fleet
+      }
+      env {
+        name = "REGION"
+        value = var.region
+      }
+      env {
+        name = "PROJECT_ID_SECRETS"
+        value = local.project_id_secrets
+      }
+      env {
+        name = "GIT_SECRET_ID"
+        value = ""
+      }
+      env {
+        name = "SOURCE_OF_TRUTH_REPO"
+        value = ""
+      }
+      env {
+        name = "SOURCE_OF_TRUTH_BRANCH"
+        value = ""
+      }
+      env {
+        name = "SOURCE_OF_TRUTH_PATH"
+        value = ""
       }
     }
   }
