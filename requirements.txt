@@ -240,6 +240,7 @@ django==5.1.2 \
     #   -r requirements.in
     #   django-jsonforms
     #   django-unfold
+    #   djangorestframework
 django-jsonforms==1.1.2 \
     --hash=sha256:3854c97345a5cd782b6c30e11b94b64134ababd5f84a825b80a4a585da955cca \
     --hash=sha256:6023b05e9b9dc5bfc3bd63eddd8a3294a7be8a7dfecc2978d316ef8fc64436b4
@@ -247,6 +248,10 @@ django-jsonforms==1.1.2 \
 django-unfold==0.40.0 \
     --hash=sha256:5038463cedb8e8110774f738bab0b50fbe51b269d7e9a2d4c0b6478a9f9d9d91 \
     --hash=sha256:84d2255d63d7cf4917f6cbe8a8caca2eed5d9175576a994d3d3f9b47381e19a0
+    # via -r requirements.in
+djangorestframework==3.15.2 \
+    --hash=sha256:2b8871b062ba1aefc2de01f773875441a961fefbf79f5eed1e32b2f096944b20 \
+    --hash=sha256:36fe88cd2d6c6bec23dca9804bab2ba5517a8bb9d8f47ebc68981b56840107ad
     # via -r requirements.in
 google-api-core[grpc]==2.23.0 \
     --hash=sha256:2ceb087315e6af43f256704b871d99326b1f12a9d6ce99beaedec99ba26a0ace \
@@ -256,6 +261,7 @@ google-auth==2.36.0 \
     --hash=sha256:51a15d47028b66fd36e5c64a82d2d57480075bccc7da37cde257fc94177a61fb \
     --hash=sha256:545e9618f2df0bcbb7dcbc45a546485b1212624716975a1ea5ae8149ce769ab1
     # via
+    #   -r requirements.in
     #   google-api-core
     #   google-cloud-secret-manager
 google-cloud-secret-manager==2.21.1 \
@@ -570,9 +576,7 @@ pygithub==2.5.0 \
 pyjwt[crypto]==2.10.0 \
     --hash=sha256:543b77207db656de204372350926bed5a86201c4cbff159f623f79c7bb487a15 \
     --hash=sha256:7628a7eb7938959ac1b26e819a1df0fd3259505627b575e4bad6d08f76db695c
-    # via
-    #   -r requirements.in
-    #   pygithub
+    # via pygithub
 pynacl==1.5.0 \
     --hash=sha256:06b8f6fa7f5de8d5d2f7573fe8c863c051225a27b61e6860fd047b1775807858 \
     --hash=sha256:0c84947a22519e013607c9be43706dd42513f9e6ae5d39d3613ca1e142fba44d \

@@ -60,7 +60,7 @@ class ClusterIntent(models.Model):
     services_ipv4_cidr = models.CharField(max_length=18, null=False,
                                           verbose_name='Services IPv4 CIDR')
     external_load_balancer_ipv4_address_pools = models.CharField(
-        max_length=18, null=False, verbose_name='External Load Balancer IPv4 Address Pools')
+        max_length=180, null=False, verbose_name='External Load Balancer IPv4 Address Pools')
     sync_repo = models.CharField(max_length=128, null=False, help_text='This is the full URL to a '
                                                                        'Git repository')
     sync_branch = models.CharField(max_length=50, null=False, default='main',
@@ -71,8 +71,8 @@ class ClusterIntent(models.Model):
     cluster_version = models.CharField(max_length=30, null=False,
                                        help_text='This is the GDCC control plane version, '
                                                  'i.e. "1.7.1"')
-    maintenance_window_start = models.TimeField(null=True, blank=True)
-    maintenance_window_end = models.TimeField(null=True, blank=True)
+    maintenance_window_start = models.DateTimeField(null=True, blank=True)
+    maintenance_window_end = models.DateTimeField(null=True, blank=True)
     maintenance_window_recurrence = models.CharField(max_length=128, null=True, blank=True)
     subnet_vlans = models.CharField(max_length=128, null=True)
     recreate_on_delete = models.BooleanField(default=False)

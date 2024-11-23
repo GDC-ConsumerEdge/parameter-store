@@ -23,12 +23,12 @@ call_command('makemigrations')
 # Database migrations
 call_command('migrate')
 
-# Create a superuser if one doesn't exist
-if not User.objects.filter(is_superuser=True).exists():
-    username = os.environ.get('DJANGO_SUPERUSERNAME', 'admin')
-    email = os.environ.get('DJANGO_SUPERUSEREMAIL', 'admin@example.com')
-    password = os.environ.get('DJANGO_SUPERUSERPASSWORD', 'Ch@ngeme!')
-    User.objects.create_superuser(username=username, email=email, password=password)
+# Create a superuser if one doesn't exist (maybe not, let the 1st user be superuser)
+# if not User.objects.filter(is_superuser=True).exists():
+#     username = os.environ.get('DJANGO_SUPERUSERNAME', 'admin')
+#     email = os.environ.get('DJANGO_SUPERUSEREMAIL', 'admin@example.com')
+#     password = os.environ.get('DJANGO_SUPERUSERPASSWORD', 'Ch@ngeme!')
+#     User.objects.create_superuser(username=username, email=email, password=password)
 
 from django.core.wsgi import get_wsgi_application
 application = get_wsgi_application()

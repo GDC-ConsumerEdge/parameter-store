@@ -73,7 +73,7 @@ class SotCsvIntegration:
                     repo.create_file(self.source_of_truth_path, 'created by eps', content, branch=self.source_of_truth_branch)
                     logger.info(f"File '{self.source_of_truth_path}' created successfully!")
                 else:
-                    logger.error(e)
+                    raise e
         elif parsed_result.netloc == "gitlab.com":
             gl = gitlab.Gitlab(url='https://gitlab.com', private_token=self.source_of_truth_repo_token)
             project = gl.projects.get(project_path)
@@ -93,6 +93,6 @@ class SotCsvIntegration:
                     })
                     logger.info(f"File '{self.source_of_truth_path}' created successfully!")
                 else:
-                    logger.error(e)
+                    raise e
         else:
-            logger.error(f"Unsupported git provider {self.source_of_truth_repo}")
+            raise Exception(f"Unsupported git provider {self.source_of_truth_repo}")

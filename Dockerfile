@@ -32,7 +32,9 @@ RUN pip install --require-hashes -r requirements.txt
 #ENV PYTHONPATH="/usr/local/lib/python3.13/site-packages:${PYTHONPATH}"
 
 # Copy your source code
-COPY . /app
+COPY manage.py /app/
+COPY parameter_store /app/parameter_store
+COPY auto_api /app/auto_api
 
 # Set working directory
 WORKDIR /app
@@ -46,7 +48,7 @@ FROM base
 COPY --from=builder $VIRTUAL_ENV $VIRTUAL_ENV
 
 # Copy collected static files
-COPY --from=builder /app/staticfiles /app/staticfiles
+COPY --from=builder /app /app
 
 # Activate the virtual environment
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
@@ -63,10 +65,6 @@ ENV LOG_LEVEL info
 # default port of django admin site
 ENV DJANGO_PORT=8080
 EXPOSE ${DJANGO_PORT}
-
-# Add application code.
-COPY manage.py /app/
-COPY parameter_store /app/parameter_store
 
 RUN chmod 777 /app && chmod 666 /app/*
 RUN chmod 777 /tmp

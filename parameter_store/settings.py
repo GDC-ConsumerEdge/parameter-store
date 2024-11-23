@@ -22,9 +22,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-%yzr3^+)s&c2$4sxk702l#m0(52xd81^e40bg3tq4j+xo$wy@v')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DJANGO_DEBUG', 'false').lower() == 'true'
 
 ALLOWED_HOSTS = ['*']
+
+
+CSRF_TRUSTED_ORIGINS = ['https://'+x.strip()
+                        for x in os.environ.get('CSRF_TRUSTED_ORIGINS', '*.internal, *.localhost').split(',')]
 
 # Application definition
 
@@ -38,7 +42,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'parameter_store'
+    'parameter_store',
+    'rest_framework',
+    'auto_api'
 ]
 
 MIDDLEWARE = [

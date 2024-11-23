@@ -43,11 +43,11 @@ variable "project_services" {
   type        = list(string)
   description = "GCP Service APIs (<api>.googleapis.com) to enable for this project"
   default = [
-    "cloudbuild.googleapis.com",
-    "cloudfunctions.googleapis.com",
-    "cloudscheduler.googleapis.com",
-    "run.googleapis.com",
-    "storage.googleapis.com",
+#     "cloudbuild.googleapis.com",
+#     "cloudfunctions.googleapis.com",
+#     "cloudscheduler.googleapis.com",
+#     "run.googleapis.com",
+#     "storage.googleapis.com",
   ]
 }
 
@@ -56,32 +56,37 @@ variable "project_services_fleet" {
   type        = list(string)
   description = "GCP Service APIs (<api>.googleapis.com) to enable for this project"
   default = [
-    "anthos.googleapis.com",
-    "anthosaudit.googleapis.com",
-    "anthosconfigmanagement.googleapis.com",
-    "anthosgke.googleapis.com",
+#     "anthos.googleapis.com",
+#     "anthosaudit.googleapis.com",
+#     "anthosconfigmanagement.googleapis.com",
+#     "anthosgke.googleapis.com",
     "artifactregistry.googleapis.com",
-    "cloudbuild.googleapis.com",
-    "cloudfunctions.googleapis.com",
-    "cloudresourcemanager.googleapis.com",
-    "cloudscheduler.googleapis.com",
+#     "cloudbuild.googleapis.com",
+#     "cloudfunctions.googleapis.com",
+#     "cloudresourcemanager.googleapis.com",
+#     "cloudscheduler.googleapis.com",
     "connectgateway.googleapis.com",
-    "container.googleapis.com",
-    "edgecontainer.googleapis.com",
-    "gkeconnect.googleapis.com",
-    "gkehub.googleapis.com",
-    "gkeonprem.googleapis.com",
+#     "container.googleapis.com",
+#     "edgecontainer.googleapis.com",
+#     "gkeconnect.googleapis.com",
+#     "gkehub.googleapis.com",
+#     "gkeonprem.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
+    "iap.googleapis.com",
+    "identitytoolkit.googleapis.com",
     "logging.googleapis.com",
     "monitoring.googleapis.com",
     "opsconfigmonitoring.googleapis.com",
     "run.googleapis.com",
     "secretmanager.googleapis.com",
     "serviceusage.googleapis.com",
+    "sql-component.googleapis.com",
+    "sqladmin.googleapis.com",
     "stackdriver.googleapis.com",
-    "storage.googleapis.com",
+#     "storage.googleapis.com",
     "sts.googleapis.com",
+    "vpcaccess.googleapis.com",
   ]
 }
 
@@ -184,8 +189,23 @@ variable "eps_vpc_access_max_throughput" {
   default = 1000
 }
 
+variable "eps_db_instance" {
+  description = "The name of the Cloud SQL Postgres Instance"
+  type = string
+}
+
 variable "eps_db_name" {
   description = "The name of the Cloud SQL Postgres DB"
+  type = string
+}
+
+variable "eps_db_user" {
+  description = "The username of the Cloud SQL Postgres DB"
+  type = string
+}
+
+variable "eps_db_password" {
+  description = "The user password of the Cloud SQL Postgres DB"
   type = string
 }
 
@@ -205,4 +225,16 @@ variable "eps_cert_name" {
   description = "The name of the region self signed cert for eps"
   type = string
   default = "eps-cert"
+}
+
+variable "iap_enabled" {
+  description = "Whether use with IAP. true: validate JWT with IAP public key. false: validate JWT with Google public key"
+  type = bool
+  default = true
+}
+
+variable "csrf_trusted_origins"{
+  description = "The trusted CSRF origins. Put the DNS domain name of the app to here."
+  type = list(string)
+  default = ["*.internal", "*.localhost"]
 }

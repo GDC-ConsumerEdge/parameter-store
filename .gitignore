@@ -169,4 +169,4 @@ cython_debug/
 
 # djano admin site statifiles
 staticfiles
-/test1.py
+/test*.py
