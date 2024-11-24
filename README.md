@@ -125,6 +125,8 @@ e.g. `gcr.io/test-proj-1234/parameter-store/parameter-store:v0.1`
 * The `latest` tag is always attached to the most recently built image
 ## Deploy to GCP
 We use terraform to deploy parameter store apps to a GCP project
+### System Diagram
+![eps_arch.png](./doc_img/eps_arch.png) 
 ### Initialize Terraform
 For the first time to deploy paramter store, we need to initialize terraform state.
 1. go to `deployment` folder
