@@ -56,7 +56,7 @@ class ClusterTagInline(uadmin.TabularInline):
     extra = 1
 
 
-class ClusterFleetLabels(uadmin.TabularInline):
+class ClusterFleetLabelsInline(uadmin.TabularInline):
     model = ClusterFleetLabel
     extra = 1
 
@@ -69,7 +69,7 @@ class ClusterAdmin(uadmin.ModelAdmin):
         if tags:
             return ", ".join(tag.name for tag in tags)
 
-    inlines = [ClusterTagInline, ClusterIntentInline]
+    inlines = [ClusterTagInline, ClusterFleetLabelsInline, ClusterIntentInline]
     list_display = ['name', 'group', 'comma_separated_tags']
     list_filter = ['name', 'group', 'tags__name']
     search_fields = ['name', 'group__name', 'tags__name']
