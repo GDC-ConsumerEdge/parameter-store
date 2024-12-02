@@ -13,48 +13,16 @@
 # limitations under the License.
 
 # Use the official Python docker container, slim version, running Debian
-FROM python:3.13.0-slim-bookworm@sha256:450bb2ed2919f9a476c54c19884e200f473d89c2b2d458f07a03ee463026dcb8 as base
-
-# define virtual environment
-ENV VIRTUAL_ENV=/opt/venv
-
-FROM base as builder
-
-# Create a virtual environment
-RUN python3 -m venv $VIRTUAL_ENV
-
-# Activate the virtual environment
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+FROM python:3.12-alpine
+# Set working directory
+WORKDIR /app
+# Copy your source code
+COPY . .
 
 # Install dependencies.
-COPY requirements.* ./
-RUN pip install --require-hashes -r requirements.txt
-#ENV PYTHONPATH="/usr/local/lib/python3.13/site-packages:${PYTHONPATH}"
-
-# Copy your source code
-COPY manage.py /app/
-COPY parameter_store /app/parameter_store
-COPY auto_api /app/auto_api
-
-# Set working directory
-WORKDIR /app
-
 # Collect static files. This will generate a folder named `staticfiles` in working directory
-RUN python3 manage.py collectstatic --noinput
-
-FROM base
-
-# Copy the virtual environment from the builder stage
-COPY --from=builder $VIRTUAL_ENV $VIRTUAL_ENV
-
-# Copy collected static files
-COPY --from=builder /app /app
-
-# Activate the virtual environment
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
-
-# Set working directory
-WORKDIR /app
+RUN pip3 install -r requirements.txt --require-hashes --no-cache-dir && \
+    python3 manage.py collectstatic --noinput
 
 # show python logs as they occur
 ENV PYTHONUNBUFFERED=0
@@ -65,9 +33,6 @@ ENV LOG_LEVEL info
 # default port of django admin site
 ENV DJANGO_PORT=8080
 EXPOSE ${DJANGO_PORT}
-
-RUN chmod 777 /app && chmod 666 /app/*
-RUN chmod 777 /tmp
 
 # Start server using gunicorn
 # CMD cat /app/logging.conf && echo $PORT && echo $LOG_LEVEL && gunicorn -b :$PORT --threads 2 --log-config /app/logging.conf --log-level=$LOG_LEVEL "api:create_app()"
