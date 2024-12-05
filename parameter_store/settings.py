@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 import os
+from operator import ifloordiv
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -19,16 +20,18 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-%yzr3^+)s&c2$4sxk702l#m0(52xd81^e40bg3tq4j+xo$wy@v')
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY',
+                            'django-insecure-%yzr3^+)s&c2$4sxk702l#m0(52xd81^e40bg3tq4j+xo$wy@v')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DJANGO_DEBUG', 'false').lower() == 'true'
 
 ALLOWED_HOSTS = ['*']
 
-
-CSRF_TRUSTED_ORIGINS = ['https://'+x.strip()
-                        for x in os.environ.get('CSRF_TRUSTED_ORIGINS', '*.internal, *.localhost').split(',')]
+CSRF_TRUSTED_ORIGINS = ['https://' + x.strip()
+                        for x in
+                        os.environ.get('CSRF_TRUSTED_ORIGINS', '*.internal, *.localhost').split(
+                            ',')]
 
 # Application definition
 
@@ -44,10 +47,15 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'parameter_store',
     'rest_framework',
-    'auto_api'
+    'auto_api',
 ]
 
-MIDDLEWARE = [
+if DEBUG:
+    INSTALLED_APPS += ['debug_toolbar']
+
+MIDDLEWARE = ['debug_toolbar.middleware.DebugToolbarMiddleware'] if DEBUG else []
+
+MIDDLEWARE += [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -92,7 +100,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.environ.get('DB_NAME', 'eps'),  # Default database name is 'eps'
         'USER': os.environ.get('DB_USER', 'eps'),  # Default username
-        'PASSWORD': os.environ.get('DB_PASSWORD', '123456'),  # Default password
+        'PASSWORD': os.environ.get('DB_PASSWORD', 's2K_Nz_gwRtjf.BCCPTmctkZ'),  # Default password
         'HOST': os.environ.get('DB_HOST', 'localhost'),  # Default host
         'PORT': os.environ.get('DB_PORT', '5432'),  # Default port
     }
@@ -160,3 +168,5 @@ LOGGING = {
         },
     },
 }
+
+INTERNAL_IPS = ['127.0.0.1']

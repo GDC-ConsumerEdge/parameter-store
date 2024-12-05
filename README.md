@@ -265,23 +265,23 @@ ALTER DATABASE eps OWNER TO eps;
 
 ```sql
 -- Connect to the database named 'eps'
-   \c eps
-   
-   -- Grant usage on the schema 'public' to 'eps'
-   GRANT USAGE ON SCHEMA public TO eps;
+\c eps
 
-   -- Grant create privileges on the schema 'public' to 'eps'
-   GRANT CREATE ON SCHEMA public TO eps;
+-- Grant usage on the schema 'public' to 'eps'
+GRANT USAGE ON SCHEMA public TO eps;
 
-   -- Grant all privileges on all tables in the schema 'public' to 'eps'
-   GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO eps;
+-- Grant create privileges on the schema 'public' to 'eps'
+GRANT CREATE ON SCHEMA public TO eps;
 
-   -- Grant all privileges on all sequences in the schema 'public' to 'eps'
-   GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO eps;
+-- Grant all privileges on all tables in the schema 'public' to 'eps'
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO eps;
 
-   -- Grant privileges to create and manage tables within the 'public' schema
-   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO eps;
-   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO eps;
+-- Grant all privileges on all sequences in the schema 'public' to 'eps'
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO eps;
+
+-- Grant privileges to create and manage tables within the 'public' schema
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO eps;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO eps;
 ```
 
 7. 
