@@ -367,3 +367,9 @@ I have Postgres running on my cloudtop while I dev locally, so I port-forward to
 ```shell
 ssh -TL 5432:localhost:5432 cloudtop
 ```
+
+## Disclaimer
+
+This project is not an official Google project. It is not supported by
+Google and Google specifically disclaims all warranties as to its quality,
+merchantability, or fitness for a particular purpose.
