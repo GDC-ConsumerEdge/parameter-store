@@ -36,4 +36,4 @@ EXPOSE ${DJANGO_PORT}
 
 # Start server using gunicorn
 # CMD cat /app/logging.conf && echo $PORT && echo $LOG_LEVEL && gunicorn -b :$PORT --threads 2 --log-config /app/logging.conf --log-level=$LOG_LEVEL "api:create_app()"
-CMD ["sh", "-c", "gunicorn parameter_store.wsgi:application --bind :${DJANGO_PORT}"]
+CMD ["sh", "-c", "gunicorn parameter_store.wsgi:application --workers 5 --worker-class sync --bind :${DJANGO_PORT}"]

@@ -7,6 +7,7 @@ from django.core.cache import cache
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.core.exceptions import ValidationError
+from guardian.admin import GuardedModelAdmin
 
 from .models import Cluster, ClusterIntent, ClusterTag, ClusterFleetLabel, Group, Tag, Validator, \
     ValidatorAssignment, ClusterData, ClusterDataField, ClusterDataFieldValidatorAssignment
@@ -25,8 +26,8 @@ class HideAdmin:
 
 class ParamStoreAdmin(usites.UnfoldAdminSite):
     site_header = 'Parameter Store'
-    site_title = 'Parameter Store Admin'
-    index_title = 'Parameter Store Admin'
+    site_title = 'Parameter Store'
+    index_title = 'Parameter Store'
 
     def get_app_list(self, request, app_label=None):
         """ Return a sorted list of all the installed apps that have been registered to this
@@ -166,7 +167,7 @@ class ClusterDataInline(uadmin.TabularInline):
 
 
 @admin.register(Cluster, site=param_admin_site)
-class ClusterAdmin(uadmin.ModelAdmin):
+class ClusterAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     inlines = [ClusterDataInline, ClusterTagInline, ClusterFleetLabelsInline, ClusterIntentInline]
     list_display = ['name', 'group', 'comma_separated_tags']
     list_filter = ['name', 'group', 'tags__name']
@@ -198,7 +199,7 @@ class ClusterAdmin(uadmin.ModelAdmin):
 
 
 @admin.register(Group, site=param_admin_site)
-class GroupAdmin(uadmin.ModelAdmin):
+class GroupAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     list_display = ['name']
     sortable_by = ['name']
     ordering = ['name']
@@ -206,7 +207,7 @@ class GroupAdmin(uadmin.ModelAdmin):
 
 
 @admin.register(Tag, site=param_admin_site)
-class TagAdmin(uadmin.ModelAdmin):
+class TagAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     list_display = ['name']
     sortable_by = ['name']
     ordering = ['name']
@@ -214,7 +215,7 @@ class TagAdmin(uadmin.ModelAdmin):
 
 
 @admin.register(ClusterFleetLabel, site=param_admin_site)
-class ClusterFleetLabelAdmin(uadmin.ModelAdmin):
+class ClusterFleetLabelAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     list_display = ['cluster', 'key', 'value']
     sortable_by = ['cluster', 'key', 'value']
     ordering = ['cluster', 'key']
@@ -222,7 +223,7 @@ class ClusterFleetLabelAdmin(uadmin.ModelAdmin):
 
 
 @admin.register(ClusterIntent, site=param_admin_site)
-class ClusterIntentAdmin(uadmin.ModelAdmin):
+class ClusterIntentAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     list_display = ['cluster', 'zone_name', 'zone_name', 'location']
     list_filter = ['cluster']
     ordering = ['cluster']
@@ -230,13 +231,13 @@ class ClusterIntentAdmin(uadmin.ModelAdmin):
 
 
 @admin.register(Validator, site=param_admin_site)
-class ValidatorAdmin(uadmin.ModelAdmin):
+class ValidatorAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     list_display = ['name', 'validator']
     validate_on_save = True
 
 
 @admin.register(ValidatorAssignment, site=param_admin_site)
-class ValidatorAssignmentAdmin(uadmin.ModelAdmin):
+class ValidatorAssignmentAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     list_display = ['model_field', 'validator']
     validate_on_save = True
 
