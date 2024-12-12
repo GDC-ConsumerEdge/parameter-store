@@ -1,28 +1,75 @@
 # parameter_store
-## Preparation
-### Install required tools
+- [parameter\_store](#parameter_store)
+  - [Description](#description)
+  - [Getting Started](#getting-started)
+    - [Preparation](#preparation)
+      - [Install required tools](#install-required-tools)
+      - [Configure GCP OAuth Consent Screen](#configure-gcp-oauth-consent-screen)
+      - [Cloud SQL (Postgres)](#cloud-sql-postgres)
+      - [Public IP Address for Loadbalancer](#public-ip-address-for-loadbalancer)
+      - [Prepare DNS name of Parameter Store app](#prepare-dns-name-of-parameter-store-app)
+      - [SSL Certificate](#ssl-certificate)
+      - [Create IAP Service Identity and Assign Roles](#create-iap-service-identity-and-assign-roles)
+      - [Automation Integration related resources](#automation-integration-related-resources)
+    - [Build Image](#build-image)
+    - [Deploy to GCP](#deploy-to-gcp)
+      - [System Diagram](#system-diagram)
+      - [Initialize Terraform](#initialize-terraform)
+      - [Configure Terraform Variables](#configure-terraform-variables)
+      - [More Deployment Variables](#more-deployment-variables)
+      - [Deploy Parameter Store App](#deploy-parameter-store-app)
+      - [Enable IAP for Parameter Store](#enable-iap-for-parameter-store)
+      - [Teardown](#teardown)
+  - [Operate Parameter Store](#operate-parameter-store)
+  - [Local Dev](#local-dev)
+      - [Postgres Setup](#postgres-setup)
+      - [Python Setup](#python-setup)
+      - [Django Setup](#django-setup)
+  - [Appendix](#appendix)
+      - [Possible Errors](#possible-errors)
+      - [Dev Hacks](#dev-hacks)
+  - [Disclaimer](#disclaimer)
+
+## Description
+This repository gets you started in deploying Edge Parameter Store. GDCc at scale uses a source of truth for the declartive intent during automated cluster provisioning. Edge Paramater Store enables users to manage the source of truth through a management portal. Benefits of using edge parameter store
+- SSO login via Google IAM
+- Auditing - what happened when
+- Schema - provides guardrails
+## Getting Started
+Go through  all of the steps below to get started
+- Preparation
+- Build Image
+- Deploy to GCP
+
+### Preparation
+This section outlines steps that is need to be done by the user in the for their respective actions:
+-  in the GCP portal. i.e to configure OAuth, create CloudSql..etc
+-  in preferred Domain/SSL provider. i.e Entrust,..etc
+-  in a terminal session, i.e to generate OpenSSL
+
+#### Install required tools
 * [Python 3.13](https://www.python.org/downloads/)
 * [gcloud](https://cloud.google.com/sdk/docs/install)
 * [terraform](https://developer.hashicorp.com/terraform/install)
 * [docker](https://docs.docker.com/engine/install/)
 * [psql client](https://docs.timescale.com/use-timescale/latest/integrations/query-admin/psql/) or [pgadmin](https://www.pgadmin.org/download/)
-### Configure GCP OAuth Consent Screen
+#### Configure GCP OAuth Consent Screen
 1. Login [GCP Console](https://console.cloud.google.com) and select your target project
 2. Go to **Google Auth Platform** and configure OAuth consent screen.  
 Configure the app as **External** and **In Production** app
 ![oauth_consent.gif](./doc_img/oauth_consent.gif)
-### Cloud SQL (Postgres)
+#### Cloud SQL (Postgres)
 1. Create a [Cloud SQL Postgres DB](https://cloud.google.com/sql/postgresql?hl=en) instances in your project, or use an existing one in your project.   
 > * Assign this instance name to <span style="color:purple">*eps_db_instance*</span> in [terraform.tfvars](./deployment/terraform.tfvars).
 2. Within this db instance, create a db named <span style="color:blue">*eps*</span>
 > * assign this db name to <span style="color:purple">*eps_db_name*</span> in [terraform.tfvars](./deployment/terraform.tfvars)
-### Public IP Address for Loadbalancer
+#### Public IP Address for Loadbalancer
 Reserve a *regional standard* public IP address in *your project*, and name it <span style="color:blue">*eps-lb-ip*</span>  
 ```bash
 gcloud compute addresses create eps-lb-ip --project=<project_id> --region=<your_region>
 ```   
 > * this IP Address is referred in [main.tf](./deployment/main.tf) as <span style="color:purple">*google_compute_address.eps_lb_ip*</span>
-### Prepare DNS name of Parameter Store app
+#### Prepare DNS name of Parameter Store app
 System administrators need to assign a DNS name to app, and update DNS server to resolve this name to the IP address created [above](#public-ip-address-for-loadbalancer).  
 
 Assuming <span style="color:blue">*eps.mycompany.com*</span> is the DNS name selected for your parameter store app. You need to 
@@ -37,7 +84,7 @@ csrf_trusted_origins    = ["*.internal", "*.mycompany.com"]
 > # assuming 12.34.56.78 is your load balancer IP
 > 12.34.56.78	eps.gdc.internal
 > ```
-### SSL Certificate
+#### SSL Certificate
 Once the DNS name is decided, we need to acquire an SSL cert for the Parameter Store App.  
 This cert will be applied on the loadbalancer's frontend.
 * For production deployment  
@@ -61,7 +108,7 @@ gcloud beta compute ssl-certificates create eps-cert \
   --private-key=key.pem \
   --region=<target deploy region>
 ```
-### Create IAP Service Identity and Assign Roles
+#### Create IAP Service Identity and Assign Roles
 This is a one-off task for a GCP project.  
 1. Create the service account used by IAP.  
 ```bash
@@ -75,7 +122,7 @@ gcloud projects add-iam-policy-binding <project_id> \
   --member='serviceAccount:service-<project_number>@gcp-sa-iap.iam.gserviceaccount.com' \
   --role='roles/run.invoker'
 ```
-### Automation Integration related resources
+#### Automation Integration related resources
 In the current automation solution, the source of truth is store in a csv file in a gitlab repository.  
 To keep backward compatible and gradual evolution, parameter store provides integration to the current automation solution, by updating the database content to the target csv file.  
 To enable this integration, the following information needs to be provided to parameter store app, by setting up the following variables in [terraform.tfvars](./deployment/terraform.tfvars)
@@ -88,7 +135,7 @@ project_id_secrets  # the gcp project id where the git secret stored, if differe
 ```
 * There is a simple Rest API defined at <span style="color:blue">/api/update_sot</span>  
 Making a GET request (without any parameters) to this url, will trigger the app to dump the database content and save to the csv file in the git repo.
-## Build Image
+### Build Image
 We will build a docker image and push to an artifact registry in target deployment GCP project. Please make sure the artifact registry is available and GCP account running the build script has sufficient permission to push image to it. 
 1. Clone this project and go to the project workspace
 ```bash
@@ -123,11 +170,11 @@ By default to use **parameter-store**.
 * The generated image is tagged as `${REPO_HOST}/${PROJECT_ID}/${REPO_FOLDER}/${APP}:v${VERSION}`  
 e.g. `gcr.io/test-proj-1234/parameter-store/parameter-store:v0.1`
 * The `latest` tag is always attached to the most recently built image
-## Deploy to GCP
+### Deploy to GCP
 We use terraform to deploy parameter store apps to a GCP project
-### System Diagram
+#### System Diagram
 ![eps_arch.png](./doc_img/eps_arch.png) 
-### Initialize Terraform
+#### Initialize Terraform
 For the first time to deploy parameter store, we need to initialize terraform state.
 1. go to `deployment` folder
 ```bash
@@ -151,7 +198,7 @@ terraform init
     ```bash
     terraform init -backend-config=env/testing.gcs.tfbackend
     ```
-### Configure Terraform Variables
+#### Configure Terraform Variables
 Define all the deployment variables in [terraform.tfvars](deployment/terraform.tfvars)
 * project_id  
 The target gcp project where the parameter store app will be deployed.
@@ -198,10 +245,10 @@ git_secret_id           = "daniel-gl-pat"
 
 csrf_trusted_origins    = ["*.internal", "*.mycompany.com"]
 ```
-### More Deployment Variables
+#### More Deployment Variables
 A complete list of deployment variables are defined in [variables.tf](deployment/variables.tf)  
 Most of the optional variables have default values.
-### Deploy Parameter Store App
+#### Deploy Parameter Store App
 Use `terraform plan` to check the deployment.
 ```bash
 terraform plan
@@ -211,7 +258,7 @@ You need to answer yes when prompting, to confirm the deployment action.
 ```bash
 terraform apply
 ```
-### Enable IAP for Parameter Store
+#### Enable IAP for Parameter Store
 After terraform deployed the app. This final step must be done via **GCP Console**
 1. Go to **Security** &rarr; **Identity-Aware Proxy**
 2. Find the backend service of parameter store app and enable IAP.  
@@ -219,7 +266,7 @@ If you deploy with the default argument, the name should be <span style="color:b
 ![enable_iap.gif](./doc_img/enable_iap.gif)
 3. Enable IAP from console will automatically create an OAuth2 client.  
 User can view this info in Google Auth Platform as discussed in [Configure GCP OAuth Consent Screen](#configure-gcp-oauth-consent-screen)
-### Teardown
+#### Teardown
 ```bash
 terrform destroy
 ```
@@ -234,7 +281,7 @@ Manual created resource requires manual deletion, including
 * The superuser will be responsible to assign permission to users. But users must log in **at least once** so that the superuser can see them on the system.
 ## Local Dev
 
-### Postgres Setup
+#### Postgres Setup
 
 1. Install Postgres 16
 2. Log in to PostgresSQL as a Superuser: Use the psql command-line utility to log in as the postgres user.
@@ -286,7 +333,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO eps;
 
 7. 
 
-### Python Setup
+#### Python Setup
 
 1. Install Python 3.12
 
@@ -303,7 +350,7 @@ pip3 install -r requirements.txt
 pip3 install -r requirements-dev.txt
 ```
 
-### Django Setup
+#### Django Setup
 
 1. Run Django Migrations
 
@@ -326,7 +373,7 @@ python manage.py runserver
 
 ## Appendix
 
-### Possible Errors
+#### Possible Errors
 
 Sometimes Django doesn't seem to pick up the models for `parameter_store`, so I have to `makemigrations` explicitly for it:
 
@@ -360,7 +407,7 @@ Running migrations:
 
 ```
 
-### Dev Hacks
+#### Dev Hacks
 
 I have Postgres running on my cloudtop while I dev locally, so I port-forward to psql on the cloudtop:
 
