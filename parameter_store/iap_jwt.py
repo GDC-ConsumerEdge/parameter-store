@@ -1,18 +1,17 @@
-import os
-from django.shortcuts import redirect
-from django.contrib.auth.models import User
-from django.contrib.auth import login
-from google.oauth2 import id_token
-from google.auth.transport import requests
-import jwt
-import logging
 import json
+import logging
+import os
+
+from django.contrib.auth import login
+from django.contrib.auth.models import User
+from google.auth.transport import requests
+from google.oauth2 import id_token
 
 # Get an instance of a logger
 logger = logging.getLogger(__name__)
 
 
-def str_to_bool(value:str|bool) -> bool:
+def str_to_bool(value: str | bool) -> bool:
     if isinstance(value, bool):
         return value
     value = value.lower()
@@ -55,7 +54,7 @@ class IapJwtMiddleware:
                 # IAP public keys are stored in a different URL than generic google public keys
                 id_info = id_token.verify_token(
                     iap_jwt, req,
-                    certs_url = "https://www.gstatic.com/iap/verify/public_key") if (
+                    certs_url="https://www.gstatic.com/iap/verify/public_key") if (
                     iap_enabled) else id_token.verify_token(iap_jwt, req)
                 logger.debug(json.dumps(id_info, indent=4))
 
