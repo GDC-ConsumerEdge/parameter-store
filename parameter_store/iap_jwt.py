@@ -67,18 +67,10 @@ class IapJwtMiddleware:
                     return self.get_response(request)
 
                 # Get or create the user
-                if User.objects.filter(is_superuser=True).exists():
-                    # Superuser exists, make this user a staff user
-                    user, created = User.objects.get_or_create(
-                        username=email,
-                        defaults={'email': email, 'is_staff': True}
-                    )
-                else:
-                    # No superuser exists, make this user a superuser
-                    user, created = User.objects.get_or_create(
-                        username=email,
-                        defaults={'email': email, 'is_staff': True, 'is_superuser': True}
-                    )
+                user, _ = User.objects.get_or_create(
+                    username=email,
+                    defaults={'email': email, 'is_staff': True}
+                )
 
                 # Trust the JWT and Authenticate the user
                 login(request, user)

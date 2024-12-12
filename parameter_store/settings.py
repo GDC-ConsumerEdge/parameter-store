@@ -28,10 +28,10 @@ DEBUG = os.environ.get('DJANGO_DEBUG', 'false').lower() == 'true'
 
 ALLOWED_HOSTS = ['*']
 
-CSRF_TRUSTED_ORIGINS = ['https://' + x.strip()
-                        for x in
-                        os.environ.get('CSRF_TRUSTED_ORIGINS', '*.internal, *.localhost').split(
-                            ',')]
+CSRF_TRUSTED_ORIGINS = [
+    'https://' + x.strip()
+    for x in os.environ.get('CSRF_TRUSTED_ORIGINS', '*.internal, *.localhost').split(',')
+]
 
 # Application definition
 
@@ -39,6 +39,8 @@ INSTALLED_APPS = [
     'unfold',
     'unfold.contrib.inlines',
     'unfold.contrib.filters',
+    'unfold.contrib.guardian',
+    'guardian',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -122,6 +124,11 @@ AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
+]
+
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',
+    'guardian.backends.ObjectPermissionBackend'
 ]
 
 # Internationalization

@@ -1,4 +1,3 @@
-import inspect
 import logging
 from collections import defaultdict
 
@@ -82,29 +81,6 @@ class DynamicValidatingModel(models.Model):
             raise ValidationError(errors)
 
 
-# class CustomDataValidatingModel(models.Model):
-#     """ Provides an abstract base class with dynamic validation capabilities.
-#
-#     This class serves as a foundation for models requiring dynamic validation
-#     based on external validator configurations. It accomplishes this by
-#     associating validator assignments to specific model fields, enabling field
-#     values to be validated against a wide range of criteria defined outside
-#     the model itself. The validation mechanism is invoked by the `clean`
-#     method, ensuring that all field validations are executed prior to saving
-#     the model. This approach supports dynamic model validation customization
-#     and centralizes the validation logic.
-#
-#     :ivar Meta.abstract: Indicates that this is an abstract model class, which
-#         will not itself create a database table.
-#     :type Meta.abstract: bool
-#     """
-#
-#     class Meta:
-#         abstract = True  # Abstract classes won’t create a database table
-#
-
-
-
 class Group(DynamicValidatingModel):
     name = models.CharField(max_length=30, blank=False, unique=True, null=False)
     description = models.CharField(max_length=255, null=True, blank=True)
@@ -141,7 +117,7 @@ class ClusterTag(DynamicValidatingModel):
         verbose_name = 'Cluster Tag'
         verbose_name_plural = 'Cluster Tags'
 
-    cluster = models.ForeignKey(Cluster, on_delete=models.CASCADE)
+    cluster = models.ForeignKey(Cluster, on_delete=models.DO_NOTHING)
     tag = models.ForeignKey(Tag, on_delete=models.CASCADE)
 
     def __str__(self):

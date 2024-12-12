@@ -232,8 +232,13 @@ django==5.1.4 \
     --hash=sha256:de450c09e91879fa5a307f696e57c851955c910a438a35e6b4c895e86bedc82a
     # via
     #   -r requirements.in
+    #   django-guardian
     #   django-unfold
     #   djangorestframework
+django-guardian==2.4.0 \
+    --hash=sha256:440ca61358427e575323648b25f8384739e54c38b3d655c81d75e0cd0d61b697 \
+    --hash=sha256:c58a68ae76922d33e6bdc0e69af1892097838de56e93e78a8361090bcd9f89a0
+    # via -r requirements.in
 django-unfold==0.42.0 \
     --hash=sha256:1c0a3cb142972d0f7222987e82991899d369b0b19126eaad296a9aabe43337c4 \
     --hash=sha256:474bfe0ba69f2590b475f343dfb2462b5618b87fe4084e80bb6dd1abb0514c40
