@@ -1,12 +1,14 @@
+from pprint import pprint
+
 import unfold.admin as uadmin
 import unfold.sites as usites
 from django import forms
 from django.apps import apps
 from django.contrib import admin
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
-from django.core.exceptions import ValidationError
 from guardian.admin import GuardedModelAdmin
 
 from .models import Cluster, ClusterIntent, ClusterTag, ClusterFleetLabel, Group, Tag, Validator, \
@@ -170,7 +172,7 @@ class ClusterDataInline(uadmin.TabularInline):
 class ClusterAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     inlines = [ClusterDataInline, ClusterTagInline, ClusterFleetLabelsInline, ClusterIntentInline]
     list_display = ['name', 'group', 'comma_separated_tags']
-    list_filter = ['name', 'group', 'tags__name']
+    list_filter = ['group', 'tags__name']
     search_fields = ['name', 'group__name', 'tags__name']
     sortable_by = ['name', 'group']
     ordering = ['group', 'name']
@@ -188,9 +190,9 @@ class ClusterAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
         return ""
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('group',
-                                                            'clusterintent').prefetch_related(
-            'tags')
+        return super().get_queryset(request)\
+            .select_related('group', 'clusterintent')\
+            .prefetch_related('tags')
 
     def formfield_for_manytomany(self, db_field, request, **kwargs):
         if db_field.name == "tags":
@@ -230,6 +232,11 @@ class ClusterIntentAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     validate_on_save = True
 
 
+@admin.register(ClusterDataField, site=param_admin_site)
+class ClusterDataFieldAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
+    pass
+
+
 @admin.register(Validator, site=param_admin_site)
 class ValidatorAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     list_display = ['name', 'validator']
@@ -238,8 +245,12 @@ class ValidatorAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
 
 @admin.register(ValidatorAssignment, site=param_admin_site)
 class ValidatorAssignmentAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
-    list_display = ['model_field', 'validator']
+    list_display = ['pretty_field', 'validator']
     validate_on_save = True
+
+    @admin.display(description='Model Field')
+    def pretty_field(self, obj):
+        return f'{obj.model.split('.')[2]}.{obj.model_field}'
 
 
 @admin.register(ClusterDataFieldValidatorAssignment, site=param_admin_site)
