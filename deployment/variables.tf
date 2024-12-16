@@ -1,3 +1,19 @@
+###############################################################################
+# Copyright 2024 Google, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+###############################################################################
 # Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -51,26 +67,13 @@ variable "project_services" {
   ]
 }
 
-# prune list of required services later
+# TODO: prune list of required services
 variable "project_services_fleet" {
   type        = list(string)
   description = "GCP Service APIs (<api>.googleapis.com) to enable for this project"
   default = [
-#     "anthos.googleapis.com",
-#     "anthosaudit.googleapis.com",
-#     "anthosconfigmanagement.googleapis.com",
-#     "anthosgke.googleapis.com",
     "artifactregistry.googleapis.com",
-#     "cloudbuild.googleapis.com",
-#     "cloudfunctions.googleapis.com",
-#     "cloudresourcemanager.googleapis.com",
-#     "cloudscheduler.googleapis.com",
     "connectgateway.googleapis.com",
-#     "container.googleapis.com",
-#     "edgecontainer.googleapis.com",
-#     "gkeconnect.googleapis.com",
-#     "gkehub.googleapis.com",
-#     "gkeonprem.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
     "iap.googleapis.com",
@@ -84,7 +87,6 @@ variable "project_services_fleet" {
     "sql-component.googleapis.com",
     "sqladmin.googleapis.com",
     "stackdriver.googleapis.com",
-#     "storage.googleapis.com",
     "sts.googleapis.com",
     "vpcaccess.googleapis.com",
   ]

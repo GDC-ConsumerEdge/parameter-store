@@ -1,3 +1,19 @@
+###############################################################################
+# Copyright 2024 Google, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+###############################################################################
 """
 Django settings for parameter_store project.
 
@@ -16,15 +32,14 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY',
-                            'django-insecure-%yzr3^+)s&c2$4sxk702l#m0(52xd81^e40bg3tq4j+xo$wy@v')
-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DJANGO_DEBUG', 'false').lower() == 'true'
+
+# SECURITY WARNING: keep the secret key used in production secret!
+# TODO: Update this when deploying into production
+# THIS VALUE IS NOT SECURE FOR PRODUCTION USE
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY',
+                            'django-insecure-%yzr3^+)s&c2$4sxk702l#m0(52xd81^e40bg3tq4j+xo$wy@v')
 
 ALLOWED_HOSTS = ['*']
 
@@ -177,3 +192,7 @@ LOGGING = {
 }
 
 INTERNAL_IPS = ['127.0.0.1']
+
+SECURE_SSL_REDIRECT = False if DEBUG else True
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
