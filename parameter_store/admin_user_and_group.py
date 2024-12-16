@@ -15,21 +15,31 @@
 #
 ###############################################################################
 import unfold.admin as uadmin
-from django.contrib import admin
+import unfold.sites
 from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from django.contrib.auth.models import Group as DjangoGroup
-from django.contrib.auth.models import User as DjangoUser
-
-admin.site.unregister(DjangoUser)
-admin.site.unregister(DjangoGroup)
+from django.contrib.auth.models import Group
+from django.contrib.auth.models import User
+from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 
 
-@admin.register(DjangoUser)
+class CustomAdminSite(unfold.sites.UnfoldAdminSite):
+    def has_permission(self, request):
+        return request.user.is_superuser
+
+
+admin_site = CustomAdminSite(name='custom_admin')
+
+
 class UserAdmin(BaseUserAdmin, uadmin.ModelAdmin):
-    pass
+    form = UserChangeForm
+    add_form = UserCreationForm
+    change_password_form = AdminPasswordChangeForm
 
 
-@admin.register(DjangoGroup)
 class GroupAdmin(BaseGroupAdmin, uadmin.ModelAdmin):
     pass
+
+
+admin_site.register(User, UserAdmin)
+admin_site.register(Group, GroupAdmin)

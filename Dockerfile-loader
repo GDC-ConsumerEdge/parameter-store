@@ -1,0 +1,18 @@
+FROM python:3.12-alpine
+
+# Set working directoryx
+WORKDIR /app
+# Copy your source code
+COPY . .
+
+COPY mcd_db_loader/load_db.py .
+COPY mcd_db_loader/cluster_intent.csv .
+COPY mcd_db_loader/cluster_registry.csv .
+COPY mcd_db_loader/platform.csv .
+COPY mcd_db_loader/workload.csv .
+
+# Install dependencies.
+# Collect static files. This will generate a folder named `staticfiles` in working directory
+RUN pip3 install -r requirements.txt --require-hashes --no-cache-dir && pip3 install ipython
+
+CMD ["sh"]

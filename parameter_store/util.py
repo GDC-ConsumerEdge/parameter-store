@@ -51,12 +51,22 @@ def inspect_callable_signature(callable: Callable):
     for name, param in params.items():
         if name != 'self' and param.kind in valid_params:
             all_params.append(name)
+            # @formatter:off
             if param.kind == inspect.Parameter.POSITIONAL_ONLY or \
-                (param.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD
-                 and param.default == inspect.Parameter.empty) or \
-                (param.kind == inspect.Parameter.KEYWORD_ONLY
-                 and param.default == inspect.Parameter.empty):
+                    (param.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD and param.default == inspect.Parameter.empty) or \
+                    (param.kind == inspect.Parameter.KEYWORD_ONLY and param.default == inspect.Parameter.empty):
                 required_params.append(name)
-
+            # @formatter:on
     return all_params, required_params
 
+
+def str_to_bool(value: str | bool) -> bool:
+    match value:
+        case True | False:
+            return value
+        case str() if value.lower() in ('true', 'y', 'yes'):
+            return True
+        case str() if value.lower() in ('false', 'n', 'no'):
+            return False
+        case _:
+            raise ValueError(f"{value} isn't an expected boolean value")
