@@ -17,7 +17,7 @@
 import unfold.admin as uadmin
 import unfold.sites as usites
 from django import forms
-from django.apps import apps
+from django.apps import AppConfig
 from django.contrib import admin
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
@@ -28,22 +28,16 @@ from guardian.admin import GuardedModelAdmin
 from .models import Cluster, ClusterIntent, ClusterTag, ClusterFleetLabel, Group, Tag, Validator, \
     ValidatorAssignment, ClusterData, ClusterDataField, ClusterDataFieldValidatorAssignment
 
-app = apps.get_app_config('parameter_store')
-app.verbose_name = 'Edge Parameter Store'
 
-
-class HideAdmin:
-    def has_module_permission(self, request):
-        """
-        Return empty perms dict thus hiding the model from admin index.
-        """
-        return {}
+class ParamStoreAppConfig(AppConfig):
+    name = 'parameter_store'
+    verbose_name = 'Edge Parameter Store'
 
 
 class ParamStoreAdmin(usites.UnfoldAdminSite):
-    site_header = 'Parameter Store'
-    site_title = 'Parameter Store'
-    index_title = 'Parameter Store'
+    site_header = 'Edge Parameter Store'
+    site_title = 'Edge Parameter Store'
+    index_title = 'Edge Parameter Store'
 
     def get_app_list(self, request, app_label=None):
         """ Return a sorted list of all the installed apps that have been registered to this
@@ -73,11 +67,13 @@ class ParamStoreAdmin(usites.UnfoldAdminSite):
 
 
 param_admin_site = ParamStoreAdmin('param_admin')
+param_admin_site.verbose_name = 'Edge Parameter Store'
 
 
 class ClusterIntentInline(uadmin.StackedInline):
     model = ClusterIntent
     extra = 0
+    parent_link = True
 
 
 def get_tag_choices():
@@ -108,7 +104,6 @@ class ClusterTagInlineForm(forms.ModelForm):
         fields = '__all__'
 
     def clean_tag(self):
-        print('in clean_tag')
         field_id = self.cleaned_data.get('tag')
         if field_id:
             try:
@@ -186,8 +181,10 @@ class ClusterDataInline(uadmin.TabularInline):
 class ClusterAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     inlines = [ClusterDataInline, ClusterTagInline, ClusterFleetLabelsInline, ClusterIntentInline]
     list_display = ['name', 'group', 'comma_separated_tags']
-    list_filter = ['group', 'tags__name']
-    search_fields = ['name', 'group__name', 'tags__name']
+    # list_filter = ['group', 'tags__name']
+    list_filter = ['group']
+    # search_fields = ['name', 'group__name', 'tags__name']
+    search_fields = ['name', 'group__name']
     sortable_by = ['name', 'group']
     ordering = ['group', 'name']
     validate_on_save = True
@@ -204,8 +201,8 @@ class ClusterAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
         return ""
 
     def get_queryset(self, request):
-        return super().get_queryset(request)\
-            .select_related('group', 'clusterintent')\
+        return super().get_queryset(request) \
+            .select_related('group', 'intent') \
             .prefetch_related('tags')
 
     def formfield_for_manytomany(self, db_field, request, **kwargs):
@@ -271,7 +268,3 @@ class ValidatorAssignmentAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
 class ClusterDataFieldValidatorAssignmentAdmin(uadmin.ModelAdmin):
     list_display = ['field', 'validator']
     validate_on_save = True
-
-
-# loads changes to admin site last
-from . import admin_user_and_group  # noqa

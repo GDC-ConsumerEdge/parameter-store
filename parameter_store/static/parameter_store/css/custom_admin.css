@@ -1,0 +1,18 @@
+/*
+This is intended to target admin user and group select boxes so they are sanely sized, since
+permissions are notoriously big and hard to read in the standard-size selects.
+*/
+#id_user_permissions_from,
+#id_user_permissions_to,
+#id_groups_from,
+#id_groups_to,
+#id_permissions_from,
+#id_permissions_to {
+    width: 100%;
+    height: 250px;
+}
+
+/* the div.selector is has max-width of 42rem without an override */
+div.selector {
+    max-width: 100rem;
+}

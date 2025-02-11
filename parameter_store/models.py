@@ -19,6 +19,7 @@ from collections import defaultdict
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models.query import Prefetch
 
 from parameter_store.util import get_class_from_full_path, inspect_callable_signature
 from parameter_store.validation import BaseValidator
@@ -98,15 +99,34 @@ class DynamicValidatingModel(models.Model):
 
 
 class Group(DynamicValidatingModel):
-    name = models.CharField(max_length=30, blank=False, unique=True, null=False)
+    name = models.CharField(db_index=True, max_length=30, blank=False, unique=True, null=False)
     description = models.CharField(max_length=255, null=True, blank=True)
 
     def __str__(self):
         return self.name
 
 
+class ClusterManager(models.Manager):
+    # def get_queryset(self):
+    #     return super().get_queryset()
+
+    def with_related(self):
+        return (
+            self.get_queryset()
+            .select_related('group', 'intent')
+            .prefetch_related(
+                'tags',
+                'fleet_labels',
+                Prefetch(
+                    'data',
+                    queryset=ClusterData.objects.select_related('field')
+                )
+            )
+        )
+
+
 class Cluster(DynamicValidatingModel):
-    name = models.CharField(max_length=30, blank=False, unique=True, null=False)
+    name = models.CharField(db_index=True, max_length=30, blank=False, unique=True, null=False)
     description = models.CharField(max_length=255, null=True, blank=True)
     group = models.ForeignKey(Group, on_delete=models.DO_NOTHING)
     tags = models.ManyToManyField(
@@ -115,8 +135,22 @@ class Cluster(DynamicValidatingModel):
         related_name='clusters',
     )
 
+    objects = ClusterManager()
+
     def __str__(self):
         return self.name
+
+    @property
+    def tags_list(self):
+        return self.tags.all()
+
+    @property
+    def fleet_labels_list(self):
+        return self.fleet_labels.all()
+
+    @property
+    def data_list(self):
+        return self.data.all()
 
 
 class Tag(DynamicValidatingModel):
@@ -145,7 +179,12 @@ class ClusterIntent(DynamicValidatingModel):
         verbose_name = 'Cluster Intent'
         verbose_name_plural = 'Cluster Intent'
 
-    cluster = models.OneToOneField(Cluster, on_delete=models.CASCADE)
+    cluster = models.OneToOneField(Cluster, on_delete=models.CASCADE, related_name="intent")
+    unique_zone_id = models.CharField(
+        max_length=64,
+        unique=True,
+        verbose_name='Unique Zone ID',
+        help_text='This is the ID that uniquely identifies a zone in the ordering process.')
     zone_name = models.CharField(
         max_length=100,
         null=True,
@@ -154,7 +193,7 @@ class ClusterIntent(DynamicValidatingModel):
     location = models.CharField(
         max_length=30,
         null=False,
-        help_text=None)
+        help_text="This is a GCP location")
     machine_project_id = models.CharField(
         max_length=30,
         null=False,
@@ -200,7 +239,7 @@ class ClusterIntent(DynamicValidatingModel):
     sync_dir = models.CharField(
         max_length=50,
         null=False,
-        default=f'hydrated/clusters/{cluster.name}',
+        default='hydrated/clusters/',
         help_text=None)
     git_token_secret_manager_name = models.CharField(
         max_length=255,
@@ -222,7 +261,23 @@ class ClusterIntent(DynamicValidatingModel):
         max_length=128,
         null=True,
         blank=True,
-        help_text=None)
+        help_text="This is an RFC 5545 recurrence rule, ex: FREQ=WEEKLY;BYDAY=WE,TH,FR"
+    )
+    maintenance_exclusion_name = models.CharField(
+        null=True,
+        blank=True,
+        max_length=64
+    )
+    maintenance_exclusion_start_1 = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=None
+    )
+    maintenance_exclusion_end_1 = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=None
+    )
     subnet_vlans = models.CharField(
         max_length=128,
         null=True,
@@ -241,7 +296,7 @@ class ClusterFleetLabel(DynamicValidatingModel):
             models.UniqueConstraint(fields=['cluster', 'key'], name='unique_cluster_key')
         ]
 
-    cluster = models.ForeignKey(Cluster, on_delete=models.CASCADE)
+    cluster = models.ForeignKey(Cluster, on_delete=models.CASCADE, related_name="fleet_labels")
     key = models.CharField(max_length=63, blank=False, null=False)
     value = models.CharField(max_length=63, blank=False, null=False)
 
@@ -306,14 +361,16 @@ class Validator(models.Model):
         null=False,
         help_text="Enter parameters for the validator in JSON format. Due to limitations in the "
                   "UI, arguments for validators cannot be displayed dynamically. Contents of "
-                  "this field will be validated and feedback will be provided on the contents of "
-                  "this field."
+                  "this field will be validated and feedback will be provided."
     )
 
     def __str__(self):
         return self.name
 
     def clean(self):
+        if not isinstance(self.parameters, dict):
+            self.parameters = {}
+
         validator = get_class_from_full_path(self.validator)
         errors = defaultdict(list)
 
@@ -403,7 +460,7 @@ class ClusterData(models.Model):
             models.UniqueConstraint(fields=['cluster', 'field'], name='unique_cluster_field')
         ]
 
-    cluster = models.ForeignKey(Cluster, on_delete=models.CASCADE)
+    cluster = models.ForeignKey(Cluster, on_delete=models.CASCADE, related_name="data")
     field = models.ForeignKey(ClusterDataField, on_delete=models.CASCADE)
     value = models.CharField(max_length=1024, null=True, blank=True)
 

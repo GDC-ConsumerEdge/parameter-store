@@ -18,8 +18,8 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from parameter_store.sot_csv_integration import SotCsvIntegration
-from auto_api.util import cluster_intent_to_csv
+from .sot_csv_integration import SotCsvIntegration
+from .util import cluster_intent_to_csv
 
 
 class UpdateSot(APIView):
