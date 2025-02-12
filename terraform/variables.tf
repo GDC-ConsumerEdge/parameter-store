@@ -49,6 +49,7 @@ variable "eps_project_services" {
     "artifactregistry.googleapis.com",
     "certificatemanager.googleapis.com",
     "cloudresourcemanager.googleapis.com",
+    "dns.googleapis.com",
     "iam.googleapis.com",
     "iap.googleapis.com",
     "logging.googleapis.com",
