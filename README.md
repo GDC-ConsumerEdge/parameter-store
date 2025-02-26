@@ -1,35 +1,31 @@
 # parameter_store
 
-- [parameter\_store](#parameter_store)
-    - [Description](#description)
-    - [Getting Started](#getting-started)
-        - [Preparation](#preparation)
+- [parameter_store](#parameter_store)
+    * [Description](#description)
+    * [Getting Started](#getting-started)
+        + [Preparation](#preparation)
             - [Install required tools](#install-required-tools)
             - [Configure GCP OAuth Consent Screen](#configure-gcp-oauth-consent-screen)
-            - [Cloud SQL (Postgres)](#cloud-sql-postgres)
-            - [Public IP Address for Loadbalancer](#public-ip-address-for-loadbalancer)
-            - [Prepare DNS name of Parameter Store app](#prepare-dns-name-of-parameter-store-app)
-            - [SSL Certificate](#ssl-certificate)
-            - [Create IAP Service Identity and Assign Roles](#create-iap-service-identity-and-assign-roles)
-            - [Automation Integration related resources](#automation-integration-related-resources)
-        - [Build Image](#build-image)
-        - [Deploy to GCP](#deploy-to-gcp)
+            - [Parameter Store Domain Name](#parameter-store-domain-name)
+            - [Prepare fully-qualified domain name of Parameter Store app](#prepare-fully-qualified-domain-name-of-parameter-store-app)
+            - [TLS Certificate](#tls-certificate)
+        + [Build Image](#build-image)
+        + [Deploy to GCP](#deploy-to-gcp)
             - [System Diagram](#system-diagram)
             - [Initialize Terraform](#initialize-terraform)
-            - [Configure Terraform Variables](#configure-terraform-variables)
-            - [More Deployment Variables](#more-deployment-variables)
+            - [Terraform Configuration Variables](#terraform-configuration-variables)
             - [Deploy Parameter Store App](#deploy-parameter-store-app)
-            - [Enable IAP for Parameter Store](#enable-iap-for-parameter-store)
+            - [Rerun Terraform After First Apply](#rerun-terraform-after-first-apply)
             - [Teardown](#teardown)
-    - [Operate Parameter Store](#operate-parameter-store)
-    - [Local Dev](#local-dev)
-        - [Postgres Setup](#postgres-setup)
-        - [Python Setup](#python-setup)
-        - [Django Setup](#django-setup)
-    - [Appendix](#appendix)
-        - [Possible Errors](#possible-errors)
-        - [Dev Hacks](#dev-hacks)
-    - [Disclaimer](#disclaimer)
+    * [Operate Parameter Store](#operate-parameter-store)
+    * [Local Dev](#local-dev)
+      - [Postgres Setup](#postgres-setup)
+      - [Python Setup](#python-setup)
+      - [Django Setup](#django-setup)
+    * [Appendix](#appendix)
+      - [Possible Errors](#possible-errors)
+      - [Dev Hacks](#dev-hacks)
+    * [Disclaimer](#disclaimer)
 
 ## Description
 
@@ -71,172 +67,58 @@ This section outlines steps that is need to be done by the user in the for their
 1. Login [GCP Console](https://console.cloud.google.com) and select your target project
 2. Go to **Google Auth Platform** and configure OAuth consent screen.  
    Configure the app as **External** and **In Production** app
-   ![oauth_consent.gif](./doc_img/oauth_consent.gif)
+   ![oauth_consent.gif](./doc_assets/oauth_consent.gif)
 
-#### Cloud SQL (Postgres)
+#### Parameter Store Domain Name
 
-1. Create a [Cloud SQL Postgres DB](https://cloud.google.com/sql/postgresql?hl=en) instances in your project, or use an
-   existing one in your project.
+#### Prepare fully-qualified domain name of Parameter Store app
 
-> * Assign this instance name to <span style="color:purple">*eps_db_instance*</span>
-    in [terraform.tfvars](./deployment/terraform.tfvars).
+Choose a fully qualified domain name for your application. The Terraform takes provides an opinionated configuration for
+the utilization of your FQDN, creating a manged zone in the deployment project. This assumes you will create a delegated
+zone in your application project to which an A-record for the EPS apps load balancer will be created. In doing so, it
+wires the application up end-to-end. If this is not your desired configuration, you will need to modify the provided
+Terraform [here](./terraform/dns.tf)
 
-2. Within this db instance, create a db named <span style="color:blue">*eps*</span>
+Set your selected fully-qualified domain name in [terraform.tfvars](terraform/terraform.tfvars):
 
-> * assign this db name to <span style="color:purple">*eps_db_name*</span>
-    in [terraform.tfvars](./deployment/terraform.tfvars)
-
-#### Public IP Address for Loadbalancer
-
-Reserve a *regional standard* public IP address in *your project*, and name it <span style="color:blue">
-*eps-lb-ip*</span>
-
-```bash
-gcloud compute addresses create eps-lb-ip --project=<project_id> --region=<your_region>
-```   
-
-> * this IP Address is referred in [main.tf](./deployment/main.tf) as <span style="color:purple">
-    *google_compute_address.eps_lb_ip*</span>
-
-#### Prepare DNS name of Parameter Store app
-
-System administrators need to assign a DNS name to app, and update DNS server to resolve this name to the IP address
-created [above](#public-ip-address-for-loadbalancer).
-
-Assuming <span style="color:blue">*eps.mycompany.com*</span> is the DNS name selected for your parameter store app. You
-need to
-
-1. purchase an SSL cert with this domain name
-2. Add this name, or a wild card name to the CSRF trusted list, which is variable <span style="color:purple">
-   *csrf_trusted_origins*</span> in [terraform.tfvars](deployment/terraform.tfvars) file. e.g.
-
-```properties
-csrf_trusted_origins=["*.internal", "*.mycompany.com"]
+```terraform
+app_fqdn = "eps.cloud.corpdomain.com"
 ```
 
-> * For dev deployment we can use some internal domain names, like <span style="color:blue">*eps.gdc.internal*</span>.
-> * For testing purpose, we can update the DNS mapping in local <span style="color:blue">/etc/hosts</span> file, e.g.
-> ```properties
-> # assuming 12.34.56.78 is your load balancer IP
-> 12.34.56.78=eps.gdc.internal
-> ```
+Add this name or a wild card name to the CSRF trusted list, which is variable *csrf_trusted_origins*
+in [terraform.tfvars](terraform/terraform.tfvars) file. e.g.
 
-#### SSL Certificate
-
-Once the DNS name is decided, we need to acquire an SSL cert for the Parameter Store App.  
-This cert will be applied on the loadbalancer's frontend.
-
-* For production deployment  
-  Please purchase a cert signed by trusted CAs.
-* For development deployment  
-  A self-signed cert could be used to save cost.
-* To generate a self-signed cert
-
-```bash
-openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 \
-  -nodes -keyout key.pem -out cert.pem \
-  -subj "/CN=eps.gdc.internal" \
-  -addext "subjectAltName=DNS:eps.gdc.internal"
+```terraform
+csrf_trusted_origins = ["eps.cloud.corpdomain.com"]
 ```
 
-This command generates a cert file <span style="color:blue">cert.pem</span> and a private key
-file <span style="color:blue">key.pem</span> in the current directory. The domain name of the site
-is <span style="color:blue">eps.gdc.internal</span>
-> **Note:** Currently GCP won't accept self-signed RSA key longer than 2048.
+#### TLS Certificate
 
-Add this cert to deployment GCP project with the following command. This cert name (**eps-cert**) will be assigned
-to  <span style="color:purple">*eps_cert_name*</span> in [terraform.tfvars](./deployment/terraform.tfvars)
+When using the provided Terraform, a TLS certificate is automatically generated and associated with the EPS load
+balancer.
 
-```bash
-gcloud beta compute ssl-certificates create eps-cert \
-  --certificate=cert.pem \
-  --private-key=key.pem \
-  --region=<target deploy region>
-```
-
-#### Create IAP Service Identity and Assign Roles
-
-This is a one-off task for a GCP project.
-
-1. Create the service account used by IAP.
-
-```bash
-gcloud beta services identity create --service=iap.googleapis.com --project=<project_id>
-```  
-
-It should create a service account for IAP, typically the named is  
-<span style="color:blue">*service-<project_number>@gcp-sa-iap.iam.gserviceaccount.com*</span>
-
-2. Assign <span style="color:blue">*roles/run.invoker*</span> role to this service account, to allow IAP to invoke Cloud
-   Run (the Parameter Store app).
-
-```bash
-gcloud projects add-iam-policy-binding <project_id> \
-  --member='serviceAccount:service-<project_number>@gcp-sa-iap.iam.gserviceaccount.com' \
-  --role='roles/run.invoker'
-```
-
-#### Automation Integration related resources
-
-In the current automation solution, the source of truth is store in a csv file in a gitlab repository.  
-To keep backward compatible and gradual evolution, parameter store provides integration to the current automation
-solution, by updating the database content to the target csv file.  
-To enable this integration, the following information needs to be provided to parameter store app, by setting up the
-following variables in [terraform.tfvars](./deployment/terraform.tfvars)
-
-```properties
-source_of_truth_repo=# GitLab or GitHub repo url (without https://) of the repo where source of truth csv file stored
-source_of_truth_branch=# repo branch name
-source_of_truth_path=# file path to the sot csv file within the repo, include the file name itself
-git_secret_id=# name of the secret of the repo access token. This token is stored in google secret manager
-project_id_secrets=# the gcp project id where the git secret stored, if different from the deployment project
-```
-
-* There is a simple Rest API defined at <span style="color:blue">/api/update_sot</span>  
-  Making a GET request (without any parameters) to this url, will trigger the app to dump the database content and save
-  to the csv file in the git repo.
+Providing and associating your own externally-managed TLS certificate is technically possible however the provided
+example Terraform does not support this configuration and would require modification.
 
 ### Build Image
 
-We will build a docker image and push to an artifact registry in target deployment GCP project. Please make sure the
-artifact registry is available and GCP account running the build script has sufficient permission to push image to it.
+We will build a docker image and push to an Artifact Registry in the target deployment GCP project. Please make sure the
+Artifact Registry is available and GCP account running the build script has sufficient permission to push image to it.
 
 1. Clone this project and go to the project workspace
 
-```bash
-mkdir parameter-store
-cd parameter-store
-git clone https://github.com/GDC-ConsumerEdge/parameter-store.git .
-```
+    ```bash
+    git clone https://github.com/GDC-ConsumerEdge/parameter-store.git
+    cd parameter-store
+    ```
 
-2. Create python virtual environment and activate it
+2. Update `terraform.tfvars`
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
+3. build the docker image and push to Artifact Registry
 
-3. Define local build environment, by creating a .env file in the project directory
-
-```bash
-copy env.template .env
-```  
-
-edit the .env file and update the following parameters
-
-* PROJECT_ID  
-  This is the same project id as your target deployment project
-* REPO_HOST  
-  Your repo host name, e.g. **gcr.io**, or **us-central1-docker.pkg.dev**
-* REPO_FOLDER  
-  The folder name under the artifact registry.  
-  By default to use **parameter-store**.
-
-4. build the docker image and push to artifact registry
-
-```bash
-./build.sh [VERSION] [APP]
-```
+    ```bash
+    ./build.sh [VERSION] [APP]
+    ```
 
 * Both **VERSION** and **APP** are optional.  
   **VERSION** default to *0.1*, while **APP** default to *parameter-store*.
@@ -246,11 +128,14 @@ edit the .env file and update the following parameters
 
 ### Deploy to GCP
 
-We use terraform to deploy parameter store apps to a GCP project
+Use Terraform to deploy parameter store infrastructure. Optionally deploy Parameter Store app with Terraform, though
+this is not recommended in production.
+
+<!---TODO: Update with instructions regarding Cloud Build.)--->
 
 #### System Diagram
 
-![eps_arch.png](./doc_img/eps_arch.png)
+![eps_arch.png](./doc_assets/eps_arch.png)
 
 #### Initialize Terraform
 
@@ -271,73 +156,70 @@ terraform init
 * For better collaboration, most of the time we need to save the terraform state file to a shared place, e.g. a GCP
   bucket. To achieve this, we need to configure a GCP bucket as terraform backend.
     1. Create or using an existing GCS bucket. Make sure your current account has write permission to it.
-    2. Create/Modify a terraform backend config file in [deployment/env](./deployment/env) folder.
-       e.g. [testing.gcs.tfbackend](./deployment/env/testing.gcs.tfbackend). Configure the following parameters
-        * bucket &rarr; The gcs bucket name for terraform state files
-        * prefix &rarr; The top level folder name under the bucket where the state file are saved.  
-          e.g.
-           ```properties
-           bucket = "danielxia-tf-back"
-           prefix = "testing"
-           ```
+    2. Create/Modify a terraform backend config file in [terraform/main.tf](./terraform/main.tf).
+        ```terraform
+        bucket = "my-bucket"
+        prefix = "testing"
+        ```
     3. initialize terraform with backend config
     ```bash
     terraform init -backend-config=env/testing.gcs.tfbackend
     ```
 
-#### Configure Terraform Variables
+#### Terraform Configuration Variables
 
-Define all the deployment variables in [terraform.tfvars](deployment/terraform.tfvars)
+The full set of Terraform variables are defined in [variables.tf](terraform/variables.tf), though we will call out
+notable items here.
 
-* project_id  
-  The target gcp project where the parameter store app will be deployed.
+`eps_project_id` is where the app (and nearly all) of its resources will be created. It is assumed this project already
+exists.
 
+`secrets_project_id` is the name of a Google Cloud Project where app-related secrets are to be configured. This may be
+the same as the `eps_project_id` or yet another separate project.
 
-* region  
-  The target region where the parameter store app will be deployed.
+`eps_image` is the full name and tag of the image to be deployed by Terraform to Cloud Run on its first invocation.
 
+`terraform_principal` is the principal associated with the EPS Terraform deployment and is very likely a Google service
+account.
 
-* eps_db_instance
-* eps_db_name
-* eps_db_user
-* eps_db_password  
-  The cloud sql instance as defined in [Cloud SQL (Postgres)](#cloud-sql-postgres).
+`iap_audience` is the "audience" against which IAP JWT tokens are compared. This comes from the backend service
+associated with your load balancer stack. This value is not known until Terraform is run the first time, so on its first
+invocation, an empty string (`""`) is appropriate. This value takes the form of:
 
-
-* project_id_secrets
-* source_of_truth_repo
-* source_of_truth_branch
-* source_of_truth_path
-* git_secret_id  
-  The integration parameters as defined
-  in [Automation Integration related resources](#automation-integration-related-resources)
-
-
-* csrf_trusted_origins  
-  This list should include the DNS name you assigned to your Parameter Store app, as stated
-  in [Prepare DNS name of Parameter Store app](#prepare-dns-name-of-prameter-store-app)
-
-e.g.
-
-```properties
-project_id="danielxia-sandbox"
-region="us-central1"
-eps_db_instance="test-db"
-eps_db_name="eps"
-eps_db_user="eps"
-eps_db_password="123456"
-project_id_secrets="danielxia-sandbox"
-source_of_truth_repo="gitlab.com/daniell76/test_2"
-source_of_truth_branch="main"
-source_of_truth_path="test_sot_iap.csv"
-git_secret_id="daniel-gl-pat"
-csrf_trusted_origins=["*.internal", "*.mycompany.com"]
+```bash
+"/projects/${EPS project ID}/us-central1/backendServices/${EPS load balancer backend service number}"
 ```
 
-#### More Deployment Variables
+You can find this number by running the following example:
 
-A complete list of deployment variables are defined in [variables.tf](deployment/variables.tf)  
-Most of the optional variables have default values.
+```bash
+gcloud compute backend-services describe eps-lb-backend-service \ 
+  --region=us-central1 \
+  --format="value(id)"
+6252277272778218001
+```
+
+`superusers` is an array of users that will automatically receive EPS "superuser" permissions upon first login. This may
+be omitted, in which case superusers will need to be configured manually or at all. EPS should have at
+least 1 superuser. Because EPS uses IAP its identities (usernames) are email address configured in Google Identity. EPS
+uses the username portion of the email address as its username. Simply drop the `@mycorp.com`.
+
+`eps_allowed_accessors` is an array of IAM principals that will be granted Cloud Run invoker and IAP accessor
+permissions. This does not grant in-app permissions but merely allows these identities web access through IAP and into
+Cloud Run. This is probably a group of users the membership of which is managed externally to Terraform.
+
+```terraform
+environment_name    = "dev"
+eps_project_id      = "example-eps"
+secrets_project_id  = "example-eps"
+eps_image           = "us-docker.pkg.dev/example-eps/hsp/parameter_store:v11"
+terraform_principal = "serviceAccount:terraform@example-eps.iam.gserviceaccount.com"
+app_fqdn            = "example.eps.example.net"
+csrf_trusted_origins = ["localhost"]
+iap_audience        = "/projects/22368248810/us-central1/backendServices/6252277272778218001"
+superusers = ["example", "user"]
+eps_allowed_accessors = ["group:eps@example.net"]
+```
 
 #### Deploy Parameter Store App
 
@@ -347,24 +229,23 @@ Use `terraform plan` to check the deployment.
 terraform plan
 ```
 
-Use `terraform apply` to deploy the app.  
-You need to answer yes when prompting, to confirm the deployment action.
+Use `terraform apply` to deploy the app.
 
 ```bash
 terraform apply
 ```
 
-#### Enable IAP for Parameter Store
+#### Rerun Terraform After First Apply
 
-After terraform deployed the app. This final step must be done via **GCP Console**
+The IAP audience is not known until after the first run due to unfortunate cycles in the Terraform dependency graph.
 
-1. Go to **Security** &rarr; **Identity-Aware Proxy**
-2. Find the backend service of parameter store app and enable IAP.  
-   If you deploy with the default argument, the name should be <span style="color:blue">*eps-lb-backend-service*</span>
-   ![enable_iap.gif](./doc_img/enable_iap.gif)
-3. Enable IAP from console will automatically create an OAuth2 client.  
-   User can view this info in Google Auth Platform as discussed
-   in [Configure GCP OAuth Consent Screen](#configure-gcp-oauth-consent-screen)
+Take the output value of `jwt_audence` and set as the variable `iap_audience`. It should look something like:
+
+```
+/projects/22368248810/us-central1/backendServices/6252277272778218001
+```
+
+When done, rerun `terraform apply`.
 
 #### Teardown
 
@@ -372,21 +253,16 @@ After terraform deployed the app. This final step must be done via **GCP Console
 terrform destroy
 ```
 
-This command will tear down all the gcp resources provisioned by terraform.  
+This command will tear down all the GCP resources provisioned by Terraform.  
 Manual created resource requires manual deletion, including
-
-* OAuth Client created in [above section](#enable-iap-for-parameter-store)
-* The [Public IP Address](#public-ip-address-for-loadbalancer) reserved for Loadbalancer
-* The [self-signed cert](#ssl-certificate), if created.
 
 ## Operate Parameter Store
 
-* After initial deployment, there is no user configure for parameter store app. The first logged-in user will
-  automatically become **Superuser**
-* All the following users will be assigned with minimum permissions, i.e. they can just log in system but not doing
-  anything else.
+* After initial deployment, there is no user configuration for EPS if Terraform `superusers` variable was set
+* All the following users will be assigned with minimum permissions, i.e. they can just log in system but not do
+  anything else
 * The superuser will be responsible to assign permission to users. But users must log in **at least once** so that the
-  superuser can see them on the system.
+  superuser can see them in the system.
 
 ## Local Dev
 
@@ -477,7 +353,7 @@ python manage.py makemigrations
 python manage.py migrate
 ```
 
-2. Compile staticfiles
+2. Collect static files
 
 ```shell
 python manage.py collectstatic
