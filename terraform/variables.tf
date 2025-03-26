@@ -49,7 +49,6 @@ variable "eps_project_services" {
     "artifactregistry.googleapis.com",
     "certificatemanager.googleapis.com",
     "cloudresourcemanager.googleapis.com",
-    "dns.googleapis.com",
     "iam.googleapis.com",
     "iap.googleapis.com",
     "logging.googleapis.com",
@@ -177,4 +176,15 @@ variable "superusers" {
   description = "Comma separated list of users who, upon first login, become app superusers; usernames only, which is everything before the @ in the email"
   type        = list(string)
   default     = []
+}
+
+variable "github_app_installation_id" {
+  description = "The GitHub App installation ID"
+  type        = number
+}
+
+variable "pat_token" {
+  description = "GitHub Personal Access Token"
+  type        = string
+  sensitive   = true # Mark as sensitive
 }
