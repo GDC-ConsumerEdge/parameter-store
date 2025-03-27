@@ -27,11 +27,21 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 import os
+
+# rgb to hex conversion
+import colorsys 
 from pathlib import Path
 
 from django.templatetags.static import static
 
 from parameter_store.util import str_to_bool
+
+# libraries for unfold navbar
+from django.urls import reverse_lazy  
+from django.utils.translation import gettext_lazy as _
+
+# customer settings such as logo image path and company hex color
+from parameter_store.customerconfig import img_path, primary_color_hex
 
 version = "v1.0.0"
 
@@ -207,12 +217,77 @@ CSRF_COOKIE_SECURE = True
 CORS_ALLOW_CREDENTIALS = True
 SESSION_COOKIE_AGE = os.environ.get('PARAM_STORE_COOKIE_TTL', 3600)  # one hour default
 
+# generate hls color palette based on company color hex
+def generate_hls_palette(hex_color):
+    hex_color = hex_color.lstrip('#')
+    
+    r = int(hex_color[0:2], 16) / 255.0
+    g = int(hex_color[2:4], 16) / 255.0
+    b = int(hex_color[4:6], 16) / 255.0
+
+    h, l, s = colorsys.rgb_to_hls(r,g,b)
+    palette = {}
+
+    shades = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950]
+    
+    for shade in shades:
+        if shade <= 500:
+            new_l = l + (500 - shade) / 500 * (1 - l)
+        else:
+            new_l = l * (500 / shade)
+
+        new_r, new_g, new_b = colorsys.hls_to_rgb(h, new_l, s)
+        r, g, b = int(new_r * 255), int(new_g * 255), int(new_b * 255)
+        new_hex = f'#{r:02x}{g:02x}{b:02x}'
+        
+        palette[str(shade)] = new_hex
+
+    return palette
+
 # Param Store App Settings
 UNFOLD = {
     "STYLES": [
         lambda request: static("parameter_store/css/custom_admin.css"),
     ],
+    "SITE_HEADER": "Edge Parameter Store",
+    "COLORS": {
+        "base": {
+            "50": "249 250 251",
+            "100": "243 244 246",
+            "200": "229 231 235",
+            "300": "209 213 219",
+            "400": "156 163 175",
+            "500": "107 114 128",
+            "600": "75 85 99",
+            "700": "55 65 81",
+            "800": "31 41 55",
+            "900": "17 24 39",
+            "950": "3 7 18",
+        },
+        "primary": generate_hls_palette(primary_color_hex),
+        "font": {
+            "subtle-light": "var(--color-base-500)",  # text-base-500
+            "subtle-dark": "var(--color-base-400)",  # text-base-400
+            "default-light": "var(--color-base-600)",  # text-base-600
+            "default-dark": "var(--color-base-300)",  # text-base-300
+            "important-light": "var(--color-base-900)",  # text-base-900
+            "important-dark": "var(--color-base-100)",  # text-base-100
+        },
+    },
 }
+
+# if company logo exists, add as site_icon and favicons
+if img_path:
+    UNFOLD["SITE_ICON"] = lambda request: static(img_path)
+    UNFOLD["SITE_FAVICONS"] = [
+        {
+            "rel": "icon",
+            "sizes": "32x32",
+            "type": "image/svg+xml",
+            "href": lambda request: static(img_path) 
+        }
+    ]
+
 
 # Defaults to enabled
 IAP_ENABLED = str_to_bool(os.environ.get('PARAM_STORE_IAP_ENABLED', True))
