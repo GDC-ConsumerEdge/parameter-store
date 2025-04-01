@@ -37,6 +37,8 @@ jobs:
         run: python3 manage.py makemigrations parameter_store api
       - name: django migrate
         run: python3 manage.py migrate
+      - name: django collectstatic
+        run: python3 manage.py collectstatic
       - name: django runserver
-        run: timeout 1 python3 manage.py runserver || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
+        run: timeout 10s python3 manage.py runserver || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
 
