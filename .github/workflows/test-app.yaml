@@ -1,0 +1,42 @@
+on:
+  pull_request:
+    branches:
+      - main
+
+name: test app
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:latest
+        env:
+          POSTGRES_DB: eps
+          POSTGRES_USER: eps
+          POSTGRES_PASSWORD: 's2K_Nz_gwRtjf.BCCPTmctkZ'
+        ports:
+          - 5432:5432
+        # Set health checks to wait until postgres has started
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: install app dependencies
+        run: pip3 install -r requirements.txt --require-hashes
+      - name: install dev dependencies
+        run: pip3 install -r requirements-dev.txt --require-hashes
+      - name: django makemigrations
+        run: python3 manage.py makemigrations parameter_store api
+      - name: django migrate
+        run: python3 manage.py migrate
+      - name: django runserver
+        run: timeout 1 python3 manage.py runserver || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
+
