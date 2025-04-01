@@ -61,8 +61,13 @@ resource "google_sql_database_instance" "default" {
     }
 
     ip_configuration {
-      ipv4_enabled    = true
+      ipv4_enabled    = false
       private_network = module.eps-network.network_self_link
+      psc_config {
+        psc_enabled               = true
+        allowed_consumer_projects = [var.eps_project_id]
+        # consumer_network          = [module.eps-network.network_id]
+      }
     }
 
     maintenance_window {
