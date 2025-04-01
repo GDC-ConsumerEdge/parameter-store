@@ -1,0 +1,122 @@
+steps:
+  - name: gcr.io/cloud-builders/curl
+    args:
+      - '-o'
+      - cloud-sql-proxy
+      - >-
+        https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.15.1/cloud-sql-proxy.linux.amd64
+  - name: gcr.io/cloud-builders/gcloud
+    args:
+      - '-c'
+      - chmod +x cloud-sql-proxy; ls; pwd; ./cloud-sql-proxy -h;
+    entrypoint: bash
+  - name: gcr.io/cloud-builders/docker
+    id: buildbase
+    args:
+      - build
+      - '-t'
+      - 'us-docker.pkg.dev/eps-cicd/eps/parameter_store:temp'
+      - .
+  #- name: gcr.io/cloud-builders/docker
+  #  id: buildbase
+  #  args:
+  #    - 'push'
+  #    - 'us-docker.pkg.dev/eps-cicd/eps/parameter_store:$COMMIT_SHA'
+  - name: 'us-docker.pkg.dev/eps-cicd/eps/parameter_store:temp'
+    waitFor: ['buildbase']
+    env:
+      - 'DATABASE_NAME=${_DATABASE_NAME}'
+      - 'DATABASE_USER=${_DATABASE_USER}'
+      - 'DATABASE_PORT=${_DATABASE_PORT}'
+      - 'DB_HOST=${_DB_HOST}'
+      - 'DB_NAME=${_DATABASE_NAME}'
+      - 'DB_USER=${_DATABASE_USER}'
+      - 'DB_PORT=${_DATABASE_PORT}'
+      - 'INSTANCE_CONNECTION_NAME=${_INSTANCE_CONNECTION_NAME}'
+    args:
+      - '-c'
+      - >-
+        env; mkdir -p /cloudsql; chmod 777 /cloudsql;  ./cloud-sql-proxy
+        --unix-socket /cloudsql --debug-logs eps-cicd:us-central1:eps-015b & sleep 200; cd /app; python3 manage.py makemigrations parameter_store; ls /app/parameter_store/migrations; cp -rf /app/parameter_store/migrations /workspace/parameter_store;
+    id: migrate
+    entrypoint: sh
+    secretEnv:
+      - DB_PASSWORD
+  - name: gcr.io/cloud-builders/gcloud
+    id: check1
+    waitFor: ['migrate']
+    args:
+      - '-c'
+      - ls; pwd; ls /workspace/parameter_store;
+    entrypoint: bash
+  - name: gcr.io/cloud-builders/docker
+    id: buildbase2
+    waitFor: ['check1']
+    args:
+      - build
+      - '-t'
+      - 'us-docker.pkg.dev/eps-cicd/eps/parameter_store:$COMMIT_SHA'
+      - .
+  - name: gcr.io/cloud-builders/docker
+    waitFor: ['buildbase2']
+    args:
+      - push
+      - us-docker.pkg.dev/eps-cicd/eps/parameter_store:$COMMIT_SHA
+  - name: gcr.io/cloud-builders/git
+    args:
+      - '-c'
+      - >
+
+        echo
+        "https://psabhishekgoogle:$$GITHUBTOKEN@github.com"
+        > ~/.git-credentials
+
+        pwd
+
+        cd /
+
+        ls
+
+        ls /workspace
+
+        ls /workspace/migrations
+
+        git config --global credential.helper 'store --file ~/.git-credentials'
+
+        git config --global user.email "psabhishek@google.com"
+
+        git config --global user.name "psabhishekgoogle"
+
+        git clone https://github.com/Cloudops-Google/parameter-store.git
+
+        cd parameter-store
+
+        cp -rf /workspace/parameter_store/migrations parameter_store/.
+
+        git checkout -b $SHORT_SHA
+
+        git add .
+
+        git commit -m "added migration files"
+
+        git push origin $SHORT_SHA
+    entrypoint: bash
+    secretEnv: ['GITHUBTOKEN']
+images:
+  - us-docker.pkg.dev/eps-cicd/eps/parameter_store:$COMMIT_SHA
+options:
+  logging: CLOUD_LOGGING_ONLY
+  dynamicSubstitutions: true
+substitutions:
+  _DATABASE_PASSWORD_KEY: eps-db-pass
+  _DATABASE_USER: eps
+  _DB_HOST: '/cloudsql/eps-cicd:us-central1:eps-015b'
+  _DATABASE_NAME: eps
+  _DATABASE_PORT: '5432'
+  _INSTANCE_CONNECTION_NAME: 'eps-cicd:us-central1:eps-015b'
+availableSecrets:
+  secretManager:
+    - versionName: 'projects/188064827529/secrets/${_DATABASE_PASSWORD_KEY}/versions/2'
+      env: DB_PASSWORD
+    - versionName: projects/188064827529/secrets/github-pat-secret/versions/1
+      env: 'GITHUBTOKEN'

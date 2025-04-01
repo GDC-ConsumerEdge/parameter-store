@@ -17,7 +17,7 @@
 import unfold.admin as uadmin
 import unfold.sites as usites
 from django import forms
-from django.apps import AppConfig
+from django.apps import apps
 from django.contrib import admin
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
@@ -28,16 +28,14 @@ from guardian.admin import GuardedModelAdmin
 from .models import Cluster, ClusterIntent, ClusterTag, ClusterFleetLabel, Group, Tag, Validator, \
     ValidatorAssignment, ClusterData, ClusterDataField, ClusterDataFieldValidatorAssignment
 
-
-class ParamStoreAppConfig(AppConfig):
-    name = 'parameter_store'
-    verbose_name = 'Edge Parameter Store'
+app = apps.get_app_config('parameter_store')
+app.verbose_name = 'Edge Parameter Store'
 
 
 class ParamStoreAdmin(usites.UnfoldAdminSite):
-    site_header = 'Edge Parameter Store'
-    site_title = 'Edge Parameter Store'
-    index_title = 'Edge Parameter Store'
+    site_header = 'Parameter Store'
+    site_title = 'Parameter Store'
+    index_title = 'Parameter Store'
 
     def get_app_list(self, request, app_label=None):
         """ Return a sorted list of all the installed apps that have been registered to this
@@ -67,7 +65,6 @@ class ParamStoreAdmin(usites.UnfoldAdminSite):
 
 
 param_admin_site = ParamStoreAdmin('param_admin')
-param_admin_site.verbose_name = 'Edge Parameter Store'
 
 
 class ClusterIntentInline(uadmin.StackedInline):

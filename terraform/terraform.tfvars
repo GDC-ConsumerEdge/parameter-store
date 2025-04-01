@@ -20,7 +20,7 @@
 environment_name      = "dev"
 eps_project_id        = "durivage-eps"
 secrets_project_id    = "durivage-eps"
-eps_image             = "us-docker.pkg.dev/durivage-eps/hsp/parameter_store:v11"
+eps_image             = "us-docker.pkg.dev/cloudrun/container/hello"
 terraform_principal   = "serviceAccount:terraform@durivage-eps.iam.gserviceaccount.com"
 app_fqdn              = "durivage.eps.joonix.net"
 csrf_trusted_origins  = ["localhost"]

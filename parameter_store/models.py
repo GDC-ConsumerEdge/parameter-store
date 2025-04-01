@@ -180,11 +180,6 @@ class ClusterIntent(DynamicValidatingModel):
         verbose_name_plural = 'Cluster Intent'
 
     cluster = models.OneToOneField(Cluster, on_delete=models.CASCADE, related_name="intent")
-    unique_zone_id = models.CharField(
-        max_length=64,
-        unique=True,
-        verbose_name='Unique Zone ID',
-        help_text='This is the ID that uniquely identifies a zone in the ordering process.')
     zone_name = models.CharField(
         max_length=100,
         null=True,
@@ -193,7 +188,7 @@ class ClusterIntent(DynamicValidatingModel):
     location = models.CharField(
         max_length=30,
         null=False,
-        help_text="This is a GCP location")
+        help_text=None)
     machine_project_id = models.CharField(
         max_length=30,
         null=False,
@@ -261,23 +256,7 @@ class ClusterIntent(DynamicValidatingModel):
         max_length=128,
         null=True,
         blank=True,
-        help_text="This is an RFC 5545 recurrence rule, ex: FREQ=WEEKLY;BYDAY=WE,TH,FR"
-    )
-    maintenance_exclusion_name = models.CharField(
-        null=True,
-        blank=True,
-        max_length=64
-    )
-    maintenance_exclusion_start_1 = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text=None
-    )
-    maintenance_exclusion_end_1 = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text=None
-    )
+        help_text=None)
     subnet_vlans = models.CharField(
         max_length=128,
         null=True,

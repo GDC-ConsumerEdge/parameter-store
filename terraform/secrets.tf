@@ -25,9 +25,17 @@ data "google_iam_policy" "eps-secret-access" {
 #
 #  Cloud SQL Database Password
 #
+
 resource "random_password" "database" {
-  length = 30
+  length           = 10
+  special          = false
+  override_special = ""
+  min_upper        = 0 # No uppercase letters
+  min_lower        = 1
+  min_numeric      = 1
+  upper            = false # Ensure no uppercase letters
 }
+
 
 resource "google_secret_manager_secret" "eps-db-pass" {
   secret_id = "${var.app_name_short}-db-pass"
@@ -89,4 +97,16 @@ resource "google_secret_manager_secret_iam_policy" "eps-secret" {
   project     = google_secret_manager_secret.eps-secret.project
   secret_id   = google_secret_manager_secret.eps-secret.id
   policy_data = data.google_iam_policy.eps-secret-access.policy_data
+}
+
+resource "google_secret_manager_secret" "github_pat_secret" {
+  secret_id = "github-pat-secret"
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_version" "github_pat_secret_version" {
+  secret = google_secret_manager_secret.github_pat_secret.id
+  secret_data = var.pat_token
 }
