@@ -182,3 +182,4 @@ staticfiles
 /terraform/.terraform.lock.hcl
 
 *.DS_Store
+**/migrations/
