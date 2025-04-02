@@ -184,49 +184,50 @@ class ClusterIntent(DynamicValidatingModel):
         max_length=64,
         unique=True,
         verbose_name='Unique Zone ID',
-        help_text='This is the ID that uniquely identifies a zone in the ordering process.')
+        help_text='This is a user-defined name of the zone and is sometimes '
+                  'referred to as "store_id"')
     zone_name = models.CharField(
         max_length=100,
         null=True,
         blank=True,
-        help_text=None)
+        help_text='Name of the zone as an object in the GDCC API; ex: us-west1-edge-mtv55')
     location = models.CharField(
         max_length=30,
         null=False,
-        help_text="This is a GCP location")
+        help_text="This is a GCP region")
     machine_project_id = models.CharField(
         max_length=30,
         null=False,
         verbose_name='Machine Project ID',
-        help_text=None)
+        help_text='Project ID where machines are associated')
     fleet_project_id = models.CharField(
         max_length=30,
         null=False,
         verbose_name='Fleet Project ID',
-        help_text=None)
+        help_text='Project ID of the fleet')
     secrets_project_id = models.CharField(
         max_length=30,
         null=False,
-        help_text=None)
+        help_text='Project ID for secrets')
     node_count = models.IntegerField(
         null=False,
         default=3,
-        help_text=None)
+        help_text='Number of nodes in the cluster; defaults to 3')
     cluster_ipv4_cidr = models.CharField(
         max_length=18,
         null=False,
         verbose_name='Cluster IPv4 CIDR',
-        help_text=None)
+        help_text='IPv4 CIDR with which to provision the control plane of the cluster')
     services_ipv4_cidr = models.CharField(
         max_length=18,
         null=False,
         verbose_name='Services IPv4 CIDR',
-        help_text=None)
+        help_text='IPv4 to use as the Kubernetes services range')
     external_load_balancer_ipv4_address_pools = models.CharField(
         max_length=180,
         null=False,
         verbose_name='External Load Balancer IPv4 Address Pools',
-        help_text=None)
+        help_text='IPv4 CIDR used by Kubernetes for services of type LoadBalancer')
     sync_repo = models.CharField(
         max_length=128,
         null=False,
@@ -240,11 +241,11 @@ class ClusterIntent(DynamicValidatingModel):
         max_length=50,
         null=False,
         default='hydrated/clusters/',
-        help_text=None)
-    git_token_secret_manager_name = models.CharField(
+        help_text='Directory with a repo to sync for this cluster')
+    git_token_secrets_manager_name = models.CharField(
         max_length=255,
         null=False,
-        help_text=None)
+        help_text='Name of a Secret Manager secret that contains Git token')
     cluster_version = models.CharField(
         max_length=30,
         null=False,
@@ -263,10 +264,11 @@ class ClusterIntent(DynamicValidatingModel):
         blank=True,
         help_text="This is an RFC 5545 recurrence rule, ex: FREQ=WEEKLY;BYDAY=WE,TH,FR"
     )
-    maintenance_exclusion_name = models.CharField(
+    maintenance_exclusion_name_1 = models.CharField(
         null=True,
         blank=True,
-        max_length=64
+        max_length=64,
+        help_text=None
     )
     maintenance_exclusion_start_1 = models.DateTimeField(
         null=True,
@@ -281,7 +283,8 @@ class ClusterIntent(DynamicValidatingModel):
     subnet_vlans = models.CharField(
         max_length=128,
         null=True,
-        help_text=None)
+        help_text='Comma-separated list of VLAN IDs for subnets'
+    )
     recreate_on_delete = models.BooleanField(default=False)
 
     def __str__(self):
