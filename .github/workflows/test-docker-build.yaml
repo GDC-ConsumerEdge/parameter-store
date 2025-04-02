@@ -3,7 +3,7 @@ on:
     branches:
       - main
     paths-ignore:
-      - terraform/*
+      - terraform/**
 
 name: test dockerfile
 
