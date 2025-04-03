@@ -26,22 +26,14 @@ https://docs.djangoproject.com/en/5.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
+import colorsys
 import os
-
-# rgb to hex conversion
-import colorsys 
 from pathlib import Path
 
 from django.templatetags.static import static
 
-from parameter_store.util import str_to_bool
-
-# libraries for unfold navbar
-from django.urls import reverse_lazy  
-from django.utils.translation import gettext_lazy as _
-
-# customer settings such as logo image path and company hex color
 from parameter_store.customerconfig import img_path, primary_color_hex
+from parameter_store.util import str_to_bool
 
 version = "v1.0.0"
 
@@ -66,8 +58,6 @@ CSRF_TRUSTED_ORIGINS = [
 
 # Application definition
 INSTALLED_APPS = [
-    'parameter_store',
-    "api",
     'unfold',
     'unfold.contrib.inlines',
     'unfold.contrib.filters',
@@ -79,6 +69,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'parameter_store',
+    "api",
 ]
 
 if DEBUG:
@@ -165,11 +157,10 @@ AUTHENTICATION_BACKENDS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
-
 USE_I18N = True
 
 USE_TZ = True
+TIME_ZONE = os.environ.get('TIME_ZONE', 'UTC')
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
@@ -217,19 +208,20 @@ CSRF_COOKIE_SECURE = True
 CORS_ALLOW_CREDENTIALS = True
 SESSION_COOKIE_AGE = os.environ.get('PARAM_STORE_COOKIE_TTL', 3600)  # one hour default
 
+
 # generate hls color palette based on company color hex
 def generate_hls_palette(hex_color):
     hex_color = hex_color.lstrip('#')
-    
+
     r = int(hex_color[0:2], 16) / 255.0
     g = int(hex_color[2:4], 16) / 255.0
     b = int(hex_color[4:6], 16) / 255.0
 
-    h, l, s = colorsys.rgb_to_hls(r,g,b)
+    h, l, s = colorsys.rgb_to_hls(r, g, b)
     palette = {}
 
     shades = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950]
-    
+
     for shade in shades:
         if shade <= 500:
             new_l = l + (500 - shade) / 500 * (1 - l)
@@ -239,10 +231,11 @@ def generate_hls_palette(hex_color):
         new_r, new_g, new_b = colorsys.hls_to_rgb(h, new_l, s)
         r, g, b = int(new_r * 255), int(new_g * 255), int(new_b * 255)
         new_hex = f'#{r:02x}{g:02x}{b:02x}'
-        
+
         palette[str(shade)] = new_hex
 
     return palette
+
 
 # Param Store App Settings
 UNFOLD = {
@@ -284,10 +277,9 @@ if img_path:
             "rel": "icon",
             "sizes": "32x32",
             "type": "image/svg+xml",
-            "href": lambda request: static(img_path) 
+            "href": lambda request: static(img_path)
         }
     ]
-
 
 # Defaults to enabled
 IAP_ENABLED = str_to_bool(os.environ.get('PARAM_STORE_IAP_ENABLED', True))

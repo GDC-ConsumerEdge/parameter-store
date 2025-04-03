@@ -101,6 +101,8 @@ class DynamicValidatingModel(models.Model):
 class Group(DynamicValidatingModel):
     name = models.CharField(db_index=True, max_length=30, blank=False, unique=True, null=False)
     description = models.CharField(max_length=255, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name
@@ -134,6 +136,8 @@ class Cluster(DynamicValidatingModel):
         through='ClusterTag',
         related_name='clusters',
     )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     objects = ClusterManager()
 
@@ -157,6 +161,8 @@ class Tag(DynamicValidatingModel):
     name = models.CharField(max_length=30, blank=False, unique=True, null=False,
                             verbose_name='tag name')
     description = models.CharField(max_length=255, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name
@@ -169,6 +175,8 @@ class ClusterTag(DynamicValidatingModel):
 
     cluster = models.ForeignKey(Cluster, on_delete=models.DO_NOTHING)
     tag = models.ForeignKey(Tag, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f'{self.cluster.name} - {self.tag.name}'
@@ -286,6 +294,8 @@ class ClusterIntent(DynamicValidatingModel):
         help_text='Comma-separated list of VLAN IDs for subnets'
     )
     recreate_on_delete = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.cluster.name
@@ -302,6 +312,8 @@ class ClusterFleetLabel(DynamicValidatingModel):
     cluster = models.ForeignKey(Cluster, on_delete=models.CASCADE, related_name="fleet_labels")
     key = models.CharField(max_length=63, blank=False, null=False)
     value = models.CharField(max_length=63, blank=False, null=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f'{self.cluster.name} - "{self.key}" = "{self.value}"'
@@ -364,8 +376,9 @@ class Validator(models.Model):
         null=False,
         help_text="Enter parameters for the validator in JSON format. Due to limitations in the "
                   "UI, arguments for validators cannot be displayed dynamically. Contents of "
-                  "this field will be validated and feedback will be provided."
-    )
+                  "this field will be validated and feedback will be provided.")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name
@@ -406,8 +419,9 @@ class ValidatorAssignment(models.Model):
         blank=False,
         null=False,
         choices=get_model_field_choices(),
-        help_text="Select model and its field"
-    )
+        help_text="Select model and its field")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = "Standard Validator Assignment"
@@ -435,6 +449,8 @@ class ClusterDataField(models.Model):
 
     name = models.CharField(max_length=64, blank=False, unique=True, null=False)
     description = models.CharField(max_length=255, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name
@@ -450,6 +466,8 @@ class ClusterDataFieldValidatorAssignment(models.Model):
 
     field = models.ForeignKey(ClusterDataField, on_delete=models.DO_NOTHING)
     validator = models.ForeignKey(Validator, on_delete=models.DO_NOTHING)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f'Field "{self.field.name}" - Validator "{self.validator.name}"'
@@ -466,6 +484,8 @@ class ClusterData(models.Model):
     cluster = models.ForeignKey(Cluster, on_delete=models.CASCADE, related_name="data")
     field = models.ForeignKey(ClusterDataField, on_delete=models.CASCADE)
     value = models.CharField(max_length=1024, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f'{self.cluster.name} - "{self.field.name}" = "{self.value}"'

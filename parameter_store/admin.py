@@ -17,21 +17,13 @@
 import unfold.admin as uadmin
 import unfold.sites as usites
 from django import forms
-from django.apps import AppConfig
 from django.contrib import admin
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
-from django.db.models.signals import post_save, post_delete
-from django.dispatch import receiver
 from guardian.admin import GuardedModelAdmin
 
 from .models import Cluster, ClusterIntent, ClusterTag, ClusterFleetLabel, Group, Tag, Validator, \
     ValidatorAssignment, ClusterData, ClusterDataField, ClusterDataFieldValidatorAssignment
-
-
-class ParamStoreAppConfig(AppConfig):
-    name = 'parameter_store'
-    verbose_name = 'Edge Parameter Store'
 
 
 class ParamStoreAdmin(usites.UnfoldAdminSite):
@@ -67,7 +59,6 @@ class ParamStoreAdmin(usites.UnfoldAdminSite):
 
 
 param_admin_site = ParamStoreAdmin('param_admin')
-param_admin_site.verbose_name = 'Edge Parameter Store'
 
 
 class ClusterIntentInline(uadmin.StackedInline):
@@ -84,16 +75,6 @@ def get_tag_choices():
         choices = list(Tag.objects.values_list('id', 'name'))
         cache.set(cache_key, choices, timeout=300)  # Cache for 5 minutes
     return choices
-
-
-@receiver(post_save, sender=Tag)
-def invalidate_tag_cache_on_save(sender, **kwargs):
-    cache.delete('tag_choices_inline')
-
-
-@receiver(post_delete, sender=Tag)
-def invalidate_tag_cache_on_delete(sender, **kwargs):
-    cache.delete('tag_choices_inline')
 
 
 class ClusterTagInlineForm(forms.ModelForm):
@@ -141,16 +122,6 @@ def get_cluster_data_field_choices():
     return choices
 
 
-@receiver(post_save, sender=ClusterDataField)
-def invalidate_cluster_data_field_choices_on_save(sender, instance, **kwargs):
-    cache.delete('cluster_data_field_choices')
-
-
-@receiver(post_delete, sender=ClusterDataField)
-def invalidate_cluster_data_field_choices_on_delete(sender, instance, **kwargs):
-    cache.delete('cluster_data_field_choices')
-
-
 class ClusterDataInlineForm(forms.ModelForm):
     field = forms.ChoiceField(choices=get_cluster_data_field_choices)
 
@@ -181,13 +152,12 @@ class ClusterDataInline(uadmin.TabularInline):
 class ClusterAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     inlines = [ClusterDataInline, ClusterTagInline, ClusterFleetLabelsInline, ClusterIntentInline]
     list_display = ['name', 'group', 'comma_separated_tags']
-    # list_filter = ['group', 'tags__name']
-    list_filter = ['group']
-    # search_fields = ['name', 'group__name', 'tags__name']
-    search_fields = ['name', 'group__name']
+    list_filter = ['group', 'tags__name']
+    search_fields = ['name', 'group__name', 'tags__name']
     sortable_by = ['name', 'group']
     ordering = ['group', 'name']
     validate_on_save = True
+    readonly_fields = ('created_at', 'updated_at')
 
     @admin.display(description='Cluster Tags')
     def comma_separated_tags(self, obj):
@@ -217,6 +187,7 @@ class GroupAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     sortable_by = ['name']
     ordering = ['name']
     validate_on_save = True
+    readonly_fields = ('created_at', 'updated_at')
 
 
 @admin.register(Tag, site=param_admin_site)
@@ -225,6 +196,12 @@ class TagAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     sortable_by = ['name']
     ordering = ['name']
     validate_on_save = True
+    readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(ClusterTag, site=param_admin_site)
+class ClusterTagAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
+    readonly_fields = ('created_at', 'updated_at')
 
 
 @admin.register(ClusterFleetLabel, site=param_admin_site)
@@ -233,6 +210,7 @@ class ClusterFleetLabelAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     sortable_by = ['cluster', 'key', 'value']
     ordering = ['cluster', 'key']
     validate_on_save = True
+    readonly_fields = ('created_at', 'updated_at')
 
 
 @admin.register(ClusterIntent, site=param_admin_site)
@@ -241,23 +219,34 @@ class ClusterIntentAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     list_filter = ['cluster']
     ordering = ['cluster']
     validate_on_save = True
+    readonly_fields = ('created_at', 'updated_at')
 
 
 @admin.register(ClusterDataField, site=param_admin_site)
 class ClusterDataFieldAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
-    pass
+    readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(ClusterData, site=param_admin_site)
+class ClusterDataAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
+    readonly_fields = ('created_at', 'updated_at')
+
+    def get_queryset(self, request):
+        return super().get_queryset(request)
 
 
 @admin.register(Validator, site=param_admin_site)
 class ValidatorAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     list_display = ['name', 'validator']
     validate_on_save = True
+    readonly_fields = ('created_at', 'updated_at')
 
 
 @admin.register(ValidatorAssignment, site=param_admin_site)
 class ValidatorAssignmentAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     list_display = ['pretty_field', 'validator']
     validate_on_save = True
+    readonly_fields = ('created_at', 'updated_at')
 
     @admin.display(description='Model Field')
     def pretty_field(self, obj):
@@ -268,3 +257,4 @@ class ValidatorAssignmentAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
 class ClusterDataFieldValidatorAssignmentAdmin(uadmin.ModelAdmin):
     list_display = ['field', 'validator']
     validate_on_save = True
+    readonly_fields = ('created_at', 'updated_at')

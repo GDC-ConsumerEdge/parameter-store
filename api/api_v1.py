@@ -142,7 +142,7 @@ def get_clusters(request, filters: Query[ClusterFilter], limit=250, offset=0):
     """
     clusters = paginate(filters.filter(Cluster.objects.with_related()), limit, offset)
 
-    out = [
+    out = (
         ClusterResponse(
             name=cluster.name,
             description=cluster.description,
@@ -157,6 +157,8 @@ def get_clusters(request, filters: Query[ClusterFilter], limit=250, offset=0):
                 d.field.name: d.value
                 for d in cluster.data.all()
             } if cluster.data.exists() else None,
+            created_at=cluster.created_at,
+            updated_at=cluster.updated_at,
         ) for cluster in clusters
-    ]
+    )
     return {'clusters': out, 'count': clusters.count()}
