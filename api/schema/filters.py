@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Annotated, Any
 
 import pydantic
@@ -25,9 +26,17 @@ class ClusterFilter(FilterSchema):
     # how tag queries are to be performed, either with a logical AND or OR
     # this field is popped out of the generated filter in overridden `get_filter_expression`
     tags_logical_operator: Annotated[
-        LogicalExpression | None,
+        LogicalExpression,
         Field(q=None, description="The logical operation to use when querying for tags")
     ] = LogicalExpression.AND
+
+    updated_at: Annotated[
+        datetime | None,
+        Field(alias='updated_since',
+              q='updated_at__gte',
+              description='Find clusters that were updated after this datetime in ISO 8601 or '
+                          'Unix timestamps; ex: 2025-04-02T12:40:01-05:00')
+    ] = None
 
     def get_filter_expression(self) -> Q:
         """ Overrides parent method to remove the "tags_logical_operator" from the resulting

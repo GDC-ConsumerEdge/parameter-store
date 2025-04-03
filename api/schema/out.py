@@ -1,4 +1,5 @@
 import enum
+from datetime import datetime
 from typing import Any
 
 from ninja import Schema
@@ -25,7 +26,8 @@ class FleetLabelResponse(Schema):
     value: str
 
 
-ClusterIntentResponse = create_schema(ClusterIntent, exclude=['id', 'cluster'])
+ClusterIntentResponse = create_schema(
+    ClusterIntent, exclude=('id', 'cluster', 'created_at', 'updated_at'))
 
 
 class LogicalExpression(enum.StrEnum):
@@ -41,6 +43,8 @@ class ClusterResponse(Schema):
     fleet_labels: list[FleetLabelResponse]
     data: dict[str, str | None] | None
     intent: ClusterIntentResponse | None
+    created_at: datetime | None
+    updated_at: datetime | None
 
 
 class ClustersResponse(Schema):
