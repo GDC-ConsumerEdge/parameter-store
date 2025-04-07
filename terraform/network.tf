@@ -30,9 +30,8 @@ resource "google_vpc_access_connector" "eps_vpc_access" {
 #
 # Private services access
 #
-
-resource "google_compute_global_address" "private-services-access" {
-  name          = "private-ip-address"
+resource "google_compute_global_address" "sql" {
+  name          = "sql"
   purpose       = "VPC_PEERING"
   address_type  = "INTERNAL"
   prefix_length = 24
@@ -40,19 +39,22 @@ resource "google_compute_global_address" "private-services-access" {
   project       = var.eps_project_id
 }
 
-resource "google_service_networking_connection" "private-services-access" {
+resource "google_service_networking_connection" "sql" {
   network = module.eps-network.network_id
 
-  service                 = "servicenetworking.googleapis.com"
-  reserved_peering_ranges = [google_compute_global_address.private-services-access.name]
+  service = "servicenetworking.googleapis.com"
+  reserved_peering_ranges = [
+    google_compute_global_address.sql.name,
+    google_compute_global_address.gcb.name # TODO: remove if not using GCB data loader
+  ]
   deletion_policy         = "ABANDON" # Read docs on this, it has consequences
+  update_on_creation_fail = true
 }
 
 
 #
 # EPS app on Cloud Run load balancer
 #
-
 resource "google_compute_region_network_endpoint_group" "eps-neg" {
   name                  = "${var.app_name_short}-neg"
   region                = var.region
