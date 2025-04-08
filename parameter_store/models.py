@@ -81,8 +81,10 @@ class DynamicValidatingModel(models.Model):
                              f'{va.validator.name}: {va.validator.parameters}')
                 raise
 
+            model, field_name = va.model_field.split('.')
+
             try:
-                field = getattr(self, va.model_field)
+                field = getattr(self, field_name)
             except AttributeError:
                 logger.error(f'ValidatorAssignment {va.id} references invalid '
                              f'field {va.model_field} for model {this_class}')
@@ -92,7 +94,7 @@ class DynamicValidatingModel(models.Model):
                 validator.validate(field)
             except ValidationError as e:
                 logger.info("Validation error", e)
-                errors[va.model_field].append(e)
+                errors[field_name].append(e)
 
         if errors:
             raise ValidationError(errors)
@@ -338,8 +340,9 @@ def get_model_choices():
         Group, Cluster, Tag, ClusterTag, ClusterIntent, ClusterFleetLabel
     )
 
-    return [(model.__module__ + '.' + model.__name__, model.__name__)
-            for model in _validation_enabled_models]
+    choices = [(model.__module__ + '.' + model.__name__, model.__name__)
+               for model in _validation_enabled_models]
+    return choices
 
 
 def get_model_field_choices():
@@ -354,7 +357,7 @@ def get_model_field_choices():
         for field in ModelClass._meta.fields:
             if field.name != 'id':
                 model_field_path = f"{ModelClass.__name__}.{field.name}"
-                model_field_choices.append((field.name, model_field_path))
+                model_field_choices.append((model_field_path, model_field_path))
 
     return model_field_choices
 
@@ -436,7 +439,8 @@ class ValidatorAssignment(models.Model):
 
     def clean(self):
         cls = get_class_from_full_path(self.model)
-        if not hasattr(cls, self.model_field):
+        model, field_name = self.model_field.split('.')
+        if not hasattr(cls, field_name):
             raise ValidationError({
                 'model_field': f'Model "{cls.__name__}" does not have field "{self.model_field}"'
             })

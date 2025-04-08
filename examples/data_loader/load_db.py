@@ -180,13 +180,13 @@ def create_validators():
                 validator=models.Validator.objects.get(
                     name="Valid Example Cluster Name Length"),
                 model='parameter_store.models.Cluster',
-                model_field='name',
+                model_field='Cluster.name',
             ),
             models.ValidatorAssignment(
                 validator=models.Validator.objects.get(
                     name="Valid Example Cluster Name Format"),
                 model='parameter_store.models.Cluster',
-                model_field='name',
+                model_field='Cluster.name',
             )
         ]
     )
