@@ -244,13 +244,9 @@ class ValidatorAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
 
 @admin.register(ValidatorAssignment, site=param_admin_site)
 class ValidatorAssignmentAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
-    list_display = ['pretty_field', 'validator']
+    list_display = ['model_field', 'validator']
     validate_on_save = True
     readonly_fields = ('created_at', 'updated_at')
-
-    @admin.display(description='Model Field')
-    def pretty_field(self, obj):
-        return f'{obj.model.split('.')[2]}.{obj.model_field}'
 
 
 @admin.register(ClusterDataFieldValidatorAssignment, site=param_admin_site)

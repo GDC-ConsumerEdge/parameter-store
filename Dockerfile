@@ -10,9 +10,6 @@ COPY . .
 RUN pip3 install -r requirements.txt --require-hashes --no-cache-dir && \
     python3 manage.py collectstatic --noinput
 
-# show python logs as they occur
-ENV PYTHONUNBUFFERED 0
-
 # explicitly set a fallback log level in case no log level is defined by Kubernetes
 ENV DJANGO_LOG_LEVEL INFO
 
