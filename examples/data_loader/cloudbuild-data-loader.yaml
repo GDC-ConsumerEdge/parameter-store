@@ -1,0 +1,59 @@
+steps:
+  - name: gcr.io/cloud-builders/curl
+    id: install-cloud-sql-proxy
+    args:
+      - '-o'
+      - cloud-sql-proxy
+      - >-
+        https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/${_CLOUD_SQL_PROXY_VER}/cloud-sql-proxy.linux.amd64
+
+  - name: gcr.io/cloud-builders/gcloud
+    id: setup-cloud-sql-proxy
+    script: |
+      #!/usr/bin/env bash
+      chmod +x cloud-sql-proxy; 
+      ./cloud-sql-proxy -h;
+
+  - name: ${_EPS_IMAGE}
+    id: load
+    env:
+      - 'DB_HOST=${_DB_HOST}'
+      - 'DB_PORT=${_DB_PORT}'
+      - 'DB_USER=${_DB_USER}'
+      - 'DB_NAME=${_DB_NAME}'
+    script: |
+      #!/usr/bin/env sh
+      env | sort
+      mkdir -p /cloudsql
+      chmod 777 /cloudsql
+      ./cloud-sql-proxy --unix-socket /cloudsql --debug-logs --private-ip ${_INSTANCE_CONNECTION_NAME} & 
+      export PYTHONPATH=/app;
+      python3 load_db.py ${_LOADER_ARGS}
+    secretEnv:
+      - DB_PASSWORD
+    automapSubstitutions: true
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  dynamicSubstitutions: true
+  pool:
+    name: ${_PRIVATE_POOL}
+serviceAccount: projects/${_EPS_PROJECT}/serviceAccounts/gcb-eps-data-loader@${_EPS_PROJECT}.iam.gserviceaccount.com
+substitutions:
+  _CLOUD_SQL_PROXY_VER: 'v2.15.2'
+  _INSTANCE_CONNECTION_NAME: '${_EPS_PROJECT}:us-central1:eps-b5ff'  # TODO: update me
+  _DB_HOST: '/cloudsql/${_INSTANCE_CONNECTION_NAME}'
+  _DB_USER: 'eps'
+  _DB_NAME: 'eps'
+  _DB_PORT: '5432'
+  _DB_PASSWORD_KEY: 'eps-db-pass'
+  _IMAGE_PROJECT: '${PROJECT_ID}'  # TODO: update me
+  _EPS_IMAGE: 'us-docker.pkg.dev/${_IMAGE_PROJECT}/hsp/parameter_store:latest'  # TODO: update me
+  _PRIVATE_POOL: 'projects/${PROJECT_ID}/locations/${LOCATION}/workerPools/eps-private-pool'  # TODO: update me as needed
+  _LOADER_ARGS: ''
+  _SECRET_PROJECT_NUMBER: ''  # TODO: update me
+  _EPS_PROJECT: '${PROJECT_ID}'  # TODO: update me as needed
+availableSecrets:
+  secretManager:
+    - versionName: 'projects/${_SECRET_PROJECT_NUMBER}/secrets/${_DB_PASSWORD_KEY}/versions/latest'
+      env: DB_PASSWORD

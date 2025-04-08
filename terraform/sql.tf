@@ -78,7 +78,7 @@ resource "google_sql_database_instance" "default" {
 
   depends_on = [
     google_project_service.default,
-    google_service_networking_connection.private-services-access,
+    google_service_networking_connection.sql,
   ]
 }
 

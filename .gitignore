@@ -174,7 +174,7 @@ staticfiles
 
 # exclude db_loaders
 # TODO: don't ignore forever!
-*db_loader/
+#*db_loader/
 
 /terraform/.terraform/
 /terraform/terraform.tfstate

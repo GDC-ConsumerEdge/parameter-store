@@ -29,7 +29,6 @@
 # limitations under the License.
 
 terraform {
-
   required_providers {
     google = {
       source  = "hashicorp/google"

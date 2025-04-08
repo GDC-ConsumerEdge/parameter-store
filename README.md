@@ -1,6 +1,6 @@
-# parameter_store
+# Edge Parameter Store
 
-- [parameter_store](#parameter_store)
+- [Edge Parameter Store](#edge-parameter-store)
     * [Description](#description)
     * [Getting Started](#getting-started)
         + [Preparation](#preparation)
@@ -18,13 +18,16 @@
             - [Rerun Terraform After First Apply](#rerun-terraform-after-first-apply)
             - [Teardown](#teardown)
     * [Operate Parameter Store](#operate-parameter-store)
+    * [Data Loading](#data-loading)
+        + [Terraform](#terraform)
+        + [How Does Data Loading Work?](#how-does-data-loading-work)
     * [Local Dev](#local-dev)
-      - [Postgres Setup](#postgres-setup)
-      - [Python Setup](#python-setup)
-      - [Django Setup](#django-setup)
+        + [Postgres Setup](#postgres-setup)
+        + [Python Setup](#python-setup)
+        + [Django Setup](#django-setup)
     * [Appendix](#appendix)
-      - [Possible Errors](#possible-errors)
-      - [Dev Hacks](#dev-hacks)
+        + [Possible Errors](#possible-errors)
+        + [Dev Hacks](#dev-hacks)
     * [Disclaimer](#disclaimer)
 
 ## Description
@@ -264,9 +267,58 @@ Manual created resource requires manual deletion, including
 * The superuser will be responsible to assign permission to users. But users must log in **at least once** so that the
   superuser can see them in the system.
 
+## Data Loading
+
+EPS can support data loading while running in Cloud SQL. Terraform sets up EPS infrastructure to deploy Cloud SQL with
+fully private networking, making it impossible to access as an operator without resorting to creative hacks. To make this
+less challenging, there is an optional data loading mechanism using Cloud Build and private workers, which is
+temporarily provisioned in the EPS network with access to Cloud SQL via a private networking path.
+
+### Terraform
+
+The Terraform folder contains optional [resources](terraform/opt-gcb-data-loader.tf) to stand up infrastructure for a
+Cloud Build data loader pipeline. If you do not want these resources, you should comment out or delete the resources in
+this folder. In addtion to this file, there are references to these resources elsewhere — search the folder for TODO
+lines related to the data loader and remove them.
+
+### How Does Data Loading Work?
+
+In the [examples/data_loader](examples/data_loader) folder there are two files:
+
+* cloudbuild-data-loader.yaml - a cloud build pipeline which runs a data loader script
+* load_db.py - an example data loader script
+
+The `load_db.py` file is an example one-time data loader. It provides a command-line interface to load source of truth
+files (CSVs) into the application, and to add some basic validators. This example file demonstrates how to load the
+database with clusters and validators and should be modified to the specific use case.
+
+The cloud build file is expected to be submitted by a user with Cloud Build submitter IAM permissions to the Cloud Build
+API. To get started, copy the load_db.py file into an empty directory and colocate SoT files adjacent to it.
+
+```shell
+mkdir db_loader
+cp examples/data_loader/* db_loader
+cp *.csv db_loader  # these are the source of truth files, make sure they end up adjacent to the load_db.py
+cd data_loader
+```
+
+Next, edit the cloudbuild-data-loader.yaml file. Be sure to update the following values in that file wherever you see a
+`TODO: update me` comment.
+
+Then submit the build job:
+
+```bash
+gcloud beta builds submit . --config=cloudbuild-data-loader.yaml --region=us-central1
+```
+
+Cloud Build will then kick off and run the data loader script, but not before establishing a private connection from its
+private pool to the private IP of the database. The SoT files will be read, prepared, and loaded into the database. The
+data loader script can be modified bespoke to your use case and even extend so that it may be run more than once. Note
+it also has a `--wipe` flag so that you can erase user-loaded data and start from a fresh dataset if needed.
+
 ## Local Dev
 
-#### Postgres Setup
+### Postgres Setup
 
 1. Install Postgres 16
 2. Log in to PostgresSQL as a Superuser: Use the psql command-line utility to log in as the postgres user.
@@ -326,7 +378,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO eps;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO eps;
 ```
 
-#### Python Setup
+### Python Setup
 
 1. Install Python 3.12
 
@@ -344,7 +396,7 @@ pip3 install -r requirements-dev.txt
 pip3 install -r requirements.txt
 ```
 
-#### Django Setup
+### Django Setup
 
 1. Run Django Migrations
 
@@ -374,7 +426,7 @@ python manage.py runserver
 
 ## Appendix
 
-#### Possible Errors
+### Possible Errors
 
 Sometimes Django doesn't seem to pick up the models for `parameter_store`, so I have to `makemigrations` explicitly for
 it:
@@ -409,7 +461,7 @@ Running migrations:
 
 ```
 
-#### Dev Hacks
+### Dev Hacks
 
 I have Postgres running on my cloudtop while I dev locally, so I port-forward to psql on the cloudtop:
 

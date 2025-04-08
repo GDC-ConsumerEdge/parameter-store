@@ -17,13 +17,13 @@
 
 # these environment variables are examples
 # TODO: before release, fix these up as dummy examples without leaking googler info
-environment_name      = "dev"
-eps_project_id        = "durivage-eps"
-secrets_project_id    = "durivage-eps"
-eps_image             = "us-docker.pkg.dev/durivage-eps/hsp/parameter_store:v11"
-terraform_principal   = "serviceAccount:terraform@durivage-eps.iam.gserviceaccount.com"
-app_fqdn              = "durivage.eps.joonix.net"
-csrf_trusted_origins  = ["localhost"]
-iap_audience          = "/projects/22368248810/us-central1/backendServices/6252277272778218001"
-superusers            = ["durivage", "bfogel", "anmolsachdeva", "psabhishek", "jpandurangan", "kodrama"]
-eps_allowed_accessors = ["group:eps@durivage.joonix.net"]
+environment_name           = "dev"
+eps_project_id             = "durivage-eps"
+secrets_project_id         = "durivage-eps"
+eps_image                  = "us-docker.pkg.dev/durivage-eps/hsp/parameter_store:v12"
+terraform_principal        = "serviceAccount:terraform@durivage-eps.iam.gserviceaccount.com"
+app_fqdn                   = "durivage.eps.joonix.net"
+csrf_trusted_origins       = ["localhost"]
+iap_audience               = "/projects/22368248810/us-central1/backendServices/3598029050544832040"
+superusers                 = ["durivage", "bfogel", "anmolsachdeva", "psabhishek", "jpandurangan", "kodrama"]
+eps_allowed_accessors      = ["group:eps@durivage.joonix.net"]
