@@ -147,6 +147,7 @@ def get_clusters(request, filters: Query[ClusterFilter], limit=250, offset=0):
             name=cluster.name,
             description=cluster.description,
             group=cluster.group.name,
+            secondary_groups=[g.name for g in cluster.secondary_groups.all()],
             tags=[tag.name for tag in cluster.tags.all()],
             fleet_labels=[
                 FleetLabelResponse(key=fl.key, value=fl.value)

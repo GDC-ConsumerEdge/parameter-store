@@ -12,7 +12,8 @@ from api.schema.out import LogicalExpression
 class ClusterFilter(FilterSchema):
     group: Annotated[
         str | None,
-        Field(q='group__name', description="Cluster group to match; accepts only one")
+        Field(q=['group__name', 'secondary_groups__name'],
+              description="Cluster group to match; accepts only one")
     ] = None
 
     tags: Annotated[

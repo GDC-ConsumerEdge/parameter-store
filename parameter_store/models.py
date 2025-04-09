@@ -115,12 +115,18 @@ class ClusterManager(models.Manager):
     #     return super().get_queryset()
 
     def with_related(self):
+        """
+
+        Returns:
+
+        """
         return (
             self.get_queryset()
             .select_related('group', 'intent')
             .prefetch_related(
                 'tags',
                 'fleet_labels',
+                'secondary_groups',
                 Prefetch(
                     'data',
                     queryset=ClusterData.objects.select_related('field')
@@ -133,6 +139,7 @@ class Cluster(DynamicValidatingModel):
     name = models.CharField(db_index=True, max_length=30, blank=False, unique=True, null=False)
     description = models.CharField(max_length=255, null=True, blank=True)
     group = models.ForeignKey(Group, on_delete=models.DO_NOTHING)
+    secondary_groups = models.ManyToManyField(Group, related_name='secondary_clusters')
     tags = models.ManyToManyField(
         'Tag',
         through='ClusterTag',

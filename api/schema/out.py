@@ -39,6 +39,7 @@ class ClusterResponse(Schema):
     name: str
     description: str | None
     group: str
+    secondary_groups: list[str]
     tags: list[str]
     fleet_labels: list[FleetLabelResponse]
     data: dict[str, str | None] | None
