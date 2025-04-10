@@ -60,3 +60,14 @@ class HealthResponse(Schema):
 
 class PingResponse(Schema):
     status: str = 'ok'
+
+
+class GroupResponse(Schema):
+    name: str
+    description: str | None
+    data: dict[str, str | None] | None
+
+
+class GroupsResponse(Schema):
+    groups: list[GroupResponse]
+    count: int

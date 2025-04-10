@@ -16,14 +16,13 @@
 ###############################################################################
 import unfold.admin as uadmin
 import unfold.sites as usites
-from django import forms
 from django.contrib import admin
-from django.core.cache import cache
-from django.core.exceptions import ValidationError
 from guardian.admin import GuardedModelAdmin
 
+from .admin_inlines import ClusterIntentInline, ClusterTagInline, ClusterFleetLabelsInline, \
+    ClusterDataInline
 from .models import Cluster, ClusterIntent, ClusterTag, ClusterFleetLabel, Group, Tag, Validator, \
-    ValidatorAssignment, ClusterData, ClusterDataField, ClusterDataFieldValidatorAssignment
+    ValidatorAssignment, ClusterData, CustomDataField, CustomDataFieldValidatorAssignment
 
 
 class ParamStoreAdmin(usites.UnfoldAdminSite):
@@ -42,9 +41,10 @@ class ParamStoreAdmin(usites.UnfoldAdminSite):
             "Cluster Intent": 4,
             "Cluster Fleet Labels": 6,
             'Cluster Custom Data Fields': 7,
-            "Validators": 8,
-            "Standard Validator Assignments": 9,
-            "Cluster Custom Data Validator Assignments": 10,
+            "Cluster Custom Data": 8,
+            "Validators": 9,
+            "Standard Data Validator Assignments": 10,
+            "Cluster Custom Data Validator Assignments": 11,
         }
         app_dict = self._build_app_dict(request, app_label)
 
@@ -61,93 +61,6 @@ class ParamStoreAdmin(usites.UnfoldAdminSite):
 param_admin_site = ParamStoreAdmin('param_admin')
 
 
-class ClusterIntentInline(uadmin.StackedInline):
-    model = ClusterIntent
-    extra = 0
-    parent_link = True
-
-
-def get_tag_choices():
-    """Caches Tag choices for inline forms."""
-    cache_key = 'tag_choices_inline'  # Distinct cache key for inlines
-    choices = cache.get(cache_key)
-    if choices is None:
-        choices = list(Tag.objects.values_list('id', 'name'))
-        cache.set(cache_key, choices, timeout=300)  # Cache for 5 minutes
-    return choices
-
-
-class ClusterTagInlineForm(forms.ModelForm):
-    tag = forms.ChoiceField(choices=get_tag_choices)
-
-    class Meta:
-        model = ClusterTag
-        fields = '__all__'
-
-    def clean_tag(self):
-        field_id = self.cleaned_data.get('tag')
-        if field_id:
-            try:
-                return Tag.objects.get(pk=field_id)
-            except Tag.DoesNotExist:
-                raise ValidationError("Invalid Tag.")
-        return None
-
-
-class ClusterTagInline(uadmin.TabularInline):
-    model = ClusterTag
-    form = ClusterTagInlineForm
-    extra = 0
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).select_related('cluster', 'tag')
-
-
-class ClusterFleetLabelsInline(uadmin.TabularInline):
-    model = ClusterFleetLabel
-    extra = 0
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).select_related('cluster')
-
-
-def get_cluster_data_field_choices():
-    """Caches ClusterDataField choices."""
-    cache_key = 'cluster_data_field_choices'
-    choices = cache.get(cache_key)
-    if choices is None:
-        choices = list(
-            ClusterDataField.objects.values_list('id', 'name'))
-        cache.set(cache_key, choices, timeout=300)  # Cached for 5 minutes
-    return choices
-
-
-class ClusterDataInlineForm(forms.ModelForm):
-    field = forms.ChoiceField(choices=get_cluster_data_field_choices)
-
-    class Meta:
-        model = ClusterData
-        fields = '__all__'
-
-    def clean_field(self):
-        field_id = self.cleaned_data.get('field')
-        if field_id:
-            try:
-                return ClusterDataField.objects.get(pk=field_id)
-            except ClusterDataField.DoesNotExist:
-                raise ValidationError("Invalid ClusterDataField.")
-        return None
-
-
-class ClusterDataInline(uadmin.TabularInline):
-    model = ClusterData
-    form = ClusterDataInlineForm
-    extra = 0
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).select_related('cluster', 'field')
-
-
 @admin.register(Cluster, site=param_admin_site)
 class ClusterAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     inlines = [ClusterDataInline, ClusterTagInline, ClusterFleetLabelsInline, ClusterIntentInline]
@@ -156,7 +69,6 @@ class ClusterAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     search_fields = ['name', 'group__name', 'tags__name']
     sortable_by = ['name', 'group']
     ordering = ['group', 'name']
-    validate_on_save = True
     readonly_fields = ('created_at', 'updated_at')
 
     @admin.display(description='Cluster Tags')
@@ -183,10 +95,10 @@ class ClusterAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
 
 @admin.register(Group, site=param_admin_site)
 class GroupAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
+    # inlines = [GroupDataInline]
     list_display = ['name']
     sortable_by = ['name']
     ordering = ['name']
-    validate_on_save = True
     readonly_fields = ('created_at', 'updated_at')
 
 
@@ -195,7 +107,6 @@ class TagAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     list_display = ['name']
     sortable_by = ['name']
     ordering = ['name']
-    validate_on_save = True
     readonly_fields = ('created_at', 'updated_at')
 
 
@@ -203,14 +114,21 @@ class TagAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
 class ClusterTagAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     readonly_fields = ('created_at', 'updated_at')
 
+    def has_module_permission(self, request, **kwargs):
+        # Return False to hide the model from the admin
+        return False
+
 
 @admin.register(ClusterFleetLabel, site=param_admin_site)
 class ClusterFleetLabelAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     list_display = ['cluster', 'key', 'value']
     sortable_by = ['cluster', 'key', 'value']
     ordering = ['cluster', 'key']
-    validate_on_save = True
     readonly_fields = ('created_at', 'updated_at')
+
+    def has_module_permission(self, request, **kwargs):
+        # Return False to hide the model from the admin
+        return False
 
 
 @admin.register(ClusterIntent, site=param_admin_site)
@@ -218,11 +136,14 @@ class ClusterIntentAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     list_display = ['cluster', 'zone_name', 'zone_name', 'location']
     list_filter = ['cluster']
     ordering = ['cluster']
-    validate_on_save = True
     readonly_fields = ('created_at', 'updated_at')
 
+    def has_module_permission(self, request, **kwargs):
+        # Return False to hide the model from the admin
+        return False
 
-@admin.register(ClusterDataField, site=param_admin_site)
+
+@admin.register(CustomDataField, site=param_admin_site)
 class ClusterDataFieldAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     readonly_fields = ('created_at', 'updated_at')
 
@@ -232,25 +153,26 @@ class ClusterDataAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     readonly_fields = ('created_at', 'updated_at')
 
     def get_queryset(self, request):
-        return super().get_queryset(request)
+        return super().get_queryset(request).select_related('cluster', 'field')
+
+    def has_module_permission(self, request, **kwargs):
+        # Return False to hide the model from the admin
+        return False
 
 
 @admin.register(Validator, site=param_admin_site)
 class ValidatorAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     list_display = ['name', 'validator']
-    validate_on_save = True
     readonly_fields = ('created_at', 'updated_at')
 
 
 @admin.register(ValidatorAssignment, site=param_admin_site)
 class ValidatorAssignmentAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     list_display = ['model_field', 'validator']
-    validate_on_save = True
     readonly_fields = ('created_at', 'updated_at')
 
 
-@admin.register(ClusterDataFieldValidatorAssignment, site=param_admin_site)
+@admin.register(CustomDataFieldValidatorAssignment, site=param_admin_site)
 class ClusterDataFieldValidatorAssignmentAdmin(uadmin.ModelAdmin):
     list_display = ['field', 'validator']
-    validate_on_save = True
     readonly_fields = ('created_at', 'updated_at')

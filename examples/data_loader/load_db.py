@@ -103,7 +103,7 @@ def load_db(intent, merged):
 
             for field in remaining_fields:
                 cluster_data_field = get_or_create(
-                    clus_data_field_cache, models.ClusterDataField, field
+                    clus_data_field_cache, models.CustomDataField, field
                 )
 
                 value = row[field].strip()
@@ -192,10 +192,10 @@ def create_validators():
     )
 
     # @formatter:off
-    models.ClusterDataFieldValidatorAssignment.objects.bulk_create(
+    models.CustomDataFieldValidatorAssignment.objects.bulk_create(
         [
-            models.ClusterDataFieldValidatorAssignment(
-                field=models.ClusterDataField.objects.get(name=assignment['field']),
+            models.CustomDataFieldValidatorAssignment(
+                field=models.CustomDataField.objects.get(name=assignment['field']),
                 validator=models.Validator.objects.get(name=assignment['validator'])
             ) for assignment in [
                 {
@@ -220,9 +220,9 @@ def delete_all_objects():
 
     for model in [
         models.ValidatorAssignment,
-        models.ClusterDataFieldValidatorAssignment,
+        models.CustomDataFieldValidatorAssignment,
         models.Validator,
-        models.ClusterDataField,
+        models.CustomDataField,
         models.ClusterData,
         models.ClusterIntent,
         models.ClusterFleetLabel,

@@ -2,7 +2,7 @@ from django.core.cache import cache
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 
-from .models import ClusterDataField, Tag, ClusterTag, ClusterIntent, \
+from .models import CustomDataField, Tag, ClusterTag, ClusterIntent, \
     ClusterFleetLabel, ClusterData, Cluster
 
 
@@ -79,11 +79,11 @@ def invalidate_tag_cache_on_delete(sender, **kwargs):
     cache.delete('tag_choices_inline')
 
 
-@receiver(post_save, sender=ClusterDataField)
+@receiver(post_save, sender=CustomDataField)
 def invalidate_cluster_data_field_choices_on_save(sender, instance, **kwargs):
     cache.delete('cluster_data_field_choices')
 
 
-@receiver(post_delete, sender=ClusterDataField)
+@receiver(post_delete, sender=CustomDataField)
 def invalidate_cluster_data_field_choices_on_delete(sender, instance, **kwargs):
     cache.delete('cluster_data_field_choices')
