@@ -396,12 +396,7 @@ class ClusterData(CustomDataValidatingModel):
             models.UniqueConstraint(fields=['cluster', 'field'], name='unique_cluster_field')
         ]
 
-    cluster = models.ForeignKey(
-        Cluster,
-        null=True,
-        blank=True,
-        on_delete=models.CASCADE,
-        related_name="cluster_data")
+    cluster = models.ForeignKey(Cluster, on_delete=models.CASCADE, related_name="cluster_data")
     field = models.ForeignKey(CustomDataField, on_delete=models.CASCADE)
     value = models.CharField(max_length=1024, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -419,12 +414,7 @@ class GroupData(CustomDataValidatingModel):
             models.UniqueConstraint(fields=['group', 'field'], name='unique_group_field')
         ]
 
-    group = models.ForeignKey(
-        Group,
-        null=True,
-        blank=True,
-        on_delete=models.CASCADE,
-        related_name="group_data")
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="group_data")
     field = models.ForeignKey(CustomDataField, on_delete=models.CASCADE)
     value = models.CharField(max_length=1024, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

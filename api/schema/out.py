@@ -66,6 +66,8 @@ class GroupResponse(Schema):
     name: str
     description: str | None
     data: dict[str, str | None] | None
+    created_at: datetime | None
+    updated_at: datetime | None
 
 
 class GroupsResponse(Schema):

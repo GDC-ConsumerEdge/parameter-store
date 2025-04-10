@@ -140,6 +140,8 @@ def get_group(request: HttpRequest, group: str):
         description=g.description,
         data={d.field.name: d.value for d in
               g.group_data.all()} if g.group_data.exists() else None,
+        created_at=g.created_at,
+        updated_at=g.updated_at
     )
 
 
@@ -164,6 +166,8 @@ def get_groups(request: HttpRequest, limit=250, offset=0):
             description=group.description,
             data={d.field.name: d.value for d in
                   group.group_data.all()} if group.group_data.exists() else None,
+            created_at=group.created_at,
+            updated_at=group.updated_at
         ) for group in groups
     )
     return {'groups': out, 'count': groups.count()}

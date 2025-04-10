@@ -20,9 +20,10 @@ from django.contrib import admin
 from guardian.admin import GuardedModelAdmin
 
 from .admin_inlines import ClusterIntentInline, ClusterTagInline, ClusterFleetLabelsInline, \
-    ClusterDataInline
+    ClusterDataInline, GroupDataInline
 from .models import Cluster, ClusterIntent, ClusterTag, ClusterFleetLabel, Group, Tag, Validator, \
-    ValidatorAssignment, ClusterData, CustomDataField, CustomDataFieldValidatorAssignment
+    ValidatorAssignment, ClusterData, CustomDataField, CustomDataFieldValidatorAssignment, \
+    GroupData
 
 
 class ParamStoreAdmin(usites.UnfoldAdminSite):
@@ -95,7 +96,7 @@ class ClusterAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
 
 @admin.register(Group, site=param_admin_site)
 class GroupAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
-    # inlines = [GroupDataInline]
+    inlines = [GroupDataInline]
     list_display = ['name']
     sortable_by = ['name']
     ordering = ['name']
@@ -154,6 +155,18 @@ class ClusterDataAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('cluster', 'field')
+
+    def has_module_permission(self, request, **kwargs):
+        # Return False to hide the model from the admin
+        return False
+
+
+@admin.register(GroupData, site=param_admin_site)
+class GroupDataAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
+    readonly_fields = ('created_at', 'updated_at')
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('group', 'field')
 
     def has_module_permission(self, request, **kwargs):
         # Return False to hide the model from the admin
