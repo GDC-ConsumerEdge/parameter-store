@@ -110,19 +110,36 @@ class Group(DynamicValidatingModel):
         return self.name
 
 
+class Tag(DynamicValidatingModel):
+    name = models.CharField(max_length=30, blank=False, unique=True, null=False,
+                            verbose_name='tag name')
+    description = models.CharField(max_length=255, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+
 class ClusterManager(models.Manager):
     # def get_queryset(self):
     #     return super().get_queryset()
 
     def with_related(self):
+        """
+
+        Returns:
+
+        """
         return (
             self.get_queryset()
             .select_related('group', 'intent')
             .prefetch_related(
                 'tags',
                 'fleet_labels',
+                'secondary_groups',
                 Prefetch(
-                    'data',
+                    'cluster_data',
                     queryset=ClusterData.objects.select_related('field')
                 )
             )
@@ -133,6 +150,7 @@ class Cluster(DynamicValidatingModel):
     name = models.CharField(db_index=True, max_length=30, blank=False, unique=True, null=False)
     description = models.CharField(max_length=255, null=True, blank=True)
     group = models.ForeignKey(Group, on_delete=models.DO_NOTHING)
+    secondary_groups = models.ManyToManyField(Group, related_name='secondary_clusters')
     tags = models.ManyToManyField(
         'Tag',
         through='ClusterTag',
@@ -157,17 +175,6 @@ class Cluster(DynamicValidatingModel):
     @property
     def data_list(self):
         return self.data.all()
-
-
-class Tag(DynamicValidatingModel):
-    name = models.CharField(max_length=30, blank=False, unique=True, null=False,
-                            verbose_name='tag name')
-    description = models.CharField(max_length=255, null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return self.name
 
 
 class ClusterTag(DynamicValidatingModel):
@@ -321,6 +328,102 @@ class ClusterFleetLabel(DynamicValidatingModel):
         return f'{self.cluster.name} - "{self.key}" = "{self.value}"'
 
 
+class CustomDataField(models.Model):
+    class Meta:
+        verbose_name = 'Custom Data Field'
+        verbose_name_plural = 'Custom Data Fields'
+
+    name = models.CharField(max_length=64, blank=False, unique=True, null=False)
+    description = models.CharField(max_length=255, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+
+class CustomDataValidatingModel(models.Model):
+    class Meta:
+        abstract = True
+
+    def clean(self, validator_assignment_model=None) -> None:
+        """
+        Cleans and validates the current instance against a set of validators.
+
+        The method first logs the process of validation, then retrieves all
+        `ValidatorAssignment` instances that are associated with the current
+        class by filtering on its module and name. Each validator is instantiated
+        with its parameters, and then applied on the specified model field.
+        Any validation errors are collected and, if any are found, a
+        `ValidationError` is raised with all collected errors.
+
+        :raises TypeError: If the validator is instantiated with invalid
+            parameters.
+        :raises AttributeError: If a `ValidatorAssignment` references an
+            invalid field for the model.
+        :raises ValidationError: If any of the validators fail validation.
+        """
+        logger.debug(f'Validating {self.__class__.__name__} with parameters: {self.__dict__!r} ')
+        super().clean()
+
+        errors = defaultdict(list)
+        for va in CustomDataFieldValidatorAssignment.objects.filter(field=self.field.id):
+            Validator = get_class_from_full_path(va.validator.validator)
+
+            try:
+                validator = Validator(**va.validator.parameters)
+            except TypeError:
+                logger.error(
+                    f'Invalid parameters for validator '
+                    f'{va.validator.name}: {va.validator.parameters}')
+                raise
+
+            try:
+                validator.validate(self.value)
+            except ValidationError as e:
+                logger.info("Validation error", e)
+                errors['field'].append(e)
+
+        if errors:
+            raise ValidationError(errors)
+
+
+class ClusterData(CustomDataValidatingModel):
+    class Meta:
+        verbose_name = 'Cluster Custom Data'
+        verbose_name_plural = 'Cluster Custom Data'
+        constraints = [
+            models.UniqueConstraint(fields=['cluster', 'field'], name='unique_cluster_field')
+        ]
+
+    cluster = models.ForeignKey(Cluster, on_delete=models.CASCADE, related_name="cluster_data")
+    field = models.ForeignKey(CustomDataField, on_delete=models.CASCADE)
+    value = models.CharField(max_length=1024, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.cluster.name} - "{self.field.name}" = "{self.value}"'
+
+
+class GroupData(CustomDataValidatingModel):
+    class Meta:
+        verbose_name = 'Group Custom Data'
+        verbose_name_plural = 'Group Custom Data'
+        constraints = [
+            models.UniqueConstraint(fields=['group', 'field'], name='unique_group_field')
+        ]
+
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="group_data")
+    field = models.ForeignKey(CustomDataField, on_delete=models.CASCADE)
+    value = models.CharField(max_length=1024, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.group.name} - "{self.field.name}" = "{self.value}"'
+
+
 def get_validator_choices():
     """Returns a list of tuples representing custom validator classes.
     """
@@ -427,8 +530,8 @@ class ValidatorAssignment(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "Standard Validator Assignment"
-        verbose_name_plural = "Standard Validator Assignments"
+        verbose_name = "Standard Data Validator Assignment"
+        verbose_name_plural = "Standard Data Validator Assignments"
         constraints = [
             models.UniqueConstraint(
                 fields=['model', 'model_field', 'validator'], name='unique_model_field_validator')
@@ -446,21 +549,7 @@ class ValidatorAssignment(models.Model):
             })
 
 
-class ClusterDataField(models.Model):
-    class Meta:
-        verbose_name = 'Cluster Custom Data Field'
-        verbose_name_plural = 'Cluster Custom Data Fields'
-
-    name = models.CharField(max_length=64, blank=False, unique=True, null=False)
-    description = models.CharField(max_length=255, null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return self.name
-
-
-class ClusterDataFieldValidatorAssignment(models.Model):
+class CustomDataFieldValidatorAssignment(models.Model):
     class Meta:
         verbose_name = 'Custom Data Validator Assignment'
         verbose_name_plural = 'Custom Data Validator Assignments'
@@ -468,70 +557,10 @@ class ClusterDataFieldValidatorAssignment(models.Model):
             models.UniqueConstraint(fields=['field', 'validator'], name='unique_field_validator')
         ]
 
-    field = models.ForeignKey(ClusterDataField, on_delete=models.DO_NOTHING)
+    field = models.ForeignKey(CustomDataField, on_delete=models.DO_NOTHING)
     validator = models.ForeignKey(Validator, on_delete=models.DO_NOTHING)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f'Field "{self.field.name}" - Validator "{self.validator.name}"'
-
-
-class ClusterData(models.Model):
-    class Meta:
-        verbose_name = 'Cluster Custom Data'
-        verbose_name_plural = 'Cluster Custom Data'
-        constraints = [
-            models.UniqueConstraint(fields=['cluster', 'field'], name='unique_cluster_field')
-        ]
-
-    cluster = models.ForeignKey(Cluster, on_delete=models.CASCADE, related_name="data")
-    field = models.ForeignKey(ClusterDataField, on_delete=models.CASCADE)
-    value = models.CharField(max_length=1024, null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return f'{self.cluster.name} - "{self.field.name}" = "{self.value}"'
-
-    def clean(self, validator_assignment_model=None) -> None:
-        """
-        Cleans and validates the current instance against a set of validators.
-
-        The method first logs the process of validation, then retrieves all
-        `ValidatorAssignment` instances that are associated with the current
-        class by filtering on its module and name. Each validator is instantiated
-        with its parameters, and then applied on the specified model field.
-        Any validation errors are collected and, if any are found, a
-        `ValidationError` is raised with all collected errors.
-
-        :raises TypeError: If the validator is instantiated with invalid
-            parameters.
-        :raises AttributeError: If a `ValidatorAssignment` references an
-            invalid field for the model.
-        :raises ValidationError: If any of the validators fail validation.
-        """
-
-        logger.debug(f'Validating {self.__class__.__name__} with parameters: {self.__dict__!r} ')
-        super().clean()
-
-        errors = defaultdict(list)
-        for va in ClusterDataFieldValidatorAssignment.objects.filter(field=self.field.id):
-            Validator = get_class_from_full_path(va.validator.validator)
-
-            try:
-                validator = Validator(**va.validator.parameters)
-            except TypeError:
-                logger.error(
-                    f'Invalid parameters for validator '
-                    f'{va.validator.name}: {va.validator.parameters}')
-                raise
-
-            try:
-                validator.validate(self.value)
-            except ValidationError as e:
-                logger.info("Validation error", e)
-                errors['field'].append(e)
-
-        if errors:
-            raise ValidationError(errors)

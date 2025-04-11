@@ -39,6 +39,7 @@ class ClusterResponse(Schema):
     name: str
     description: str | None
     group: str
+    secondary_groups: list[str]
     tags: list[str]
     fleet_labels: list[FleetLabelResponse]
     data: dict[str, str | None] | None
@@ -59,3 +60,16 @@ class HealthResponse(Schema):
 
 class PingResponse(Schema):
     status: str = 'ok'
+
+
+class GroupResponse(Schema):
+    name: str
+    description: str | None
+    data: dict[str, str | None] | None
+    created_at: datetime | None
+    updated_at: datetime | None
+
+
+class GroupsResponse(Schema):
+    groups: list[GroupResponse]
+    count: int

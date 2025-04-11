@@ -1,53 +1,51 @@
+import datetime
+from typing import Type
+
 from django.core.cache import cache
+from django.db.models import Model
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
+from django.utils import timezone
 
-from .models import ClusterDataField, Tag, ClusterTag, ClusterIntent, \
-    ClusterFleetLabel, ClusterData, Cluster
+from .models import CustomDataField, Tag, ClusterTag, ClusterIntent, \
+    ClusterFleetLabel, ClusterData, Cluster, GroupData, Group
 
 
-def update_cluster_timestamp(cluster, updated_at):
-    """Updates the 'updated_at' timestamp on a given Cluster instance.
+def update_timestamp(model: Type[Model], parent_instance: Group | Cluster,
+                     updated_at: datetime.datetime):
+    """Updates the 'updated_at' timestamp on a given Cluster or Group instance.
 
     Args:
-        updated_at: datetime
+        model: model/table to search for parent object
+        parent_instance: related object that we are searching to update
+        updated_at: datetime of change
     """
-    if cluster:
-        Cluster.objects.filter(pk=cluster.pk).update(updated_at=updated_at)
+    if parent_instance:
+        model.objects.filter(pk=parent_instance.pk).update(updated_at=updated_at)
 
 
-@receiver(post_save, sender=ClusterTag)
-@receiver(post_save, sender=ClusterIntent)
-@receiver(post_save, sender=ClusterFleetLabel)
-@receiver(post_save, sender=ClusterData)
-def related_object_saved(sender, instance, **kwargs):
-    """ Listens for save events on models with FK/O2O to Cluster.
-    Updates the Cluster's updated_at timestamp.
+@receiver((post_save, post_delete), sender=ClusterTag)
+@receiver((post_save, post_delete), sender=ClusterIntent)
+@receiver((post_save, post_delete), sender=ClusterFleetLabel)
+@receiver((post_save, post_delete), sender=ClusterData)
+@receiver((post_save, post_delete), sender=GroupData)
+def related_object_saved(sender, *, instance, **kwargs):
+    """ Listens for save and delete events on models with FK/O2O to Cluster.
+    Updates the Cluster or Group's updated_at timestamp.
     """
-    cluster = None
+    this = None
     if hasattr(instance, 'cluster') and instance.cluster:
-        cluster = instance.cluster
+        this = instance.cluster
+    elif hasattr(instance, 'group') and instance.group:
+        this = instance.group
 
-    if cluster:
-        update_cluster_timestamp(cluster, instance.updated_at)
+    upd_at = timezone.now() if kwargs.get('signal') else instance.updated_at
 
-
-@receiver(post_save, sender=ClusterTag)
-@receiver(post_save, sender=ClusterIntent)
-@receiver(post_save, sender=ClusterFleetLabel)
-@receiver(post_save, sender=ClusterData)
-def related_object_deleted(sender, instance, **kwargs):
-    """  Listens for delete events on models with FK/O2O to Cluster.
-    Updates the Cluster's updated_at timestamp.
-    """
-    cluster = None
-    if hasattr(instance, 'cluster') and instance.cluster:
-        # Note: On deletion, the related object might already be partially gone,
-        # but the foreign key reference should still be accessible here.
-        cluster = instance.cluster
-
-    if cluster:
-        update_cluster_timestamp(cluster, instance.updated_at)
+    match this:
+        case Cluster():
+            update_timestamp(Cluster, this, upd_at)
+        case Group():
+            update_timestamp(Group, this, upd_at)
 
 
 # This is intentionally dark code; leaving this commented out.
@@ -79,11 +77,11 @@ def invalidate_tag_cache_on_delete(sender, **kwargs):
     cache.delete('tag_choices_inline')
 
 
-@receiver(post_save, sender=ClusterDataField)
+@receiver(post_save, sender=CustomDataField)
 def invalidate_cluster_data_field_choices_on_save(sender, instance, **kwargs):
     cache.delete('cluster_data_field_choices')
 
 
-@receiver(post_delete, sender=ClusterDataField)
+@receiver(post_delete, sender=CustomDataField)
 def invalidate_cluster_data_field_choices_on_delete(sender, instance, **kwargs):
     cache.delete('cluster_data_field_choices')
