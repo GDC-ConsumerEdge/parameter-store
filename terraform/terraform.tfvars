@@ -18,12 +18,12 @@
 # these environment variables are examples
 # TODO: before release, fix these up as dummy examples without leaking googler info
 environment_name      = "dev"
-eps_project_id        = "durivage-eps"
-secrets_project_id    = "durivage-eps"
-eps_image             = "us-docker.pkg.dev/durivage-eps/hsp/parameter_store:v13"
-terraform_principal   = "serviceAccount:terraform@durivage-eps.iam.gserviceaccount.com"
-app_fqdn              = "durivage.eps.joonix.net"
+eps_project_id        = "example-eps"
+secrets_project_id    = "example-eps"
+eps_image             = "us-docker.pkg.dev/example-eps/hsp/parameter_store:v15"
+terraform_principal   = "serviceAccount:terraform@example-eps.iam.gserviceaccount.com"
+app_fqdn              = "example.eps.corp.net"
 csrf_trusted_origins  = ["localhost"]
 iap_audience          = "/projects/22368248810/us-central1/backendServices/506473743633145264"
-superusers            = ["durivage", "bfogel", "anmolsachdeva", "psabhishek", "jpandurangan", "kodrama"]
-eps_allowed_accessors = ["group:eps@durivage.joonix.net"]
+superusers            = ["example"]
+eps_allowed_accessors = ["group:eps@example.corp.net"]
