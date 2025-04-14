@@ -17,10 +17,10 @@
 
 data "google_iam_policy" "eps-secret-access" {
   binding {
-    role    = "roles/secretmanager.secretAccessor"
+    role = "roles/secretmanager.secretAccessor"
     members = [
       "serviceAccount:${google_service_account.eps.email}",
-      "serviceAccount:${google_service_account.gcb.email}"  # TODO: remove if not using Cloud Build
+      "serviceAccount:${google_service_account.gcb.email}" # TODO: remove if not using Cloud Build
     ]
   }
 }

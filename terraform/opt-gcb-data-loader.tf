@@ -1,8 +1,9 @@
 # This file contains optional resources to enable running EPS data loader scripts through Cloud Build.
 # This file is not necessary but helps.  See the repository README for more information.
 resource "google_project_service" "build" {
-  project = var.eps_project_id
-  service = "cloudbuild.googleapis.com"
+  project            = var.eps_project_id
+  service            = "cloudbuild.googleapis.com"
+  disable_on_destroy = false
 }
 
 # GSA for Cloud Build
@@ -61,16 +62,16 @@ resource "google_compute_global_address" "gcb" {
 }
 
 resource "google_cloudbuild_worker_pool" "pool" {
-  name = "eps-private-pool"
+  name     = "eps-private-pool"
   location = var.region
   worker_config {
-    disk_size_gb = 100
-    machine_type = "e2-standard-4"
+    disk_size_gb   = 100
+    machine_type   = "e2-standard-4"
     no_external_ip = true
   }
   network_config {
-    peered_network = module.eps-network.network_id
+    peered_network          = module.eps-network.network_id
     peered_network_ip_range = "/28"
   }
-  depends_on = [google_service_networking_connection.sql]
+  depends_on = [google_service_networking_connection.sql, google_project_service.build]
 }
