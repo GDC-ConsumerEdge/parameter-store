@@ -20,3 +20,4 @@ removed-requirements.txt
 staticfiles/
 terraform/
 venv/
+**/migrations

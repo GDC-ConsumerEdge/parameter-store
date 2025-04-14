@@ -224,6 +224,7 @@ def delete_all_objects():
         models.Validator,
         models.CustomDataField,
         models.ClusterData,
+        models.GroupData,
         models.ClusterIntent,
         models.ClusterFleetLabel,
         models.ClusterTag,
