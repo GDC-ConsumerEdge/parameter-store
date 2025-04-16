@@ -31,8 +31,8 @@ if auth_project:
 # --- Constants ---
 SCRIPT_DIR = Path(__file__).parent.resolve()
 CONFIG_FILE = SCRIPT_DIR / "config.ini"
-OUTPUT_INTENT_CSV = "cluster_intent_sot.csv"  # Matching the names of SoT files in  GitHub Repositories
-OUTPUT_DATA_CSV = "source_of_truth.csv"  # Matching the names in GitHub Repositories
+OUTPUT_INTENT_CSV = os.environ.get("OUTPUT_INTENT_CSV", "cluster_intent_sot.csv") # Matching the file path of SoT files in  GitHub Repositories
+OUTPUT_DATA_CSV = os.environ.get("OUTPUT_DATA_CSV", "source_of_truth.csv")  # Matching the file path in GitHub Repositories
 
 CONFIG_SECTIONS = {"SOT_COLUMNS": "sot_columns", "RENAME_COLUMNS": "rename_columns"}
 CONFIG_OPTIONS = {"INTENT_COLS": "cluster_intent_sot", "DATA_COLS": "cluster_data_sot"}
@@ -291,10 +291,15 @@ def generate_csv(df: pd.DataFrame, columns: List[str], output_filename: str):
         logger.info(f"Successfully generated '{output_filename}'")
     except KeyError as e:
         logger.error(
-            f"Column '{e}' not found while generating '{output_filename}'. This should not happen after pre-check.",
+            f"Column '{e}' not found while generating '{output_filename}'.",
         )
+        raise
+    except OSError as e: # Catch potential directory creation or file writing errors
+         logger.error(f"OS error during CSV generation for '{output_filename}': {e}")
+         raise
     except Exception as e:
         logger.exception(f"Error generating CSV file '{output_filename}': {e}")
+        raise
 
 
 # --- Main Execution ---
