@@ -1,29 +1,38 @@
-import os
 import argparse
 import ast
-import sys
 import logging
+import os
+import sys
 from configparser import ConfigParser, Error as ConfigParserError
-from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
-import pandas as pd
-import requests
+from typing import Dict, List, Any
+from pathlib import Path
 import google.auth
-from google.auth.transport.requests import Request
-from google.oauth2 import id_token
-from google.auth.exceptions import GoogleAuthError
-from requests.exceptions import RequestException, JSONDecodeError
+import google.oauth2.credentials
+import pandas as pd
+from google.auth.exceptions import GoogleAuthError  # Specific exception
+from google.auth.transport.requests import AuthorizedSession
+from google.cloud import iam_credentials_v1
+from requests.exceptions import RequestException, JSONDecodeError  # Specific exceptions
 
 # --- Setup Logging ---
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+    stream=sys.stdout
+)
 logger = logging.getLogger(__name__)
-logger.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
 
-creds, auth_project = google.auth.default()
+creds, auth_project = google.auth.default()  # GOOGLE_APPLICATION_CREDENTIALS
+logger.debug(f"Loaded credential type: {type(creds)}")
+if auth_project:
+    logger.debug(f"Authenticated with project: {auth_project}")
 
 # --- Constants ---
-CONFIG_FILE = "config.ini"
-OUTPUT_INTENT_CSV = "eps_mock_cluster_intent_sot.csv"
-OUTPUT_DATA_CSV = "eps_mock_cluster_data_sot.csv"
+SCRIPT_DIR = Path(__file__).parent.resolve()
+CONFIG_FILE = SCRIPT_DIR / "config.ini"
+OUTPUT_INTENT_CSV = "cluster_intent_sot.csv"  # Matching the names of SoT files in  GitHub Repositories
+OUTPUT_DATA_CSV = "source_of_truth.csv"  # Matching the names in GitHub Repositories
 
 CONFIG_SECTIONS = {"SOT_COLUMNS": "sot_columns", "RENAME_COLUMNS": "rename_columns"}
 CONFIG_OPTIONS = {"INTENT_COLS": "cluster_intent_sot", "DATA_COLS": "cluster_data_sot"}
@@ -33,23 +42,24 @@ PREFIXES_TO_REMOVE = ["data_", "intent_"]
 
 
 # --- Load Configuration from the config file ---
-def load_config(config_file: str) -> Optional[Dict[str, Any]]:
+def load_config(config_file: str) -> Dict[str, Any]:
     """Loads and parses configuration from the specified INI file.
 
     Args:
         config_file: Path to the configuration file.
 
     Returns:
-        A dictionary containing the parsed configuration, or None if an error occurs.
+        A dictionary containing the parsed configuration
+
+    Raises:
+        FileNotFoundError: If the config file doesn't exist or isn't readable.
+        ConfigParserError: If there's an issue parsing the INI structure.
+        ValueError: If list parsing fails or sections/options are missing.
     """
     config = ConfigParser()
     try:
         if not config.read(config_file):
-            print(
-                f"Error: Configuration file '{config_file}' not found or empty.",
-                file=sys.stderr,
-            )
-            return None
+            raise FileNotFoundError(f"Configuration file '{config_file}' not found or couldn't be read")
 
         # Safely parse list-like strings from config
         try:
@@ -62,107 +72,128 @@ def load_config(config_file: str) -> Optional[Dict[str, Any]]:
                 config.get(CONFIG_SECTIONS["SOT_COLUMNS"], CONFIG_OPTIONS["DATA_COLS"])
             )
         except (SyntaxError, ValueError) as e:
-            print(f"Error parsing column lists in config: {e}", file=sys.stderr)
-            return None
-        rename_rules = {}
+            raise ValueError(f"Error parsing column lists in config: {e}") from e
+        except (ConfigParserError, KeyError) as e:
+            raise ValueError(f"Missing section/option in config file '{config_file}': {e}") from e
+
         # Get rename rules directly as a dictionary
-        if config.has_section(CONFIG_SECTIONS["RENAME_COLUMNS"]):
-            rename_rules = dict(config.items(CONFIG_SECTIONS["RENAME_COLUMNS"]))
-        logging.info(f"Configuration loaded successfully from '{config_file}'.")
+        rename_rules = dict(config.items(CONFIG_SECTIONS["RENAME_COLUMNS"])) if config.has_section(
+            CONFIG_SECTIONS["RENAME_COLUMNS"]) else {}
+
+        logger.info(f"Configuration loaded successfully from '{config_file}'.")
         return {
             "intent_columns": cluster_intent_cols,
             "data_columns": cluster_data_cols,
             "rename_rules": rename_rules,
         }
-
     except ConfigParserError as e:
-        print(f"Error reading configuration file '{config_file}': {e}", file=sys.stderr)
-        return None
-    except Exception as e:  # Catch other potential errors like section/option not found
-        print(
-            f"An unexpected error occurred reading config '{config_file}': {e}",
-            file=sys.stderr,
-        )
-        return None
+        raise ConfigParserError(f"Error reading configuration file '{config_file}': {e}") from e
 
 
 @dataclass
 class EPSParameters:
     client_id: str
     host: str
+    service_account: str
 
 
-class EPSIntentReader:
-    def __init__(self, host, client_id):
-        self.host = host
-        self.client_id = client_id
-
-    def retrieve_source_of_truth(self):
-        url = self._get_url()
-        eps_json = make_iap_request(url, self.client_id)
-        return eps_json
-
-    def _get_url(self):
-        return f"https://{self.host}/api/v1/clusters"
+def retrieve_eps_source_of_truth(params: EPSParameters) -> Dict:
+    """Retrieves the source of truth data from the EPS API."""
+    url = f"https://{params.host}/api/v1/clusters"
+    logger.info(f"Retrieving Source of Truth from: {url}")
+    # Pass parameters directly to the request function
+    eps_json = make_iap_request(url, params.client_id, params.service_account)
+    return eps_json
 
 
-def get_parameters_from_environment():
+def get_parameters_from_environment() -> EPSParameters:
+    """Retrieves required parameters from environment variables.
+
+    Returns:
+        An EPSParameters object containing the parameters.
+
+    Raises:
+        ValueError: If any required environment variable is missing.
+    """
     client_id = os.environ.get("EPS_CLIENT_ID")
     host = os.environ.get("EPS_HOST")
+    service_account = os.environ.get("SERVICE_ACCOUNT")
 
+    missing_vars = []
     if client_id is None:
-        raise Exception("OAuth Client ID is Missing")
+        missing_vars.append("EPS_CLIENT_ID")
     if host is None:
-        raise Exception("EPS HOST URL is not Set")
+        missing_vars.append("EPS_HOST")
+    if service_account is None:
+        missing_vars.append("SERVICE_ACCOUNT")
 
-    return EPSParameters(client_id=client_id, host=host)
+    if missing_vars:
+        # Raise ValueError for configuration issues
+        raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
+
+    logger.info("Successfully retrieved parameters from environment variables.")
+    return EPSParameters(
+        client_id=client_id, host=host, service_account=service_account
+    )
 
 
 # --- IAP Request Function ---
-def make_iap_request(url: str, client_id: str, method: str = "GET", **kwargs) -> str:
+def make_iap_request(
+        url: str, client_id: str, service_account: str, method: str = "GET", **kwargs) -> Dict:
     """Makes a request to an application protected by Identity-Aware Proxy.
 
     Args:
+      service_account: The Target Service Account Email to be impersonated
       url: The Identity-Aware Proxy-protected URL to fetch.
       client_id: The client ID used by Identity-Aware Proxy.
-      method: The request method to use.
       **kwargs: Any parameters for requests.request.
 
     Returns:
-      The page body text.
+      The parsed JSON response body as a dictionary.
 
     Raises:
+        NotImplementedError: If method != GET (other methods can be implemented later)
+        ValueError: If the response is not valid JSON.
         Exception: If the request fails or returns a non-200 status.
     """
+    if method.upper() != "GET":  # Added method handling example
+        logger.error(f"HTTP method '{method}' not currently supported.")
+        raise NotImplementedError(f"HTTP method '{method}' not implemented.")
+
     if "timeout" not in kwargs:
         kwargs["timeout"] = 90
 
     try:
-        open_id_connect_token = id_token.fetch_id_token(Request(), client_id)
+        target_service_account_email = service_account
+        audience = client_id
+        logger.debug(f"Generating ID token for SA '{target_service_account_email}' with audience '{audience}'")
+        client = iam_credentials_v1.IAMCredentialsClient()
+        name = f"projects/-/serviceAccounts/{target_service_account_email}"
+        id_token_response = client.generate_id_token(name=name, audience=audience, include_email=True)
+        id_token_jwt = id_token_response.token
+        logger.debug("Creating authorized session with generated ID token.")
+        iap_creds = google.oauth2.credentials.Credentials(id_token_jwt)
+        authed_session = AuthorizedSession(iap_creds)
 
-        resp = requests.request(
-            method,
-            url,
-            headers={"Authorization": f"Bearer {open_id_connect_token}"},
-            **kwargs,
-        )
+        logger.info(f"Making {method} request to IAP URL: {url}")
 
+        resp = authed_session.request(method, url, **kwargs)
+        logger.info(f"Received status code: {resp.status_code} from {url}")
         resp.raise_for_status()  # Raises HTTPError for bad responses (4xx or 5xx)
         try:
             return resp.json()
         except JSONDecodeError as json_err:
-            logging.error(
+            logger.error(
                 f"Failed to decode JSON response from {url}. Response text: {resp.text[:500]}..."
             )  # Log part of the response
-            raise Exception(f"Invalid JSON response received from {url}") from json_err
-
+            raise ValueError(f"Invalid JSON response received from {url}") from json_err
     except (GoogleAuthError, RequestException) as e:
-        logging.error(f"Error making IAP request to {url}: {e}", exc_info=True)
-        raise Exception(f"IAP request failed: {e}") from e
+        logger.error(f"Error making IAP request to {url}: {e}", exc_info=True)
+        raise e
     except Exception as e:
-        logging.exception(f"An unexpected error occurred during IAP request to {url}")
+        logger.exception(f"An unexpected error occurred during IAP request to {url}")
         # Re-raise or handle as appropriate for the application context
-        raise Exception(f"IAP request failed: {e}") from e
+        raise e
 
 
 def remove_prefix_any(text: str, prefixes: List[str]) -> str:
@@ -177,13 +208,13 @@ def remove_prefix_any(text: str, prefixes: List[str]) -> str:
     """
     for prefix in prefixes:
         if text.startswith(prefix):
-            return text[len(prefix) :]
+            return text[len(prefix):]
     return text
 
 
 def process_data(
-    data: Dict, prefixes_to_remove: List[str], rename_rules: Dict[str, str]
-) -> Optional[pd.DataFrame]:
+        data: Dict, prefixes_to_remove: List[str], rename_rules: Dict[str, str]
+) -> pd.DataFrame:
     """Flattens JSON data, removes prefixes, and renames columns.
 
     Args:
@@ -192,14 +223,18 @@ def process_data(
         rename_rules: Specific column renaming rules (original_name: new_name).
 
     Returns:
-        A processed Pandas DataFrame, or None if 'clusters' key is missing.
+        A processed Pandas DataFrame
+
+    Raises:
+        ValueError: If the input data is invalid.
+        Exception: For unexpected errors during processing.
     """
     if "clusters" not in data:
-        print("Error: 'clusters' key not found in the input data.", file=sys.stderr)
-        return None
+        raise ValueError("Input data is missing the required 'clusters' key.")
 
     try:
         flattened_df = pd.json_normalize(data["clusters"], sep="_")
+        logger.debug(f"Initial columns after flattening: {flattened_df.columns.tolist()}")
         # Apply prefix removal
         prefix_rename_map = {
             col: remove_prefix_any(col, prefixes_to_remove)
@@ -214,13 +249,18 @@ def process_data(
             k: v for k, v in rename_rules.items() if k in current_columns
         }
 
-        flattened_df.rename(columns=effective_rename_rules, inplace=True)
-        logging.info(f"Final column rename mapping applied: {effective_rename_rules}")
+        if effective_rename_rules:
+            logger.info(f"Applying specific column renames: {effective_rename_rules}")
+            flattened_df.rename(columns=effective_rename_rules, inplace=True)
+        else:
+            logger.info("No specific column rename rules matched current columns.")
+
+        logger.info("Data processing completed successfully.")
         return flattened_df
 
     except Exception as e:
-        print(f"Error processing data: {e}", file=sys.stderr)
-        return None
+        logger.exception(f"Error processing data: {e}")
+        raise Exception(f"Failed during data processing: {e}") from e
 
 
 def generate_csv(df: pd.DataFrame, columns: List[str], output_filename: str):
@@ -235,29 +275,26 @@ def generate_csv(df: pd.DataFrame, columns: List[str], output_filename: str):
         # Check if all requested columns exist
         missing_cols = [col for col in columns if col not in df.columns]
         if missing_cols:
-            print(
-                f"Warning: The following columns were requested but not found in the data for '{output_filename}': {missing_cols}",
-                file=sys.stderr,
+            logger.warning(
+                f"The following requested columns were not found in the data for '{output_filename}': {missing_cols}"
             )
             # Filter columns to only include those that actually exist
             columns = [col for col in columns if col in df.columns]
             if not columns:
-                print(
-                    f"Error: No valid columns found to generate '{output_filename}'. Skipping.",
-                    file=sys.stderr,
+                logger.error(
+                    f"No valid columns found to generate '{output_filename}'. Skipping."
                 )
                 return
 
         df_subset = df[columns]
         df_subset.to_csv(output_filename, index=False, encoding="utf-8")
-        logging.info(f"Successfully generated '{output_filename}'")
+        logger.info(f"Successfully generated '{output_filename}'")
     except KeyError as e:
-        print(
-            f"Error: Column {e} not found while generating '{output_filename}'.",
-            file=sys.stderr,
+        logger.error(
+            f"Column '{e}' not found while generating '{output_filename}'. This should not happen after pre-check.",
         )
     except Exception as e:
-        print(f"Error generating CSV file '{output_filename}': {e}", file=sys.stderr)
+        logger.exception(f"Error generating CSV file '{output_filename}': {e}")
 
 
 # --- Main Execution ---
@@ -279,39 +316,49 @@ def main():
         action="store_true",
     )
     args = parser.parse_args()
-    params = get_parameters_from_environment()
+    try:
+        params = get_parameters_from_environment()
 
-    # Check if any action is requested
-    print("checking if any action is requested...")
-    if not args.cluster_intent_sot and not args.cluster_data_sot:
-        print("No action specified. Use -intent or -data flag to generate CSV files.")
-        parser.print_help()
-        sys.exit(0)  # Exit gracefully if no action requested
+        # Check if any action is requested
+        logger.info("Checking requested actions...")
+        if not args.cluster_intent_sot and not args.cluster_data_sot:
+            logger.info("No action specified. Use -intent or -data flag to generate CSV files.")
+            parser.print_help(file=sys.stdout)
+            sys.exit(0)  # Exit gracefully if no action requested
 
-    # Load Configuration
-    config_data = load_config(CONFIG_FILE)
-    if not config_data:
-        sys.exit(1)  # Exit if config loading failed
+        # Load Configuration
+        config_data = load_config(CONFIG_FILE)
 
-    # Fetch the Source of Truth from EPS
-    intent_reader = EPSIntentReader(params.host, params.client_id)
-    raw_data = intent_reader.retrieve_source_of_truth()
-    if not raw_data:
-        sys.exit(1)  # Exit if data loading failed
+        # Fetch the Source of Truth from EPS
+        raw_data = retrieve_eps_source_of_truth(params)
+        if not raw_data:
+            logger.critical("Failed to retrieve data from EPS. Exiting.")
+            sys.exit(1)  # Exit if data loading failed
 
-    # Process Data
-    processed_df = process_data(
-        raw_data, PREFIXES_TO_REMOVE, config_data["rename_rules"]
-    )
-    if processed_df is None:
-        sys.exit(1)  # Exit if data processing failed
+        # Process Data
+        processed_df = process_data(
+            raw_data, PREFIXES_TO_REMOVE, config_data["rename_rules"]
+        )
 
-    # Generate Outputs based on arguments
-    if args.cluster_intent_sot:
-        generate_csv(processed_df, config_data["intent_columns"], OUTPUT_INTENT_CSV)
+        # Generate Outputs based on arguments
+        if args.cluster_intent_sot:
+            logger.info("Generating Cluster Intent SoT CSV...")
+            generate_csv(processed_df, config_data["intent_columns"], OUTPUT_INTENT_CSV)
 
-    if args.cluster_data_sot:
-        generate_csv(processed_df, config_data["data_columns"], OUTPUT_DATA_CSV)
+        if args.cluster_data_sot:
+            logger.info("Generating Cluster Data SoT CSV...")
+            generate_csv(processed_df, config_data["data_columns"], OUTPUT_DATA_CSV)
+
+        logger.info("Script finished successfully.")
+    except (FileNotFoundError, ValueError, ConfigParserError) as e:
+        logger.critical(f"Configuration or Data Error: {e}")
+        sys.exit(1)
+    except (GoogleAuthError, RequestException) as e:
+        logger.critical(f"API Request Error: {e}")
+        sys.exit(1)
+    except Exception as e:
+        logger.critical(f"An unexpected critical error occurred: {e}", exc_info=True)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
