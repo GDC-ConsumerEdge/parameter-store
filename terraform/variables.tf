@@ -178,3 +178,105 @@ variable "superusers" {
   type        = list(string)
   default     = []
 }
+
+variable "worker_pool_name" {
+   description = "Name of the private worker pool."
+   type        = string
+   default     = "eps-private-pool" # Or make it required by removing default
+}
+
+variable "db_password_key" {
+  description = "Secret Manager key name for the database password."
+  type        = string
+  # No default, should be provided per environment
+}
+
+variable "proxy_version" {
+  description = "Version of the Cloud SQL Proxy to use."
+  type        = string
+  default     = "v2.15.1"
+}
+
+variable "instance_connection_name" {
+  description = "Cloud SQL instance connection name (project:region:instance)."
+  type        = string
+  # No default, should be provided per environment
+}
+
+variable "artifact_registry_host" {
+  description = "Hostname for the Artifact Registry (e.g., us-docker.pkg.dev)."
+  type        = string
+  default     = "us-docker.pkg.dev"
+}
+
+variable "artifact_registry_project_id" {
+  description = "Project ID where the Artifact Registry resides."
+  type        = string
+  # No default, often same as eps_project_id but could differ
+}
+
+variable "artifact_registry_repo" {
+  description = "Artifact Registry repository name."
+  type        = string
+}
+
+variable "app_image_name" {
+  description = "Base name for the container image."
+  type        = string
+}
+
+
+# Note: _DB_HOST uses another substitution, so we pass the template string
+# It could be made more dynamic if needed, but this keeps the Cloud Build logic
+variable "db_host_template" {
+   description = "Template for DB host using Cloud Build substitution for instance connection name."
+   type        = string
+   default     = "/cloudsql/$${_INSTANCE_CONNECTION_NAME}" # Note the $$ to escape Terraform interpolation
+}
+
+
+variable "database_port" {
+  description = "Database port."
+  type        = string # Keep as string as substitutions expect strings
+  default     = "5432"
+}
+
+variable "git_repo_url" {
+  description = "Full URL to the Git repository."
+  type        = string
+}
+
+variable "git_user_email" {
+  description = "Email for Git commits within the build."
+  type        = string
+}
+
+variable "git_user_name" {
+  description = "Username for Git commits within the build."
+  type        = string
+}
+
+variable "git_host" {
+   description = "Hostname of the Git provider (e.g., github.com)."
+   type        = string
+   default     = "github.com"
+}
+
+
+variable "source_branch_name" {
+  description = "The branch to trigger the build on."
+  type        = string
+  default     = "main"
+}
+
+variable "trigger_service_account_email" {
+   description = "Email of the service account for the trigger."
+   type        = string
+}
+
+variable "github_app_id" {
+  description = "Cloud build app id for your github organisation"
+  type        = number # Using number type as it's an ID. String would also work.
+  nullable    = false  # Make it mandatory to provide a value
+  default     = 60583057
+}
