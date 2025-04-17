@@ -3,10 +3,12 @@ import ast
 import logging
 import os
 import sys
+from collections import Counter
 from configparser import ConfigParser, Error as ConfigParserError
 from dataclasses import dataclass
-from typing import Dict, List, Any
 from pathlib import Path
+from typing import Dict, List, Any
+
 import google.auth
 import google.oauth2.credentials
 import pandas as pd
@@ -19,7 +21,7 @@ from requests.exceptions import RequestException, JSONDecodeError  # Specific ex
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "INFO").upper(),
     format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
-    stream=sys.stdout
+    stream=sys.stdout,
 )
 logger = logging.getLogger(__name__)
 
@@ -31,8 +33,12 @@ if auth_project:
 # --- Constants ---
 SCRIPT_DIR = Path(__file__).parent.resolve()
 CONFIG_FILE = SCRIPT_DIR / "config.ini"
-OUTPUT_INTENT_CSV = os.environ.get("OUTPUT_INTENT_CSV", "cluster_intent_sot.csv") # Matching the file path of SoT files in  GitHub Repositories
-OUTPUT_DATA_CSV = os.environ.get("OUTPUT_DATA_CSV", "source_of_truth.csv")  # Matching the file path in GitHub Repositories
+OUTPUT_INTENT_CSV = os.environ.get(
+    "OUTPUT_INTENT_CSV", "cluster_intent_sot.csv"
+)  # Matching the file path of SoT files in  GitHub Repositories
+OUTPUT_DATA_CSV = os.environ.get(
+    "OUTPUT_DATA_CSV", "source_of_truth.csv"
+)  # Matching the file path in GitHub Repositories
 
 CONFIG_SECTIONS = {"SOT_COLUMNS": "sot_columns", "RENAME_COLUMNS": "rename_columns"}
 CONFIG_OPTIONS = {"INTENT_COLS": "cluster_intent_sot", "DATA_COLS": "cluster_data_sot"}
@@ -59,7 +65,9 @@ def load_config(config_file: str) -> Dict[str, Any]:
     config = ConfigParser()
     try:
         if not config.read(config_file):
-            raise FileNotFoundError(f"Configuration file '{config_file}' not found or couldn't be read")
+            raise FileNotFoundError(
+                f"Configuration file '{config_file}' not found or couldn't be read"
+            )
 
         # Safely parse list-like strings from config
         try:
@@ -74,11 +82,16 @@ def load_config(config_file: str) -> Dict[str, Any]:
         except (SyntaxError, ValueError) as e:
             raise ValueError(f"Error parsing column lists in config: {e}") from e
         except (ConfigParserError, KeyError) as e:
-            raise ValueError(f"Missing section/option in config file '{config_file}': {e}") from e
+            raise ValueError(
+                f"Missing section/option in config file '{config_file}': {e}"
+            ) from e
 
         # Get rename rules directly as a dictionary
-        rename_rules = dict(config.items(CONFIG_SECTIONS["RENAME_COLUMNS"])) if config.has_section(
-            CONFIG_SECTIONS["RENAME_COLUMNS"]) else {}
+        rename_rules = (
+            dict(config.items(CONFIG_SECTIONS["RENAME_COLUMNS"]))
+            if config.has_section(CONFIG_SECTIONS["RENAME_COLUMNS"])
+            else {}
+        )
 
         logger.info(f"Configuration loaded successfully from '{config_file}'.")
         return {
@@ -87,7 +100,9 @@ def load_config(config_file: str) -> Dict[str, Any]:
             "rename_rules": rename_rules,
         }
     except ConfigParserError as e:
-        raise ConfigParserError(f"Error reading configuration file '{config_file}': {e}") from e
+        raise ConfigParserError(
+            f"Error reading configuration file '{config_file}': {e}"
+        ) from e
 
 
 @dataclass
@@ -129,7 +144,9 @@ def get_parameters_from_environment() -> EPSParameters:
 
     if missing_vars:
         # Raise ValueError for configuration issues
-        raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
+        raise ValueError(
+            f"Missing required environment variables: {', '.join(missing_vars)}"
+        )
 
     logger.info("Successfully retrieved parameters from environment variables.")
     return EPSParameters(
@@ -139,10 +156,12 @@ def get_parameters_from_environment() -> EPSParameters:
 
 # --- IAP Request Function ---
 def make_iap_request(
-        url: str, client_id: str, service_account: str, method: str = "GET", **kwargs) -> Dict:
+        url: str, client_id: str, service_account: str, method: str = "GET", **kwargs
+) -> Dict:
     """Makes a request to an application protected by Identity-Aware Proxy.
 
     Args:
+      method: The HTTP method to make the request
       service_account: The Target Service Account Email to be impersonated
       url: The Identity-Aware Proxy-protected URL to fetch.
       client_id: The client ID used by Identity-Aware Proxy.
@@ -166,10 +185,14 @@ def make_iap_request(
     try:
         target_service_account_email = service_account
         audience = client_id
-        logger.debug(f"Generating ID token for SA '{target_service_account_email}' with audience '{audience}'")
+        logger.debug(
+            f"Generating ID token for SA '{target_service_account_email}' with audience '{audience}'"
+        )
         client = iam_credentials_v1.IAMCredentialsClient()
         name = f"projects/-/serviceAccounts/{target_service_account_email}"
-        id_token_response = client.generate_id_token(name=name, audience=audience, include_email=True)
+        id_token_response = client.generate_id_token(
+            name=name, audience=audience, include_email=True
+        )
         id_token_jwt = id_token_response.token
         logger.debug("Creating authorized session with generated ID token.")
         iap_creds = google.oauth2.credentials.Credentials(id_token_jwt)
@@ -215,7 +238,8 @@ def remove_prefix_any(text: str, prefixes: List[str]) -> str:
 def process_data(
         data: Dict, prefixes_to_remove: List[str], rename_rules: Dict[str, str]
 ) -> pd.DataFrame:
-    """Flattens JSON data, removes prefixes, and renames columns.
+    """Flattens JSON data, removes prefixes, handles duplicated column names scenarios, validates rename_rules and
+    renames columns.
 
     Args:
         data: The raw data dictionary (expected to have a 'clusters' key).
@@ -241,20 +265,52 @@ def process_data(
             for col in flattened_df.columns
         }
         flattened_df.rename(columns=prefix_rename_map, inplace=True)
+        logger.debug(f"Columns after prefix removal: {flattened_df.columns.tolist()}")
 
-        # Apply specific renaming rules from config
-        # Filter rename_rules to only include columns present after prefix removal
+        # handle potential duplicate columns caused by prefix removal
+        cols_after_prefix = flattened_df.columns
+        if cols_after_prefix.has_duplicates:
+            duplicate_mask = cols_after_prefix.duplicated(keep="first")
+            keep_mask = ~duplicate_mask
+            all_duplicate_occurrences_mask = cols_after_prefix.duplicated(keep=False)
+            duplicate_col_names = cols_after_prefix[all_duplicate_occurrences_mask].unique().tolist()
+            logger.warning(
+                f"Duplicate column names found after prefix removal: {duplicate_col_names}. "
+                f"Keeping the first occurrence of each."
+            )
+            # Select only the columns marked to keep (first occurrences)
+            flattened_df = flattened_df.loc[:, keep_mask]
+
+        # 3. Validate specific renaming rules BEFORE applying them
         current_columns = set(flattened_df.columns)
-        effective_rename_rules = {
-            k: v for k, v in rename_rules.items() if k in current_columns
-        }
+        effective_rename_rules = {}
+        target_name_counts = Counter(rename_rules.values())
+        logger.debug("Validating specific rename rules...")
+        for original_name, new_name in rename_rules.items():
+            if original_name not in current_columns:
+                continue
+                # Check if there's a conflict with existing column
+            if new_name in current_columns and new_name != original_name:
+                raise ValueError(
+                    f"Invalid rename_rules: Rule '{original_name}' -> '{new_name}' "
+                    f"conflicts with existing column '{new_name}'."
+                )
+                # Check for conflict with another rename rule's target
+            if target_name_counts[new_name] > 1:
+                conflicting_originals = [k for k, v in rename_rules.items() if v == new_name and k != original_name]
+                raise ValueError(
+                    f"Invalid rename_rules: Multiple rules target the same name '{new_name}'. "
+                    f"(Conflicts: '{original_name}' and {conflicting_originals})"
+                )
+            effective_rename_rules[original_name] = new_name
 
+        # Apply the final renaming rules
+        # Filter rename_rules to only include columns present after prefix removal
         if effective_rename_rules:
             logger.info(f"Applying specific column renames: {effective_rename_rules}")
             flattened_df.rename(columns=effective_rename_rules, inplace=True)
         else:
             logger.info("No specific column rename rules matched current columns.")
-
         logger.info("Data processing completed successfully.")
         return flattened_df
 
@@ -294,9 +350,9 @@ def generate_csv(df: pd.DataFrame, columns: List[str], output_filename: str):
             f"Column '{e}' not found while generating '{output_filename}'.",
         )
         raise
-    except OSError as e: # Catch potential directory creation or file writing errors
-         logger.error(f"OS error during CSV generation for '{output_filename}': {e}")
-         raise
+    except OSError as e:  # Catch potential directory creation or file writing errors
+        logger.error(f"OS error during CSV generation for '{output_filename}': {e}")
+        raise
     except Exception as e:
         logger.exception(f"Error generating CSV file '{output_filename}': {e}")
         raise
@@ -327,7 +383,9 @@ def main():
         # Check if any action is requested
         logger.info("Checking requested actions...")
         if not args.cluster_intent_sot and not args.cluster_data_sot:
-            logger.info("No action specified. Use -intent or -data flag to generate CSV files.")
+            logger.info(
+                "No action specified. Use -intent or -data flag to generate CSV files."
+            )
             parser.print_help(file=sys.stdout)
             sys.exit(0)  # Exit gracefully if no action requested
 
