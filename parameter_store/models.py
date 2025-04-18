@@ -150,12 +150,15 @@ class Cluster(DynamicValidatingModel):
     name = models.CharField(db_index=True, max_length=30, blank=False, unique=True, null=False)
     description = models.CharField(max_length=255, null=True, blank=True)
     group = models.ForeignKey(Group, on_delete=models.DO_NOTHING)
-    secondary_groups = models.ManyToManyField(Group, related_name='secondary_clusters')
+    secondary_groups = models.ManyToManyField(
+        Group,
+        blank=True,
+        related_name='secondary_clusters')
     tags = models.ManyToManyField(
         'Tag',
         through='ClusterTag',
-        related_name='clusters',
-    )
+        blank=True,
+        related_name='clusters')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
