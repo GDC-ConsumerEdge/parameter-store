@@ -21,3 +21,4 @@ staticfiles/
 terraform/
 venv/
 **/migrations
+examples/
