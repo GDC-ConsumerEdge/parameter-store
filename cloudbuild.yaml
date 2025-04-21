@@ -1,0 +1,107 @@
+# Parameterized Cloud Build Configuration
+# This file defines a multi-step build process including:
+# - Building a temporary application image.
+# - Running database migrations using the temporary image and Cloud SQL Proxy.
+# - Copying migration files to the workspace.
+# - Building a final application image tagged with the commit SHA.
+# - Pushing the final image to Artifact Registry.
+# - Committing generated migration files back to a Git repository.
+
+steps:
+  - name: gcr.io/cloud-builders/curl
+    id: download-proxy
+    waitFor: ['-'] # Start immediately
+    args:
+      - '-o'
+      - cloud-sql-proxy
+      - 'https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/${_PROXY_VERSION}/cloud-sql-proxy.linux.amd64'
+  - name: gcr.io/cloud-builders/gcloud
+    id: chmod-proxy
+    waitFor: ['download-proxy']
+    args:
+      - '-c'
+      - chmod +x cloud-sql-proxy; ls; pwd; ./cloud-sql-proxy -h;
+    entrypoint: bash
+  - name: gcr.io/cloud-builders/docker
+    id: build-temp-image
+    waitFor: ['-'] # Can start alongside proxy download/chmod
+    args:
+      - build
+      - '-t'
+      - '${_ARTIFACT_REGISTRY_HOST}/${_ARTIFACT_REGISTRY_PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}/${_APP_IMAGE_NAME}:temp'
+      - .
+  - name: '${_ARTIFACT_REGISTRY_HOST}/${_ARTIFACT_REGISTRY_PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}/${_APP_IMAGE_NAME}:temp'
+    id: run-migrations
+    waitFor: ['build-temp-image', 'chmod-proxy']
+    env:
+      - 'DB_HOST=${_DB_HOST}'
+      - 'DB_NAME=${_DATABASE_NAME}'
+      - 'DB_USER=${_DATABASE_USER}'
+      - 'DB_PORT=${_DATABASE_PORT}'
+      - 'INSTANCE_CONNECTION_NAME=${_INSTANCE_CONNECTION_NAME}'
+    args:
+      - '-c'
+      - >-
+        env; mkdir -p /cloudsql; chmod 777 /cloudsql;  ./cloud-sql-proxy
+        --unix-socket /cloudsql --debug-logs example-eps:us-central1:eps-015b & sleep 200; cd /app; python3 manage.py makemigrations parameter_store; ls /app/parameter_store/migrations; cp -rf /app/parameter_store/migrations /workspace/parameter_store; python3 manage.py makemigrations api; ls /app/api/migrations; cp -rf /app/api/migrations /workspace/api;
+    entrypoint: sh
+    secretEnv:
+      - DB_PASSWORD
+  - name: gcr.io/cloud-builders/gcloud
+    id: check-copied-migrations
+    waitFor: ['run-migrations']
+    args:
+      - '-c'
+      - ls; pwd; ls /workspace/parameter_store; ls /workspace/api;
+    entrypoint: bash
+  - name: gcr.io/cloud-builders/docker
+    id: build-final-image
+    waitFor: ['check-copied-migrations']
+    args:
+      - build
+      - '-t'
+      - '${_ARTIFACT_REGISTRY_HOST}/${_ARTIFACT_REGISTRY_PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}/${_APP_IMAGE_NAME}:$COMMIT_SHA'
+      - .
+  - name: gcr.io/cloud-builders/docker
+    id: push-final-image-latest
+    waitFor: ['build-final-image']
+    args:
+      - push
+      - '${_ARTIFACT_REGISTRY_HOST}/${_ARTIFACT_REGISTRY_PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}/${_APP_IMAGE_NAME}:$COMMIT_SHA'
+  - name: gcr.io/cloud-builders/git
+    id: commit-migrations
+    waitFor: ['check-copied-migrations'] # Needs migrations copied
+    args:
+      - '-c'
+      - >
+        echo "https://${_GIT_USER_NAME}:$$GITHUBTOKEN@${_GIT_HOST}" > ~/.git-credentials;
+        pwd;
+        cd /;
+        git config --global credential.helper 'store --file ~/.git-credentials';
+        git config --global user.email "${_GIT_USER_EMAIL}";
+        git config --global user.name "${_GIT_USER_NAME}";
+        git clone "${_GIT_REPO_URL}";
+        cd parameter-store;
+        mkdir -p parameter_store/migrations;
+        mkdir -p api/migrations;
+        cp -rf /workspace/parameter_store/migrations/* parameter_store/migrations/.;
+        cp -rf /workspace/api/migrations/* api/migrations/.;
+        git checkout -b $SHORT_SHA;
+        git add .;
+        git commit -m "added migration files";
+        git push origin $SHORT_SHA;
+    entrypoint: bash
+    secretEnv: ['GITHUBTOKEN']
+images:
+  - '${_ARTIFACT_REGISTRY_HOST}/${_ARTIFACT_REGISTRY_PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}/${_APP_IMAGE_NAME}:$COMMIT_SHA'
+options:
+  logging: CLOUD_LOGGING_ONLY
+  dynamicSubstitutions: true
+  pool:
+    name: ${_PRIVATE_POOL}                      # Git provider host (used for credentials)
+availableSecrets:
+  secretManager:
+    - versionName: 'projects/${PROJECT_NUMBER}/secrets/${_DATABASE_PASSWORD_KEY}/versions/2'
+      env: DB_PASSWORD
+    - versionName: 'projects/${PROJECT_NUMBER}/secrets/github-pat-secret/versions/1'
+      env: GITHUBTOKEN

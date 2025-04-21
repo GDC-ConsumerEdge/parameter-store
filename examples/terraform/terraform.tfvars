@@ -27,3 +27,15 @@ csrf_trusted_origins  = ["localhost"]
 iap_audience          = "/projects/22368248810/us-central1/backendServices/506473743633145264"
 superusers            = ["example"]
 eps_allowed_accessors = ["group:eps@example.corp.net"]
+worker_pool_name                = "eps-private-pool"
+db_password_key                 = "eps-db-pass" # Or fetch from a secure source if needed at plan time
+instance_connection_name        = "example-eps:us-central1:eps-015b"
+artifact_registry_project_id    = ""example-eps
+artifact_registry_repo          = "eps"
+app_image_name                  = "parameter_store"
+git_repo_url                    = "https://github.com/example-eps/parameter-store.git"
+git_user_email                  = ""example-eps@xyz.com"
+git_user_name                   = "example-eps-gituser"
+# source_repo_id is likely derived from another resource, not set here directly
+# source_branch_name uses default "main"
+trigger_service_account_email   = "terraform@example-eps.iam.gserviceaccount.com"
