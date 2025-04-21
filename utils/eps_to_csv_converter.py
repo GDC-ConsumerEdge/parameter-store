@@ -8,14 +8,13 @@ from configparser import ConfigParser, Error as ConfigParserError
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Any
-
 import google.auth
 import google.oauth2.credentials
 import pandas as pd
-from google.auth.exceptions import GoogleAuthError  # Specific exception
+from google.auth.exceptions import GoogleAuthError  # Specific exceptions
 from google.auth.transport.requests import AuthorizedSession
 from google.cloud import iam_credentials_v1
-from requests.exceptions import RequestException, JSONDecodeError  # Specific exceptions
+from requests.exceptions import RequestException, JSONDecodeError, HTTPError  # Specific exceptions
 
 # --- Setup Logging ---
 logging.basicConfig(
@@ -24,11 +23,6 @@ logging.basicConfig(
     stream=sys.stdout,
 )
 logger = logging.getLogger(__name__)
-
-creds, auth_project = google.auth.default()  # GOOGLE_APPLICATION_CREDENTIALS
-logger.debug(f"Loaded credential type: {type(creds)}")
-if auth_project:
-    logger.debug(f"Authenticated with project: {auth_project}")
 
 # --- Constants ---
 SCRIPT_DIR = Path(__file__).parent.resolve()
@@ -107,7 +101,7 @@ def load_config(config_file: str) -> Dict[str, Any]:
 
 @dataclass
 class EPSParameters:
-    client_id: str
+    eps_oauth_client_id: str
     host: str
     service_account: str
 
@@ -117,7 +111,7 @@ def retrieve_eps_source_of_truth(params: EPSParameters) -> Dict:
     url = f"https://{params.host}/api/v1/clusters"
     logger.info(f"Retrieving Source of Truth from: {url}")
     # Pass parameters directly to the request function
-    eps_json = make_iap_request(url, params.client_id, params.service_account)
+    eps_json = make_iap_request(url, params.eps_oauth_client_id, params.service_account)
     return eps_json
 
 
@@ -130,12 +124,12 @@ def get_parameters_from_environment() -> EPSParameters:
     Raises:
         ValueError: If any required environment variable is missing.
     """
-    client_id = os.environ.get("EPS_CLIENT_ID")
+    eps_oauth_client_id = os.environ.get("EPS_CLIENT_ID")
     host = os.environ.get("EPS_HOST")
     service_account = os.environ.get("SERVICE_ACCOUNT")
 
     missing_vars = []
-    if client_id is None:
+    if eps_oauth_client_id is None:
         missing_vars.append("EPS_CLIENT_ID")
     if host is None:
         missing_vars.append("EPS_HOST")
@@ -150,13 +144,13 @@ def get_parameters_from_environment() -> EPSParameters:
 
     logger.info("Successfully retrieved parameters from environment variables.")
     return EPSParameters(
-        client_id=client_id, host=host, service_account=service_account
+        eps_oauth_client_id=eps_oauth_client_id, host=host, service_account=service_account
     )
 
 
 # --- IAP Request Function ---
 def make_iap_request(
-        url: str, client_id: str, service_account: str, method: str = "GET", **kwargs
+        url: str, eps_oauth_client_id: str, service_account: str, method: str = "GET", **kwargs
 ) -> Dict:
     """Makes a request to an application protected by Identity-Aware Proxy.
 
@@ -164,7 +158,7 @@ def make_iap_request(
       method: The HTTP method to make the request
       service_account: The Target Service Account Email to be impersonated
       url: The Identity-Aware Proxy-protected URL to fetch.
-      client_id: The client ID used by Identity-Aware Proxy.
+      eps_oauth_client_id: The client ID used by Identity-Aware Proxy.
       **kwargs: Any parameters for requests.request.
 
     Returns:
@@ -175,16 +169,14 @@ def make_iap_request(
         ValueError: If the response is not valid JSON.
         Exception: If the request fails or returns a non-200 status.
     """
-    if method.upper() != "GET":  # Added method handling example
+    if method.upper() != "GET":
         logger.error(f"HTTP method '{method}' not currently supported.")
         raise NotImplementedError(f"HTTP method '{method}' not implemented.")
-
-    if "timeout" not in kwargs:
-        kwargs["timeout"] = 90
+    kwargs.setdefault('timeout', 90)
 
     try:
         target_service_account_email = service_account
-        audience = client_id
+        audience = eps_oauth_client_id
         logger.debug(
             f"Generating ID token for SA '{target_service_account_email}' with audience '{audience}'"
         )
@@ -202,7 +194,12 @@ def make_iap_request(
 
         resp = authed_session.request(method, url, **kwargs)
         logger.info(f"Received status code: {resp.status_code} from {url}")
-        resp.raise_for_status()  # Raises HTTPError for bad responses (4xx or 5xx)
+        try:
+            resp.raise_for_status()  # Raises HTTPError for bad responses (4xx or 5xx)
+        except HTTPError as e:
+            logger.error(f'Got http response status code: {resp.status_code} ', exc_info=True)
+            raise HTTPError(f"Received a {resp.status_code} http response code on making HTTP request to EPS") from e
+
         try:
             return resp.json()
         except JSONDecodeError as json_err:
@@ -212,11 +209,10 @@ def make_iap_request(
             raise ValueError(f"Invalid JSON response received from {url}") from json_err
     except (GoogleAuthError, RequestException) as e:
         logger.error(f"Error making IAP request to {url}: {e}", exc_info=True)
-        raise e
+        raise
     except Exception as e:
-        logger.exception(f"An unexpected error occurred during IAP request to {url}")
-        # Re-raise or handle as appropriate for the application context
-        raise e
+        logger.exception(f"An unexpected error occurred during IAP request to {url}: {e}")
+        raise
 
 
 def remove_prefix_any(text: str, prefixes: List[str]) -> str:
@@ -288,6 +284,9 @@ def process_data(
         logger.debug("Validating specific rename rules...")
         for original_name, new_name in rename_rules.items():
             if original_name not in current_columns:
+                logger.warning(
+                    f"Rename rule '{original_name}' -> '{new_name}' skipped: Column '{original_name}' not found"
+                )
                 continue
                 # Check if there's a conflict with existing column
             if new_name in current_columns and new_name != original_name:
@@ -378,7 +377,6 @@ def main():
     )
     args = parser.parse_args()
     try:
-        params = get_parameters_from_environment()
 
         # Check if any action is requested
         logger.info("Checking requested actions...")
@@ -388,7 +386,18 @@ def main():
             )
             parser.print_help(file=sys.stdout)
             sys.exit(0)  # Exit gracefully if no action requested
+        logger.info("Attempting Google Cloud authentication...")
+        try:
+            creds, auth_project = google.auth.default()  # GOOGLE_APPLICATION_CREDENTIALS
+            logger.debug(f"Loaded credential type: {type(creds)}")
+            if auth_project:
+                logger.debug(f"Authenticated with project: {auth_project}")
+            logger.info("Google Cloud authentication successful.")
+        except GoogleAuthError as auth_err:
+            logger.critical(f"Google Cloud Authentication failed: {auth_err}", exc_info=True)
+            sys.exit(1)
 
+        params = get_parameters_from_environment()
         # Load Configuration
         config_data = load_config(CONFIG_FILE)
 

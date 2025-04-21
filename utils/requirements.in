@@ -1,0 +1,5 @@
+google-api-core~=2.24.2
+google-auth~=2.39.0
+pandas~=2.2.3
+requests~=2.32.3
+google-cloud-iam~=2.19.0
