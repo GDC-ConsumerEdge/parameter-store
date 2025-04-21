@@ -36,6 +36,6 @@ app_image_name                  = "parameter_store"
 git_repo_url                    = "https://github.com/example-eps/parameter-store.git"
 git_user_email                  = ""example-eps@xyz.com"
 git_user_name                   = "example-eps-gituser"
-# source_repo_id is likely derived from another resource, not set here directly
+# source_repo_id likely derived from another resource, not set here directly
 # source_branch_name uses default "main"
 trigger_service_account_email   = "terraform@example-eps.iam.gserviceaccount.com"
