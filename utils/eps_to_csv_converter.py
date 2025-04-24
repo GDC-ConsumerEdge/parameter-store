@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 # --- Constants ---
 SCRIPT_DIR = Path(__file__).parent.resolve()
-CONFIG_FILE = SCRIPT_DIR / "config.ini"
+CONFIG_FILE = os.environ.get("CONFIG_INI_PATH", SCRIPT_DIR / "config.ini")
 OUTPUT_INTENT_CSV = os.environ.get(
     "OUTPUT_INTENT_CSV", "cluster_intent_sot.csv"
 )  # Matching the file path of SoT files in  GitHub Repositories
@@ -38,7 +38,8 @@ CONFIG_SECTIONS = {"SOT_COLUMNS": "sot_columns", "RENAME_COLUMNS": "rename_colum
 CONFIG_OPTIONS = {"INTENT_COLS": "cluster_intent_sot", "DATA_COLS": "cluster_data_sot"}
 
 # Prefixes to be removed from the key names of the flattened JSON DataFrame
-PREFIXES_TO_REMOVE = ["data_", "intent_"]
+INTENT_PREFIX = "intent_"
+DATA_PREFIX = "data_"
 
 
 # --- Load Configuration from the config file ---
@@ -215,107 +216,135 @@ def make_iap_request(
         raise
 
 
-def remove_prefix_any(text: str, prefixes: List[str]) -> str:
-    """Removes the first matching prefix from a string.
-
-    Args:
-        text: The input string.
-        prefixes: A list of prefixes to check for.
-
-    Returns:
-        The string with the first matching prefix removed, or the original string.
+def process_data(data: Dict, mode: str, rename_rules: Dict[str, str]) -> pd.DataFrame:
     """
-    for prefix in prefixes:
-        if text.startswith(prefix):
-            return text[len(prefix):]
-    return text
-
-
-def process_data(
-        data: Dict, prefixes_to_remove: List[str], rename_rules: Dict[str, str]
-) -> pd.DataFrame:
-    """Flattens JSON data, removes prefixes, handles duplicated column names scenarios, validates rename_rules and
-    renames columns.
+    Flattens JSON, filters columns based on mode, removes mode-specific prefix
+    (handling conflicts with non-prefixed columns by keeping original prefixed name),
+    handles other duplicates, validates and applies the rename rules.
 
     Args:
         data: The raw data dictionary (expected to have a 'clusters' key).
-        prefixes_to_remove: List of prefixes to remove from column names.
+        mode: The processing mode ('intent' or 'data').
         rename_rules: Specific column renaming rules (original_name: new_name).
 
     Returns:
-        A processed Pandas DataFrame
+        A processed Pandas DataFrame for the specified mode.
 
     Raises:
-        ValueError: If the input data is invalid.
+        ValueError: If input data is invalid, mode is incorrect, or rename rules conflict.
         Exception: For unexpected errors during processing.
     """
     if "clusters" not in data:
         raise ValueError("Input data is missing the required 'clusters' key.")
+    if mode not in ['intent', 'data']:
+        raise ValueError(f"Invalid mode specified: {mode}. Must be 'intent' or 'data'.")
+
+    logger.info(f"Starting data processing for mode: '{mode}'")
 
     try:
+        # 1. Flatten the data
         flattened_df = pd.json_normalize(data["clusters"], sep="_")
         logger.debug(f"Initial columns after flattening: {flattened_df.columns.tolist()}")
-        # Apply prefix removal
-        prefix_rename_map = {
-            col: remove_prefix_any(col, prefixes_to_remove)
-            for col in flattened_df.columns
-        }
-        flattened_df.rename(columns=prefix_rename_map, inplace=True)
-        logger.debug(f"Columns after prefix removal: {flattened_df.columns.tolist()}")
 
-        # handle potential duplicate columns caused by prefix removal
-        cols_after_prefix = flattened_df.columns
-        if cols_after_prefix.has_duplicates:
-            duplicate_mask = cols_after_prefix.duplicated(keep="first")
+        # 2. Filter columns based on mode
+        prefix_to_keep = INTENT_PREFIX if mode == 'intent' else DATA_PREFIX
+        prefix_to_discard = DATA_PREFIX if mode == 'intent' else INTENT_PREFIX
+
+        cols_to_keep = [col for col in flattened_df.columns if not col.startswith(prefix_to_discard)]
+
+        if not cols_to_keep:
+            logger.warning(f"No columns found matching the criteria for mode '{mode}'. Returning empty DataFrame.")
+            return pd.DataFrame()
+
+        flattened_df = flattened_df[cols_to_keep]
+        original_filtered_columns = flattened_df.columns.tolist()  # Store columns before prefix removal
+        logger.debug(f"Columns after mode filtering ('{mode}'): {original_filtered_columns}")
+
+        # 3. Build rename map for prefix removal, handling conflicts with existing non-prefixed columns
+        final_rename_map = {}
+        columns_after_filtering_set = set(original_filtered_columns)  # For faster lookups
+
+        for col in original_filtered_columns:
+            if col.startswith(prefix_to_keep):
+                base_name = col[len(prefix_to_keep):]
+                # Check if the target base_name already exists as another column
+                if base_name in columns_after_filtering_set:
+                    # Conflict detected! Keep the original prefixed name.
+                    # Not adding an entry to final_rename_map for this column.
+                    logger.info(
+                        f"Conflict detected for mode '{mode}': Column '{col}' target name '{base_name}' "
+                        f"collides with existing column. Keeping original column name '{col}'."
+                    )
+                    # Continue to the next column without adding a rename rule for 'col'
+                    continue
+                else:
+                    # No conflict, just remove the prefix
+                    final_rename_map[col] = base_name
+
+        # Apply the calculated renames (only non-conflicting ones)
+        if final_rename_map:
+            flattened_df.rename(columns=final_rename_map, inplace=True)
+            logger.debug(
+                f"Columns after prefix removal/conflict resolution ('{mode}'): {flattened_df.columns.tolist()}")
+        else:
+            logger.info(f"No non-conflicting prefix removals needed for mode '{mode}'.")
+
+        #  Handle duplicates already present in source JSON after flattening
+        cols_after_rename = flattened_df.columns
+        if cols_after_rename.has_duplicates:
+            duplicate_mask = cols_after_rename.duplicated(keep="first")
             keep_mask = ~duplicate_mask
-            all_duplicate_occurrences_mask = cols_after_prefix.duplicated(keep=False)
-            duplicate_col_names = cols_after_prefix[all_duplicate_occurrences_mask].unique().tolist()
-            logger.warning(
-                f"Duplicate column names found after prefix removal: {duplicate_col_names}. "
-                f"Keeping the first occurrence of each."
-            )
-            # Select only the columns marked to keep (first occurrences)
-            flattened_df = flattened_df.loc[:, keep_mask]
+            remaining_duplicate_names = cols_after_rename[cols_after_rename.duplicated(keep=False)].unique().tolist()
 
-        # 3. Validate specific renaming rules BEFORE applying them
+            if remaining_duplicate_names:
+                logger.warning(
+                    f"Duplicate column names still found after prefix handling for mode '{mode}': {remaining_duplicate_names}. "
+                    f"These likely originated from the source data. Keeping the first occurrence of each."
+                )
+                flattened_df = flattened_df.loc[:, keep_mask]
+                logger.debug(f"Columns after handling remaining duplicates ('{mode}'): {flattened_df.columns.tolist()}")
+
+        # Validate and apply specific rename_rules
         current_columns = set(flattened_df.columns)
         effective_rename_rules = {}
         target_name_counts = Counter(rename_rules.values())
-        logger.debug("Validating specific rename rules...")
+        logger.debug(f"Validating specific rename rules for mode '{mode}'...")
         for original_name, new_name in rename_rules.items():
+            # skip the column from rename_rules if it doesn't exist in the dataframe
             if original_name not in current_columns:
                 logger.warning(
-                    f"Rename rule '{original_name}' -> '{new_name}' skipped: Column '{original_name}' not found"
-                )
+                    f"Rename rule '{original_name}' -> '{new_name}' skipped: Column '{original_name}' not found")
                 continue
-                # Check if there's a conflict with existing column
+
+            # Check if there's a conflict of target_column name to be renamed to, with existing dataframe column name
             if new_name in current_columns and new_name != original_name:
                 raise ValueError(
-                    f"Invalid rename_rules: Rule '{original_name}' -> '{new_name}' "
+                    f"Invalid rename_rules for mode '{mode}': Rule '{original_name}' -> '{new_name}' "
                     f"conflicts with existing column '{new_name}'."
                 )
-                # Check for conflict with another rename rule's target
+            # Check for conflict with another rename rule's target
             if target_name_counts[new_name] > 1:
                 conflicting_originals = [k for k, v in rename_rules.items() if v == new_name and k != original_name]
                 raise ValueError(
-                    f"Invalid rename_rules: Multiple rules target the same name '{new_name}'. "
-                    f"(Conflicts: '{original_name}' and {conflicting_originals})"
+                    f"Invalid rename_rules for mode '{mode}': Multiple rules target the same name '{new_name}'. "
+                    f"(Conflicts involve original columns: {conflicting_originals})"
                 )
             effective_rename_rules[original_name] = new_name
 
-        # Apply the final renaming rules
-        # Filter rename_rules to only include columns present after prefix removal
+        # Apply the filtered renaming rules
         if effective_rename_rules:
-            logger.info(f"Applying specific column renames: {effective_rename_rules}")
+            logger.info(f"Applying specific column renames for mode '{mode}': {effective_rename_rules}")
             flattened_df.rename(columns=effective_rename_rules, inplace=True)
         else:
-            logger.info("No specific column rename rules matched current columns.")
-        logger.info("Data processing completed successfully.")
+            logger.info(f"No specific column rename rules were applicable for mode '{mode}'.")
+
+        logger.info(f"Data processing completed successfully for mode '{mode}'.")
         return flattened_df
 
     except Exception as e:
-        logger.exception(f"Error processing data: {e}")
-        raise Exception(f"Failed during data processing: {e}") from e
+        logger.exception(f"Error processing data for mode '{mode}': {e}")
+        # Re-raise the exception to be caught by the main try-except block
+        raise Exception(f"Failed during data processing for mode '{mode}': {e}") from e
 
 
 def generate_csv(df: pd.DataFrame, columns: List[str], output_filename: str):
@@ -407,19 +436,24 @@ def main():
             logger.critical("Failed to retrieve data from EPS. Exiting.")
             sys.exit(1)  # Exit if data loading failed
 
-        # Process Data
-        processed_df = process_data(
-            raw_data, PREFIXES_TO_REMOVE, config_data["rename_rules"]
-        )
-
-        # Generate Outputs based on arguments
+        # --- Process and Generate CSV based on arguments ---
         if args.cluster_intent_sot:
-            logger.info("Generating Cluster Intent SoT CSV...")
-            generate_csv(processed_df, config_data["intent_columns"], OUTPUT_INTENT_CSV)
+            logger.info("--- Processing for Intent SoT ---")
+            intent_df = process_data(raw_data, mode="intent", rename_rules=config_data["rename_rules"])
+            if not intent_df.empty:
+                logger.info("Generating Cluster Intent SoT CSV...")
+                generate_csv(intent_df, config_data["intent_columns"], OUTPUT_INTENT_CSV)
+            else:
+                logger.warning(f"Skipping generation of '{OUTPUT_INTENT_CSV}' due to empty processed data.")
 
         if args.cluster_data_sot:
-            logger.info("Generating Cluster Data SoT CSV...")
-            generate_csv(processed_df, config_data["data_columns"], OUTPUT_DATA_CSV)
+            logger.info("--- Processing for Data SoT ---")
+            data_df = process_data(raw_data, mode="data", rename_rules=config_data["rename_rules"])
+            if not data_df.empty:
+                logger.info("Generating Cluster Data SoT CSV...")
+                generate_csv(data_df, config_data["data_columns"], OUTPUT_DATA_CSV)
+            else:
+                logger.warning(f"Skipping generation of '{OUTPUT_DATA_CSV}' due to empty processed data.")
 
         logger.info("Script finished successfully.")
     except (FileNotFoundError, ValueError, ConfigParserError) as e:
