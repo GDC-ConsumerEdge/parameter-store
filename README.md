@@ -17,6 +17,7 @@
             - [Deploy Parameter Store App](#deploy-parameter-store-app)
             - [Rerun Terraform After First Apply](#rerun-terraform-after-first-apply)
             - [Teardown](#teardown)
+    * [Cloudbuild Pipeline](#cloudbuild-pipeline)        
     * [Operate Parameter Store](#operate-parameter-store)
     * [Data Loading](#data-loading)
         + [Terraform](#terraform)
@@ -80,16 +81,16 @@ Choose a fully qualified domain name for your application. The Terraform takes p
 the utilization of your FQDN, creating a manged zone in the deployment project. This assumes you will create a delegated
 zone in your application project to which an A-record for the EPS apps load balancer will be created. In doing so, it
 wires the application up end-to-end. If this is not your desired configuration, you will need to modify the provided
-Terraform [here](./terraform/dns.tf)
+Terraform [here](examples/terraform/dns.tf)
 
-Set your selected fully-qualified domain name in [terraform.tfvars](terraform/terraform.tfvars):
+Set your selected fully-qualified domain name in [terraform.tfvars](examples/terraform/terraform.tfvars):
 
 ```terraform
 app_fqdn = "eps.cloud.corpdomain.com"
 ```
 
 Add this name or a wild card name to the CSRF trusted list, which is variable *csrf_trusted_origins*
-in [terraform.tfvars](terraform/terraform.tfvars) file. e.g.
+in [terraform.tfvars](examples/terraform/terraform.tfvars) file. e.g.
 
 ```terraform
 csrf_trusted_origins = ["eps.cloud.corpdomain.com"]
@@ -144,10 +145,10 @@ this is not recommended in production.
 
 For the first time to deploy parameter store, we need to initialize terraform state.
 
-1. go to `deployment` folder
+1. go to `examples/terraform` folder
 
 ```bash
-cd deployment
+cd examples/terraform
 ```
 
 * If using local state file, e.g. for local development work, simply run
@@ -159,7 +160,7 @@ terraform init
 * For better collaboration, most of the time we need to save the terraform state file to a shared place, e.g. a GCP
   bucket. To achieve this, we need to configure a GCP bucket as terraform backend.
     1. Create or using an existing GCS bucket. Make sure your current account has write permission to it.
-    2. Create/Modify a terraform backend config file in [terraform/main.tf](./terraform/main.tf).
+    2. Create/Modify a terraform backend config file in [terraform/main.tf](examples/terraform/main.tf).
         ```terraform
         bucket = "my-bucket"
         prefix = "testing"
@@ -171,7 +172,7 @@ terraform init
 
 #### Terraform Configuration Variables
 
-The full set of Terraform variables are defined in [variables.tf](terraform/variables.tf), though we will call out
+The full set of Terraform variables are defined in [variables.tf](examples/terraform/variables.tf), though we will call out
 notable items here.
 
 `eps_project_id` is where the app (and nearly all) of its resources will be created. It is assumed this project already
@@ -196,7 +197,7 @@ invocation, an empty string (`""`) is appropriate. This value takes the form of:
 You can find this number by running the following example:
 
 ```bash
-gcloud compute backend-services describe eps-lb-backend-service \ 
+gcloud compute backend-services describe eps-lb-backend-service \
   --region=us-central1 \
   --format="value(id)"
 6252277272778218001
@@ -211,17 +212,44 @@ uses the username portion of the email address as its username. Simply drop the 
 permissions. This does not grant in-app permissions but merely allows these identities web access through IAP and into
 Cloud Run. This is probably a group of users the membership of which is managed externally to Terraform.
 
+`worker_pool_name` is a string used as a name of the private worker pool that Cloud Build will use to execute the build. This is part of the `_PRIVATE_POOL` substitution in the [cb.tf](examples/terraform/cb.tf).
+
+`db_password_key` is a string used as a name or identifier of the secret in Secret Manager that stores the database password. This is passed as a substitution `_DATABASE_PASSWORD_KEY` to the [cb.tf](examples/terraform/cb.tf).
+
+`instance_connection_name` is a string used as a connection name for the Cloud SQL instance. This is used by the Cloud SQL Proxy to connect to the database. Passed as `_INSTANCE_CONNECTION_NAME` in the [cb.tf](examples/terraform/cb.tf).
+
+`artifact_registry_project_id` is a string value for Google Cloud Project ID where the Artifact Registry is located. Passed as `_ARTIFACT_REGISTRY_PROJECT_ID` in the [cb.tf](examples/terraform/cb.tf).
+
+`artifact_registry_repo` is a string used as a name of the repository within Artifact Registry where images will be stored/pulled. Passed as `_ARTIFACT_REGISTRY_REPO` in the [cb.tf](examples/terraform/cb.tf).
+
+`app_image_name` is a string used as a name of the application image to be built or used. Passed as `_APP_IMAGE_NAME` in the [cb.tf](examples/terraform/cb.tf).
+
+`git_repo_url` is string value for URL of the Git repository that Cloud Build will clone. Passed as `_GIT_REPO_URL` in the [cb.tf](examples/terraform/cb.tf).
+
+`git_user_email` is a string value for email address to be configured for Git operations within the build environment. Passed as `_GIT_USER_EMAIL` in the [cb.tf](examples/terraform/cb.tf).
+
+`git_user_name` is a string value for username to be configured for Git operations within the build environment. Passed as `_GIT_USER_NAME` in the [cb.tf](examples/terraform/cb.tf).
+
 ```terraform
-environment_name    = "dev"
-eps_project_id      = "example-eps"
-secrets_project_id  = "example-eps"
-eps_image           = "us-docker.pkg.dev/example-eps/hsp/parameter_store:v11"
-terraform_principal = "serviceAccount:terraform@example-eps.iam.gserviceaccount.com"
-app_fqdn            = "example.eps.example.net"
-csrf_trusted_origins = ["localhost"]
-iap_audience        = "/projects/22368248810/us-central1/backendServices/6252277272778218001"
-superusers = ["example", "user"]
-eps_allowed_accessors = ["group:eps@example.net"]
+environment_name      = "dev"
+eps_project_id        = "example-eps"
+secrets_project_id    = "example-eps"
+eps_image             = "us-docker.pkg.dev/example-eps/hsp/parameter_store:v15"
+terraform_principal   = "serviceAccount:terraform@example-eps.iam.gserviceaccount.com"
+app_fqdn              = "example.eps.corp.net"
+csrf_trusted_origins  = ["localhost"]
+iap_audience          = "/projects/22368248810/us-central1/backendServices/506473743633145264"
+superusers            = ["example"]
+eps_allowed_accessors = ["group:eps@example.corp.net"]
+worker_pool_name                = "eps-private-pool"
+db_password_key                 = "eps-db-pass" # Or fetch from a secure source if needed at plan time
+instance_connection_name        = "example-eps:us-central1:eps-015b"
+artifact_registry_project_id    = ""example-eps
+artifact_registry_repo          = "eps"
+app_image_name                  = "parameter_store"
+git_repo_url                    = "https://github.com/example-eps/parameter-store.git"
+git_user_email                  = ""example-eps@xyz.com"
+git_user_name                   = "example-eps-gituser"
 ```
 
 #### Deploy Parameter Store App
@@ -259,6 +287,41 @@ terrform destroy
 This command will tear down all the GCP resources provisioned by Terraform.  
 Manual created resource requires manual deletion, including
 
+## Cloudbuild Pipeline
+
+This Cloud Build pipeline is designed to automate the process of building EPS application, managing its database schema changes (migrations), and ensuring that these schema changes are version-controlled alongside your application code.
+
+Files used are  [cb.tf](examples/terraform/cb.tf) and [cloudbuild.yaml](./cloudbuild.yaml)
+
+[cb.tf](examples/terraform/cb.tf) automates the deployment of a Cloud Build CI/CD pipeline by:
+
+**Establishing Secure GitHub Integration**: It creates a connection to your GitHub repository using the Cloud Build GitHub App and a stored OAuth token for authenticated access.
+
+**Granting Necessary Permissions**: It assigns the Cloud Build service agent permissions to manage secrets (specifically for the GitHub token) ensuring it can operate correctly.
+
+**Defining Repository and Trigger**: It links your specific GitHub repository to Cloud Build and sets up a trigger that automatically starts a build process on pushes to the `main` branch.
+
+**Configuring Build Execution**: It specifies that builds will run using a designated private worker pool and a dedicated service account, with build steps and parameters defined in an external `cloudbuild.yaml` file (customized via substitutions).
+
+[cloudbuild.yaml](./cloudbuild.yaml) file defines a multi-step build process including:
+
+**Download Cloud SQL Proxy (download-proxy)**: Fetches the specified version of the Cloud SQL Proxy binary required for database connectivity.
+
+**Make Cloud SQL Proxy Executable (chmod-proxy)**: Sets execution permissions for the downloaded Cloud SQL Proxy.
+
+**Build Temporary Docker Image (build-temp-image)**: Creates an initial Docker image of the application, tagged as :temp, to be used for running subsequent tasks like migrations.
+
+**Run Database Migrations (run-migrations)**: Using the temporary image, starts the Cloud SQL Proxy, then runs Django's makemigrations to generate new database migration files for parameter_store and api apps, and copies these new migration files to the shared /workspace.
+
+**Check Copied Migrations (check-copied-migrations)**: Verifies that the database migration files generated in the previous step have been successfully copied to the /workspace.
+
+**Build Final Docker Image (build-final-image)**: Builds the definitive application Docker image, incorporating any new migration files, and tags it with the current Git commit SHA.
+
+**Push Final Image (push-final-image-latest)**: Pushes the final, commit-SHA-tagged Docker image to the specified Google Artifact Registry repository.
+
+**Commit Migrations (commit-migrations)**: Clones the application's Git repository, copies the newly generated migration files from /workspace into it, and then commits and pushes these files to a new branch in the remote Git repository.
+
+
 ## Operate Parameter Store
 
 * After initial deployment, there is no user configuration for EPS if Terraform `superusers` variable was set
@@ -276,7 +339,7 @@ temporarily provisioned in the EPS network with access to Cloud SQL via a privat
 
 ### Terraform
 
-The Terraform folder contains optional [resources](terraform/opt-gcb-data-loader.tf) to stand up infrastructure for a
+The Terraform folder contains optional [resources](examples/terraform/opt-gcb-data-loader.tf) to stand up infrastructure for a
 Cloud Build data loader pipeline. If you do not want these resources, you should comment out or delete the resources in
 this folder. In addtion to this file, there are references to these resources elsewhere — search the folder for TODO
 lines related to the data loader and remove them.
