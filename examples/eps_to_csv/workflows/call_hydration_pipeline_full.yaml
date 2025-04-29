@@ -35,9 +35,9 @@ jobs:
   check_drift_eps_mode:
     name: Check Drift (EPS Mode)
     if: ${{ vars.MODE == 'EPS' }}
-    uses: my-org/reusable-workflows-repo/.github/workflows/csv_updater_resuable_pipeline.yaml@main
+    uses: kkram01/eps-workflows/.github/workflows/csv_updater_resuable_pipeline.yaml@main
     with:
-      used_workflow_ref: 'my-org/my-reusable-repo/.github/workflows/csv_updater_resuable_pipeline.yaml@main'
+      used_workflow_ref: 'kkram01/eps-workflows/.github/workflows/csv_updater_resuable_pipeline.yaml@main'
       target_csv_file: ${{ vars.SOURCE_OF_TRUTH_TYPE == 'intent' && 'cluster-intent-source-of-truth.csv' || 'templates/source_of_truth.csv' }}
       # Pass the source of truth type (e.g., 'intent' or 'template') to the reusable workflow.
       source_of_truth_type: ${{ vars.SOURCE_OF_TRUTH_TYPE }}

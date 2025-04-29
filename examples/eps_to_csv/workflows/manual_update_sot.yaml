@@ -18,9 +18,9 @@ on:
 jobs:
   call_reusable_updater:
     if: ${{ vars.MODE == 'EPS' }}
-    uses: my-org/my-reusable-repo/.github/workflows/csv_updater_resuable_pipeline.yaml@main
+    uses: kkram01/eps-workflows/.github/workflows/csv_updater_reusable_pipeline.yaml@main
     with:
-      used_workflow_ref: 'my-org/my-reusable-repo/.github/workflows/csv_updater_resuable_pipeline.yaml@main'
+      used_workflow_ref: kkram01/eps-workflows/.github/workflows/csv_updater_reusable_pipeline.yaml@main
       target_csv_file: ${{ github.event.inputs.target_csv_file }} # Path in the caller repo
       source_of_truth_type: ${{ vars.SOURCE_OF_TRUTH_TYPE }}
       config_ini_path: '.github/config/csv_settings.ini' # Path to config in the caller repo
