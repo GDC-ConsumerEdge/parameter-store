@@ -1,0 +1,502 @@
+# This reusable workflow fetches data from EPS, updates a specified CSV file,
+# and either creates a new PR with the changes or handles drift checking/reconciliation
+# on an existing PR based on PR commands.
+name: Reusable - Update EPS CSV and Manage PRs/Drift
+
+on:
+  workflow_call:
+    inputs:
+      used_workflow_ref:
+        description: |
+          The 'uses' directive from the calling workflow, specifying the reusable workflow and its version.
+          Example: `my-org/reusable-workflows/.github/workflows/hydration_pipeline.yml@main`
+        required: true
+        type: string
+      target_csv_file:
+        description: "Path to the CSV file to be updated/replaced (relative to calling repo root)"
+        required: true
+        type: string
+      source_of_truth_type:
+        description: "Type of source of truth ('intent' or 'template', case-insensitive)"
+        required: true
+        type: string
+      config_ini_path:
+        description: "Path to the config.ini file for the Python script (relative to calling repo root)"
+        required: false
+        type: string
+        default: ".github/config/sot_csv_config.ini"
+      eps_client_id:
+        description: "OAuth Client ID for authenticating with the EPS API via IAP"
+        required: true
+        type: string
+      branch_name_suffix:
+        description: "Suffix for the new feature branch when creating a new PR"
+        required: false
+        type: string
+        default: "auto" # 'auto' generates a unique suffix based on run ID
+      base_branch:
+        description: "The base branch to create the PR against"
+        required: false
+        type: string
+        default: "main"
+      pr_title_prefix:
+        description: "Prefix for the Pull Request title"
+        required: false
+        type: string
+        default: "Automated CSV Update:"
+      pr_labels:
+        description: "Comma-separated list of labels to add to the PR"
+        required: false
+        type: string
+        default: "automated pr,data update"
+      pr_assignees:
+        description: "Comma-separated list of GitHub usernames to assign to the PR"
+        required: false
+        type: string
+      pr_reviewers:
+        description: "Comma-separated list of GitHub usernames/teams to request review from"
+        required: false
+        type: string
+      google_cloud_project:
+        description: "Google Cloud Project ID"
+        required: true
+        type: string
+      wif_provider:
+        description: "Workload Identity Federation Provider URL"
+        required: true
+        type: string
+      service_account:
+        description: "Google Cloud Service Account email"
+        required: true
+        type: string
+      eps_host:
+        description: "EPS Host URL"
+        required: true
+        type: string
+      python_version:
+        description: "Python version to use"
+        required: false
+        type: string
+        default: "3.11"
+      chatops_mode:
+        description: "Set to 'check' or 'reconcile' to operate on an existing PR branch with EPS commands instead of creating a new PR."
+        required: false
+        type: string
+        default: "" # Default is empty, meaning standard PR creation mode
+      pr_branch:
+        description: "The head branch name of the PR (Required if chatops_mode is 'check' or 'reconcile')"
+        required: false
+        type: string
+      pr_number:
+        description: "The PR number to comment on (Required if chatops_mode is 'check' or 'reconcile')"
+        required: false
+        type: string
+      repo_full_name:
+        description: "Full name of the repository (e.g., kkram01/hello-world) (Required if chatops_mode is 'check' or 'reconcile')"
+        required: false
+        type: string
+
+    secrets:
+      PAT_TOKEN:
+        description: "GitHub Personal Access Token with repo write scope for creating PRs or pushing reconciliation commits/comments."
+        required: true
+
+    outputs:
+      # Indicates if drift was found in 'check' mode.
+      drift_detected:
+        description: "'true' if drift was detected when chatops_mode='check', 'false' otherwise."
+        value: ${{ jobs.update_csv_and_process.outputs.drift_detected_output }}
+      #Indicates if changes were committed to the feature/source branch in 'reconcile' mode.
+      sync_performed:
+        description: "'true' if changes were committed and pushed when chatops_mode='reconcile', 'false' otherwise."
+        value: ${{ jobs.update_csv_and_process.outputs.sync_performed_output }}
+
+jobs:
+  update_csv_and_process:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write # Required for Google Auth via WIF
+    # Define job outputs linked to step outputs.
+    outputs:
+      drift_detected_output: ${{ steps.set_drift_output.outputs.detected }}
+      sync_performed_output: ${{ steps.set_sync_output.outputs.performed }}
+
+    steps:
+      #Checkout the *calling* workflow's repository.
+      # Checks out the specific branch for ChatOps modes or the triggering event's ref otherwise.
+      - name: Checkout Caller Repository
+        uses: actions/checkout@v4
+        with:
+          # Checkout PR branch if in chatops mode (triggered through PR commands), otherwise checkout triggering ref/sha
+          ref: ${{ inputs.chatops_mode != '' && inputs.pr_branch || github.event.workflow_run.head_sha || github.ref }}
+          token: ${{ secrets.PAT_TOKEN }}
+          path: caller_repo
+
+      #Parse the reusable workflow reference to get repo name and refspec.
+      - id: process-used-workflow-ref
+        name: process used workflow ref
+        run: |
+            used_workflow_ref="${{ inputs.used_workflow_ref }}"
+            refspec="${used_workflow_ref##*@}" # Extract part after '@' (branch/tag/sha)
+            IFS='/' read -ra parts <<< "${used_workflow_ref}" 
+            org_repo="${parts[0]}/${parts[1]}"
+            echo "org_repo=${org_repo}" >> ${GITHUB_OUTPUT}
+            echo "refspec=${refspec}" >> ${GITHUB_OUTPUT}
+
+      #Checkout the repository containing *this* reusable workflow. This has the python scripts and the requirements file
+      - name: checkout repo containing this reusable workflow
+        uses: actions/checkout@v4
+        with:
+          ref: "${{ steps.process-used-workflow-ref.outputs.refspec }}"
+          repository: "${{ steps.process-used-workflow-ref.outputs.org_repo }}"
+          token: ${{ secrets.PAT_TOKEN }}
+          path: "./.reusable_workflow_repo"
+
+      - name: Google Auth
+        id: google-auth
+        uses: "google-github-actions/auth@v2"
+        with:
+          token_format: "access_token"
+          access_token_lifetime: "3600s"
+          create_credentials_file: "true" # Create ADC file for Python script
+          project_id: ${{ inputs.google_cloud_project }}
+          workload_identity_provider: ${{ inputs.wif_provider }}
+          service_account: ${{ inputs.service_account }}
+
+      - name: Validate Source Of Truth Type & Prepare Script Args
+        id: determine_params
+        env:
+          SOURCE_OF_TRUTH_TYPE_INPUT: ${{ inputs.source_of_truth_type }}
+          TARGET_FILENAME_INPUT: ${{ inputs.target_csv_file }} # Relative to caller_repo
+        run: |
+          source_type_orig="${{ env.SOURCE_OF_TRUTH_TYPE_INPUT }}"
+          source_type_lower="${source_type_orig,,}" # Convert to lowercase for case-insensitive check
+          target_filename="${{ env.TARGET_FILENAME_INPUT }}"
+          FLAG_TO_ADD=""
+
+          echo "Received SOURCE_OF_TRUTH_TYPE: '$source_type_orig' (Processing as '$source_type_lower')"
+          echo "Received Target Filepath: '$target_filename'"
+
+          # Ensure target filename is provided
+          if [[ -z "$target_filename" ]]; then
+             echo "Error: target_csv_file input cannot be empty." >&2
+             exit 1
+          fi
+
+          # Determine the correct flag for the Python script based on SoT type
+          case "$source_type_lower" in
+            "intent")
+              echo "Setting flag to '-intent'."
+              FLAG_TO_ADD="-intent"
+              ;;
+            "template")
+              echo "Setting flag to '-data'."
+              FLAG_TO_ADD="-data"
+              ;;
+            *)
+              echo "Error: Invalid source_of_truth_type: '$source_type_orig'. Expected 'intent' or 'template' (case-insensitive)." >&2
+              exit 1
+              ;;
+          esac
+
+          echo "Flag determined: '$FLAG_TO_ADD'"
+          echo "flag=$FLAG_TO_ADD" >> $GITHUB_OUTPUT
+          # Construct full path to the target CSV within the checked-out caller repo
+          echo "output_csv_path=${{ github.workspace }}/caller_repo/${target_filename}" >> $GITHUB_OUTPUT
+          # Construct full path to the config INI within the checked-out caller repo
+          echo "config_ini_path=${{ github.workspace }}/caller_repo/${{ inputs.config_ini_path }}" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: "pip"  # Enable caching for pip dependencies
+
+      # Step 7: Install Python dependencies
+      - name: Install Python dependencies (from reusable workflow repo)
+        run: |
+          # Define path relative to the workspace root where the reusable repo was checked out
+          REQUIREMENTS_FILE=".reusable_workflow_repo/.github/resources/requirements.txt" # Adjust path as needed
+          if [ -f "$REQUIREMENTS_FILE" ]; then
+            pip install -r "$REQUIREMENTS_FILE"
+          else
+            echo "Warning: Requirements file '$REQUIREMENTS_FILE' not found. Skipping dependency installation."
+          fi
+        shell: bash
+
+      - name: Run EPS to CSV Converter Script
+        id: run_script
+        env:
+          EPS_HOST: ${{ inputs.eps_host }}
+          EPS_CLIENT_ID: ${{ inputs.eps_client_id }}
+          SERVICE_ACCOUNT: ${{ inputs.service_account }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.google-auth.outputs.credentials_file_path }}
+          CONFIG_INI_PATH: ${{ steps.determine_params.outputs.config_ini_path }}
+          # Set the correct output CSV environment variable based on the flag
+          ${{ steps.determine_params.outputs.flag == '-intent' && 'OUTPUT_INTENT_CSV' || 'OUTPUT_DATA_CSV' }}: ${{ steps.determine_params.outputs.output_csv_path }}
+        run: |
+          echo "Google Credentials File: $GOOGLE_APPLICATION_CREDENTIALS"
+          echo "Config INI Path (caller repo): $CONFIG_INI_PATH"
+          SCRIPT_PATH=".reusable_workflow_repo/.github/resources/eps_to_csv_converter.py" # Adjust path as needed
+          SCRIPT_FLAG="${{ steps.determine_params.outputs.flag }}"
+          USER_TARGET_PATH="${{ steps.determine_params.outputs.output_csv_path }}" # Full path
+
+          # Just Logging the output variable being set for easier debugging
+          if [[ "$SCRIPT_FLAG" == "-intent" ]]; then
+            echo "Exporting OUTPUT_INTENT_CSV=$OUTPUT_INTENT_CSV for Python script"
+          elif [[ "$SCRIPT_FLAG" == "-data" ]]; then
+            echo "Exporting OUTPUT_DATA_CSV=$OUTPUT_DATA_CSV for Python script"
+          else
+            echo "Error: Invalid script flag '$SCRIPT_FLAG' received." >&2
+            exit 1
+          fi
+
+          echo "Running command: python \"$SCRIPT_PATH\" \"$SCRIPT_FLAG\""
+          python "$SCRIPT_PATH" "$SCRIPT_FLAG"
+          SCRIPT_EXIT_CODE=$?
+
+          if [ $SCRIPT_EXIT_CODE -ne 0 ]; then
+            echo "Python script failed with exit code $SCRIPT_EXIT_CODE!" >&2
+            exit $SCRIPT_EXIT_CODE
+          fi
+
+          # Verify that the expected output file was actually created
+          if [ ! -f "$USER_TARGET_PATH" ]; then
+             echo "Error: Expected output file '$USER_TARGET_PATH' was not created by the script!" >&2
+
+             # List directory contents for easier debugging
+             ls -l "$(dirname "$USER_TARGET_PATH")" || ls -la .
+             exit 1
+          fi
+
+          echo "Script finished successfully. CSV updated/created at '$USER_TARGET_PATH'"
+        shell: bash
+
+      # Configure Git user details (only for where commits might happen).
+      - name: Configure Git for Diff/Commit
+        if: inputs.chatops_mode == 'check' || inputs.chatops_mode == 'reconcile'
+        working-directory: ./caller_repo # Operate in the checked-out caller repo
+        run: |
+          git config user.name "Hydrate Bot"
+          git config user.email "hydrate-bot@github.com"
+
+      # Check Drift (ChatOps Mode)
+      - name: Check for Drift
+        if: inputs.chatops_mode == 'check'
+        id: diff_check
+        working-directory: ./caller_repo
+        run: |
+          # Print commands and exit on unexpected errors *except* where handled
+
+          TARGET_FILE_RELATIVE="${{ inputs.target_csv_file }}" # Path relative to repo root
+          TARGET_FILE_FULL="${{ steps.determine_params.outputs.output_csv_path }}" # Full path
+
+          echo "Checking existence of generated file: $TARGET_FILE_FULL"
+          if [[ ! -f "$TARGET_FILE_FULL" ]]; then
+            echo "::warning::Generated file $TARGET_FILE_FULL not found. Cannot check drift."
+            echo "status=nofile" >> $GITHUB_OUTPUT
+            echo "message=⚠️ Generated file \`${TARGET_FILE_RELATIVE}\` not found. Script might have failed or path is incorrect." >> $GITHUB_OUTPUT
+            exit 0 # Exit cleanly
+          fi
+
+          echo "Checking if file is tracked by git: $TARGET_FILE_RELATIVE"
+          # Run git ls-files and capture its exit code explicitly
+          # Temporarily disable exit on error for this command
+          set +e
+          git ls-files --error-unmatch "$TARGET_FILE_RELATIVE" > /dev/null 2>&1
+          LS_FILES_EXIT_CODE=$?
+          set -e # Re-enable exit on error
+
+          if [[ $LS_FILES_EXIT_CODE -ne 0 ]]; then
+             echo "File '$TARGET_FILE_RELATIVE' is not tracked by git (exit code $LS_FILES_EXIT_CODE). Treating as new file."
+             echo "status=newfile" >> $GITHUB_OUTPUT
+             echo "message=ℹ️ Generated file \`${TARGET_FILE_RELATIVE}\` is new compared to branch \`${{ inputs.pr_branch }}\`." >> $GITHUB_OUTPUT
+
+             echo "Capturing content of new file: $TARGET_FILE_RELATIVE"
+             DIFF_OUTPUT=$(cat "$TARGET_FILE_RELATIVE")
+             if [ $? -ne 0 ]; then
+               echo "::error::Failed to 'cat' the new file '$TARGET_FILE_RELATIVE'. Check permissions or if it's empty/corrupted."
+               exit 1 # Exit with error if cat fails
+             fi
+
+             echo "diff_output<<EOF" >> $GITHUB_OUTPUT
+             echo "$DIFF_OUTPUT" >> $GITHUB_OUTPUT
+             echo "EOF" >> $GITHUB_OUTPUT
+             exit 0 # Exit cleanly
+          fi
+
+          echo "File '$TARGET_FILE_RELATIVE' is tracked. Checking for differences..."
+          set +e # Temporarily disable exit on error for git diff
+          git diff --exit-code --quiet "$TARGET_FILE_RELATIVE"
+          DIFF_EXIT_CODE=$?
+          set -e # Re-enable exit on error
+
+          echo "Diff exit code for $TARGET_FILE_RELATIVE: $DIFF_EXIT_CODE"
+
+          if [[ $DIFF_EXIT_CODE -eq 0 ]]; then
+            echo "No changes detected."
+            echo "status=nochange" >> $GITHUB_OUTPUT
+            echo "message=✅ No Changes detected in EPS for \`${TARGET_FILE_RELATIVE}\` on \`${{ inputs.pr_branch }}\` branch" >> $GITHUB_OUTPUT
+          elif [[ $DIFF_EXIT_CODE -eq 1 ]]; then
+            echo "Changes detected."
+            echo "status=changed" >> $GITHUB_OUTPUT
+            echo "message=⚠️ Changes detected in EPS for \`${TARGET_FILE_RELATIVE}\` on  \`${{ inputs.pr_branch }}\` branch. Run '/sync-eps' to update your source of truth before running hydration." >> $GITHUB_OUTPUT
+
+            echo "Capturing diff output..."
+            DIFF_OUTPUT=$(git diff --src-prefix="git/" --dst-prefix="eps/" "$TARGET_FILE_RELATIVE")
+            if [ $? -ne 0 ]; then
+               echo "::error::Failed to run 'git diff' to capture the output for '$TARGET_FILE_RELATIVE'."
+               exit 1 # Exit with error if diff capture fails
+             fi
+            echo "diff_output<<EOF" >> $GITHUB_OUTPUT
+            echo "$DIFF_OUTPUT" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            # This handles actual errors from git diff (exit code > 1)
+            echo "::error::'git diff --exit-code' failed with unexpected exit code $DIFF_EXIT_CODE for file '$TARGET_FILE_RELATIVE'."
+            exit 1 # Exit with error for unexpected git diff failure
+          fi
+
+          echo "Check for Drift step completed successfully."
+        # Allow workflow to continue even if diff check has issues, comment will reflect it.
+        continue-on-error: true
+
+      - name: Set drift_detected Output
+        if: inputs.chatops_mode == 'check'
+        id: set_drift_output
+        run: |
+          drift_status="${{ steps.diff_check.outputs.status }}"
+          echo "Diff check status: $drift_status"
+          if [[ "$drift_status" == "changed" || "$drift_status" == "newfile" ]]; then
+            echo "detected=true" >> $GITHUB_OUTPUT
+          else
+            # Covers 'nochange', 'nofile', or errors from diff_check step
+            echo "detected=false" >> $GITHUB_OUTPUT
+          fi
+
+      # Action 2: Reconcile Drift (ChatOps Mode)
+      - name: Reconcile Drift (Commit and Push)
+        if: inputs.chatops_mode == 'reconcile'
+        id: reconcile_commit
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: ./caller_repo
+        run: |
+          TARGET_FILE_RELATIVE="${{ inputs.target_csv_file }}"
+          TARGET_FILE_FULL="${{ steps.determine_params.outputs.output_csv_path }}"
+
+          if [[ ! -f "$TARGET_FILE_FULL" ]]; then
+            echo "::warning::Generated file $TARGET_FILE_FULL not found. Cannot reconcile."
+            echo "status=nofile" >> $GITHUB_OUTPUT
+            echo "message=⚠️ Generated file \`${{ inputs.target_csv_file }}\` not found. Cannot reconcile." >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          git add "$TARGET_FILE_RELATIVE"
+
+          if git diff --staged --quiet "$TARGET_FILE_RELATIVE"; then
+            echo "status=nochange" >> $GITHUB_OUTPUT
+            echo "message=✅ No changes detected in EPS for \`${{ inputs.target_csv_file }}\`. Nothing to reconcile on branch \`${{ inputs.pr_branch }}\`." >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Committing changes to $TARGET_FILE_RELATIVE..."
+          COMMIT_MSG="feat: Sync SoT changes from EPS for ${TARGET_FILE_RELATIVE}"
+          COMMIT_BODY="Triggered by sync-eps command on PR #${{ inputs.pr_number }}"
+          git commit -m "$COMMIT_MSG" -m "$COMMIT_BODY"
+
+          echo "Pushing changes to branch ${{ inputs.pr_branch }}..."
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ inputs.repo_full_name }}.git HEAD:${{ inputs.pr_branch }}
+          COMMIT_SHA=$(git rev-parse HEAD) # Get the SHA of the new commit
+          echo "status=committed" >> $GITHUB_OUTPUT
+          echo "message=✅ Successfully pulled the data for \`${{ inputs.target_csv_file }}\` from EPS. Changes pushed to branch \`${{ inputs.pr_branch }}\` (Commit: ${COMMIT_SHA::8})" >> $GITHUB_OUTPUT
+        # No continue on error here; if commit/push fails, it's a real failure.
+        continue-on-error: false
+
+      - name: Set sync_performed Output
+        if: inputs.chatops_mode == 'reconcile'
+        id: set_sync_output
+        run: |
+          sync_status="${{ steps.reconcile_commit.outputs.status }}"
+          echo "Reconcile commit status: $sync_status"
+          if [[ "$sync_status" == "committed" ]]; then
+            echo "performed=true" >> $GITHUB_OUTPUT
+          else
+            # Covers 'nochange', 'nofile', or potential future error states from reconcile_commit
+            echo "performed=false" >> $GITHUB_OUTPUT
+          fi
+
+      # Action 3: Create New PR (Default Mode)
+      - name: Prepare PR Details
+        if: inputs.chatops_mode == ''
+        id: prepare_pr
+        run: |
+          TARGET_CSV_RELATIVE="${{ inputs.target_csv_file }}"
+          BRANCH_SUFFIX="${{ inputs.branch_name_suffix }}"
+          PYTHON_SCRIPT_BASENAME="eps_to_csv_converter.py"
+
+          # Generate branch name: use suffix if provided and valid, otherwise generate unique name
+          if [[ "$BRANCH_SUFFIX" == "auto" || -z "$BRANCH_SUFFIX" ]]; then
+            BRANCH="feature/update-csv-${{ github.run_id }}-${{ github.run_attempt }}"
+          else
+            # Process the suffix for use in a branch name
+            BRANCH_SUFFIX_SLUG=$(echo "$BRANCH_SUFFIX" | iconv -t ascii//TRANSLIT | sed -r 's/[^a-zA-Z0-9]+/-/g' | sed -r 's/^-+|-+$//g' | tr '[:upper:]' '[:lower:]')
+            BRANCH="feature/update-csv-${BRANCH_SUFFIX_SLUG}"
+          fi
+
+          PR_TITLE="${{ inputs.pr_title_prefix }} $TARGET_CSV_RELATIVE"
+          PR_BODY="This PR was automatically generated by the reusable Update CSV workflow."
+          PR_BODY="$PR_BODY\nIt updates '$TARGET_CSV_RELATIVE' using the standard '$PYTHON_SCRIPT_BASENAME' from EPS."
+          PR_BODY="$PR_BODY\n\nWorkflow Run: ${{ steps.process-used-workflow-ref.outputs.org_repo }}/actions/runs/${{ github.run_id }}" # Link back to the run ID
+
+          echo "branch_name=$BRANCH" >> $GITHUB_OUTPUT
+          echo "commit_message=feat: Update $TARGET_CSV_RELATIVE via $PYTHON_SCRIPT_BASENAME" >> $GITHUB_OUTPUT
+          echo "pr_title=$PR_TITLE" >> $GITHUB_OUTPUT
+          echo "pr_body<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$PR_BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Pull Request
+        if: inputs.chatops_mode == ''
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
+          path: caller_repo
+          commit-message: ${{ steps.prepare_pr.outputs.commit_message }}
+          branch: ${{ steps.prepare_pr.outputs.branch_name }}
+          delete-branch: true # Clean up the feature branch after merging/closing
+          base: ${{ inputs.base_branch }}
+          title: ${{ steps.prepare_pr.outputs.pr_title }}
+          body: ${{ steps.prepare_pr.outputs.pr_body }}
+          labels: ${{ inputs.pr_labels }}
+          assignees: ${{ inputs.pr_assignees }}
+          reviewers: ${{ inputs.pr_reviewers }}
+          # only the target CSV file to be added to the PR
+          add-paths: |
+            ${{ inputs.target_csv_file }}
+
+      # --- ChatOps Mode: Post Result Comment
+      # Post a comment back to the PR with the results of 'check' or 'reconcile'.
+      - name: Post ChatOps Result Comment to PR
+        if: (inputs.chatops_mode == 'check' || inputs.chatops_mode == 'reconcile') && inputs.pr_number != '' && inputs.repo_full_name != ''
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ inputs.repo_full_name }}
+          issue-number: ${{ inputs.pr_number }}
+          body: |
+            ${{ inputs.chatops_mode == 'reconcile' && steps.reconcile_commit.outputs.message || '' }}
+            ${{ inputs.chatops_mode == 'check' && steps.diff_check.outputs.message || '' }}
+            ${{ inputs.chatops_mode == 'check' && (steps.diff_check.outputs.status == 'changed' || steps.diff_check.outputs.status == 'newfile') && format('
+
+            <details><summary>Click to view {0}</summary>
+
+            ```{1}
+            {2}
+            ```
+            </details>', steps.diff_check.outputs.status == 'changed' && 'diff' || 'new content', steps.diff_check.outputs.status == 'changed' && 'diff' || 'csv', steps.diff_check.outputs.diff_output) || '' }}
+          # Replace previous comments from this action to avoid clutter
+          edit-mode: replace

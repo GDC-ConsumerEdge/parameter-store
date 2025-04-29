@@ -14,7 +14,11 @@ import pandas as pd
 from google.auth.exceptions import GoogleAuthError  # Specific exceptions
 from google.auth.transport.requests import AuthorizedSession
 from google.cloud import iam_credentials_v1
-from requests.exceptions import RequestException, JSONDecodeError, HTTPError  # Specific exceptions
+from requests.exceptions import (
+    RequestException,
+    JSONDecodeError,
+    HTTPError,
+)  # Specific exceptions
 
 # --- Setup Logging ---
 logging.basicConfig(
@@ -34,10 +38,11 @@ OUTPUT_DATA_CSV = os.environ.get(
     "OUTPUT_DATA_CSV", "source_of_truth.csv"
 )  # Matching the file path in GitHub Repositories
 
+# Define expected section and option names in the config file
 CONFIG_SECTIONS = {"SOT_COLUMNS": "sot_columns", "RENAME_COLUMNS": "rename_columns"}
 CONFIG_OPTIONS = {"INTENT_COLS": "cluster_intent_sot", "DATA_COLS": "cluster_data_sot"}
 
-# Prefixes to be removed from the key names of the flattened JSON DataFrame
+# Prefixes used in the source EPS API JSON response to distinguish between intent and data fields
 INTENT_PREFIX = "intent_"
 DATA_PREFIX = "data_"
 
@@ -102,16 +107,28 @@ def load_config(config_file: str) -> Dict[str, Any]:
 
 @dataclass
 class EPSParameters:
+    """Simple data class to hold parameters needed for EPS API."""
     eps_oauth_client_id: str
     host: str
     service_account: str
 
 
 def retrieve_eps_source_of_truth(params: EPSParameters) -> Dict:
-    """Retrieves the source of truth data from the EPS API."""
+    """Retrieves the source of truth data from the EPS API.
+
+    Args:
+        params: An EPSParameters object containing API connection details.
+
+    Returns:
+        A dictionary representing the JSON response from the EPS API.
+
+    Raises:
+        Propagates exceptions from make_iap_request (e.g., RequestException, ValueError, GoogleAuthError).
+    """
+    # Construct the target API endpoint URL
     url = f"https://{params.host}/api/v1/clusters"
     logger.info(f"Retrieving Source of Truth from: {url}")
-    # Pass parameters directly to the request function
+    # Delegate the actual API request
     eps_json = make_iap_request(url, params.eps_oauth_client_id, params.service_account)
     return eps_json
 
@@ -145,22 +162,28 @@ def get_parameters_from_environment() -> EPSParameters:
 
     logger.info("Successfully retrieved parameters from environment variables.")
     return EPSParameters(
-        eps_oauth_client_id=eps_oauth_client_id, host=host, service_account=service_account
+        eps_oauth_client_id=eps_oauth_client_id,
+        host=host,
+        service_account=service_account,
     )
 
 
 # --- IAP Request Function ---
 def make_iap_request(
-        url: str, eps_oauth_client_id: str, service_account: str, method: str = "GET", **kwargs
+    url: str,
+    eps_oauth_client_id: str,
+    service_account: str,
+    method: str = "GET",
+    **kwargs,
 ) -> Dict:
     """Makes a request to an application protected by Identity-Aware Proxy.
 
     Args:
-      method: The HTTP method to make the request
-      service_account: The Target Service Account Email to be impersonated
+      method: The HTTP method to make the request (default: "GET"). EPS supports only GET as of now so only that is implemented.
+      service_account: The Target Service Account Email to be impersonated.
       url: The Identity-Aware Proxy-protected URL to fetch.
-      eps_oauth_client_id: The client ID used by Identity-Aware Proxy.
-      **kwargs: Any parameters for requests.request.
+      eps_oauth_client_id: The client ID used by Identity-Aware Proxy for the target app.
+      **kwargs: Any additional parameters for requests.request.
 
     Returns:
       The parsed JSON response body as a dictionary.
@@ -168,12 +191,16 @@ def make_iap_request(
     Raises:
         NotImplementedError: If method != GET (other methods can be implemented later)
         ValueError: If the response is not valid JSON.
+        GoogleAuthError: If there's an issue with Google authentication or token generation.
+        RequestException: For network-related errors during the request.
         Exception: If the request fails or returns a non-200 status.
     """
+    # Currently, only GET is supported by EPS API and hence, only it is implemented. Extend this if needed in the future.
     if method.upper() != "GET":
         logger.error(f"HTTP method '{method}' not currently supported.")
         raise NotImplementedError(f"HTTP method '{method}' not implemented.")
-    kwargs.setdefault('timeout', 90)
+    #Default timeout of 90 seconds for the request
+    kwargs.setdefault("timeout", 90)
 
     try:
         target_service_account_email = service_account
@@ -186,11 +213,12 @@ def make_iap_request(
         id_token_response = client.generate_id_token(
             name=name, audience=audience, include_email=True
         )
-        id_token_jwt = id_token_response.token
+        id_token_jwt = id_token_response.token # Extract the actual signed JWT token
         logger.debug("Creating authorized session with generated ID token.")
         iap_creds = google.oauth2.credentials.Credentials(id_token_jwt)
+        # Create an authorized session object that already includes the token in headers
         authed_session = AuthorizedSession(iap_creds)
-
+        # Make the HTTP request using the authorized session
         logger.info(f"Making {method} request to IAP URL: {url}")
 
         resp = authed_session.request(method, url, **kwargs)
@@ -198,8 +226,12 @@ def make_iap_request(
         try:
             resp.raise_for_status()  # Raises HTTPError for bad responses (4xx or 5xx)
         except HTTPError as e:
-            logger.error(f'Got http response status code: {resp.status_code} ', exc_info=True)
-            raise HTTPError(f"Received a {resp.status_code} http response code on making HTTP request to EPS") from e
+            logger.error(
+                f"Got http response status code: {resp.status_code} ", exc_info=True
+            )
+            raise HTTPError(
+                f"Received a {resp.status_code} http response code on making HTTP request to EPS"
+            ) from e
 
         try:
             return resp.json()
@@ -212,23 +244,33 @@ def make_iap_request(
         logger.error(f"Error making IAP request to {url}: {e}", exc_info=True)
         raise
     except Exception as e:
-        logger.exception(f"An unexpected error occurred during IAP request to {url}: {e}")
+        logger.exception(
+            f"An unexpected error occurred during IAP request to {url}: {e}"
+        )
         raise
 
 
 def process_data(data: Dict, mode: str, rename_rules: Dict[str, str]) -> pd.DataFrame:
     """
-    Flattens JSON, filters columns based on mode, removes mode-specific prefix
-    (handling conflicts with non-prefixed columns by keeping original prefixed name),
-    handles other duplicates, validates and applies the rename rules.
+    Processes the raw data fetched from EPS for a specific mode ('intent' or 'data').
+
+    Steps:
+    1. Flattens the nested JSON structure (specifically the 'clusters' list).
+    2. Filters columns, keeping only those relevant to the specified `mode` (intent or data)
+    3. Removes the mode-specific prefix (e.g : 'intent_') from column names.
+       Handles conflicts: If removing the prefix results in a name that already
+       exists as a non-prefixed column, the original prefixed name is kept.
+    4. Handles any remaining duplicate column names (e.g : from source data),
+       keeping the first occurrence.
+    5. Validates and applies the `rename_rules` provided in the config.
 
     Args:
-        data: The raw data dictionary (expected to have a 'clusters' key).
+        data: The raw data dictionary fetched from EPS (expected to have a root 'clusters' key containing a list).
         mode: The processing mode ('intent' or 'data').
-        rename_rules: Specific column renaming rules (original_name: new_name).
+        rename_rules: Dictionary mapping source column names to target column names.
 
     Returns:
-        A processed Pandas DataFrame for the specified mode.
+        A processed Pandas DataFrame ready for CSV generation.
 
     Raises:
         ValueError: If input data is invalid, mode is incorrect, or rename rules conflict.
@@ -236,7 +278,7 @@ def process_data(data: Dict, mode: str, rename_rules: Dict[str, str]) -> pd.Data
     """
     if "clusters" not in data:
         raise ValueError("Input data is missing the required 'clusters' key.")
-    if mode not in ['intent', 'data']:
+    if mode not in ["intent", "data"]:
         raise ValueError(f"Invalid mode specified: {mode}. Must be 'intent' or 'data'.")
 
     logger.info(f"Starting data processing for mode: '{mode}'")
@@ -244,29 +286,44 @@ def process_data(data: Dict, mode: str, rename_rules: Dict[str, str]) -> pd.Data
     try:
         # 1. Flatten the data
         flattened_df = pd.json_normalize(data["clusters"], sep="_")
-        logger.debug(f"Initial columns after flattening: {flattened_df.columns.tolist()}")
+        logger.debug(
+            f"Initial columns after flattening: {flattened_df.columns.tolist()}"
+        )
 
         # 2. Filter columns based on mode
-        prefix_to_keep = INTENT_PREFIX if mode == 'intent' else DATA_PREFIX
-        prefix_to_discard = DATA_PREFIX if mode == 'intent' else INTENT_PREFIX
-
-        cols_to_keep = [col for col in flattened_df.columns if not col.startswith(prefix_to_discard)]
+        prefix_to_keep = INTENT_PREFIX if mode == "intent" else DATA_PREFIX
+        prefix_to_discard = DATA_PREFIX if mode == "intent" else INTENT_PREFIX
+        
+        # Keep columns that DO NOT start with the prefix of the OTHER mode.
+        # This implicitly keeps columns starting with the current mode's prefix AND columns without any prefix.
+        # for e.g : if mode is "intent", then all the columns with "data_" as the prefix are discarded
+        cols_to_keep = [
+            col for col in flattened_df.columns if not col.startswith(prefix_to_discard)
+        ]
 
         if not cols_to_keep:
-            logger.warning(f"No columns found matching the criteria for mode '{mode}'. Returning empty DataFrame.")
+            logger.warning(
+                f"No columns found matching the criteria for mode '{mode}'. Returning empty DataFrame."
+            )
             return pd.DataFrame()
 
         flattened_df = flattened_df[cols_to_keep]
-        original_filtered_columns = flattened_df.columns.tolist()  # Store columns before prefix removal
-        logger.debug(f"Columns after mode filtering ('{mode}'): {original_filtered_columns}")
+        original_filtered_columns = (
+            flattened_df.columns.tolist()
+        )  # Store columns before prefix removal
+        logger.debug(
+            f"Columns after mode filtering ('{mode}'): {original_filtered_columns}"
+        )
 
         # 3. Build rename map for prefix removal, handling conflicts with existing non-prefixed columns
         final_rename_map = {}
-        columns_after_filtering_set = set(original_filtered_columns)  # For faster lookups
+        columns_after_filtering_set = set(
+            original_filtered_columns
+        )  # For faster lookups
 
         for col in original_filtered_columns:
             if col.startswith(prefix_to_keep):
-                base_name = col[len(prefix_to_keep):]
+                base_name = col[len(prefix_to_keep) :]
                 # Check if the target base_name already exists as another column
                 if base_name in columns_after_filtering_set:
                     # Conflict detected! Keep the original prefixed name.
@@ -278,23 +335,27 @@ def process_data(data: Dict, mode: str, rename_rules: Dict[str, str]) -> pd.Data
                     # Continue to the next column without adding a rename rule for 'col'
                     continue
                 else:
-                    # No conflict, just remove the prefix
                     final_rename_map[col] = base_name
 
         # Apply the calculated renames (only non-conflicting ones)
         if final_rename_map:
             flattened_df.rename(columns=final_rename_map, inplace=True)
             logger.debug(
-                f"Columns after prefix removal/conflict resolution ('{mode}'): {flattened_df.columns.tolist()}")
+                f"Columns after prefix removal/conflict resolution ('{mode}'): {flattened_df.columns.tolist()}"
+            )
         else:
             logger.info(f"No non-conflicting prefix removals needed for mode '{mode}'.")
 
-        #  Handle duplicates already present in source JSON after flattening
+        #  Handle duplicates already present in source JSON after flattening. First occurence is kept assuming the data is the same in both the fields.
         cols_after_rename = flattened_df.columns
         if cols_after_rename.has_duplicates:
             duplicate_mask = cols_after_rename.duplicated(keep="first")
             keep_mask = ~duplicate_mask
-            remaining_duplicate_names = cols_after_rename[cols_after_rename.duplicated(keep=False)].unique().tolist()
+            remaining_duplicate_names = (
+                cols_after_rename[cols_after_rename.duplicated(keep=False)]
+                .unique()
+                .tolist()
+            )
 
             if remaining_duplicate_names:
                 logger.warning(
@@ -302,7 +363,9 @@ def process_data(data: Dict, mode: str, rename_rules: Dict[str, str]) -> pd.Data
                     f"These likely originated from the source data. Keeping the first occurrence of each."
                 )
                 flattened_df = flattened_df.loc[:, keep_mask]
-                logger.debug(f"Columns after handling remaining duplicates ('{mode}'): {flattened_df.columns.tolist()}")
+                logger.debug(
+                    f"Columns after handling remaining duplicates ('{mode}'): {flattened_df.columns.tolist()}"
+                )
 
         # Validate and apply specific rename_rules
         current_columns = set(flattened_df.columns)
@@ -313,7 +376,8 @@ def process_data(data: Dict, mode: str, rename_rules: Dict[str, str]) -> pd.Data
             # skip the column from rename_rules if it doesn't exist in the dataframe
             if original_name not in current_columns:
                 logger.warning(
-                    f"Rename rule '{original_name}' -> '{new_name}' skipped: Column '{original_name}' not found")
+                    f"Rename rule '{original_name}' -> '{new_name}' skipped: Column '{original_name}' not found"
+                )
                 continue
 
             # Check if there's a conflict of target_column name to be renamed to, with existing dataframe column name
@@ -324,7 +388,11 @@ def process_data(data: Dict, mode: str, rename_rules: Dict[str, str]) -> pd.Data
                 )
             # Check for conflict with another rename rule's target
             if target_name_counts[new_name] > 1:
-                conflicting_originals = [k for k, v in rename_rules.items() if v == new_name and k != original_name]
+                conflicting_originals = [
+                    k
+                    for k, v in rename_rules.items()
+                    if v == new_name and k != original_name
+                ]
                 raise ValueError(
                     f"Invalid rename_rules for mode '{mode}': Multiple rules target the same name '{new_name}'. "
                     f"(Conflicts involve original columns: {conflicting_originals})"
@@ -333,17 +401,21 @@ def process_data(data: Dict, mode: str, rename_rules: Dict[str, str]) -> pd.Data
 
         # Apply the filtered renaming rules
         if effective_rename_rules:
-            logger.info(f"Applying specific column renames for mode '{mode}': {effective_rename_rules}")
+            logger.info(
+                f"Applying specific column renames for mode '{mode}': {effective_rename_rules}"
+            )
             flattened_df.rename(columns=effective_rename_rules, inplace=True)
         else:
-            logger.info(f"No specific column rename rules were applicable for mode '{mode}'.")
+            logger.info(
+                f"No specific column rename rules were applicable for mode '{mode}'."
+            )
 
         logger.info(f"Data processing completed successfully for mode '{mode}'.")
         return flattened_df
 
     except Exception as e:
         logger.exception(f"Error processing data for mode '{mode}': {e}")
-        # Re-raise the exception to be caught by the main try-except block
+        # Re-raise the exception to be caught by the main try-except block with more context
         raise Exception(f"Failed during data processing for mode '{mode}': {e}") from e
 
 
@@ -362,7 +434,7 @@ def generate_csv(df: pd.DataFrame, columns: List[str], output_filename: str):
             logger.warning(
                 f"The following requested columns were not found in the data for '{output_filename}': {missing_cols}"
             )
-            # Filter columns to only include those that actually exist
+            # Filter requested columns to only include those that actually exist in the data frame
             columns = [col for col in columns if col in df.columns]
             if not columns:
                 logger.error(
@@ -407,7 +479,7 @@ def main():
     args = parser.parse_args()
     try:
 
-        # Check if any action is requested
+        # Check if atleast one action (intent or data) is requested
         logger.info("Checking requested actions...")
         if not args.cluster_intent_sot and not args.cluster_data_sot:
             logger.info(
@@ -416,14 +488,19 @@ def main():
             parser.print_help(file=sys.stdout)
             sys.exit(0)  # Exit gracefully if no action requested
         logger.info("Attempting Google Cloud authentication...")
+        # Attempt to authenticate with Google Cloud using Application Default Credentials (ADC)
         try:
-            creds, auth_project = google.auth.default()  # GOOGLE_APPLICATION_CREDENTIALS
+            creds, auth_project = (
+                google.auth.default()
+            )  # GOOGLE_APPLICATION_CREDENTIALS
             logger.debug(f"Loaded credential type: {type(creds)}")
             if auth_project:
                 logger.debug(f"Authenticated with project: {auth_project}")
             logger.info("Google Cloud authentication successful.")
         except GoogleAuthError as auth_err:
-            logger.critical(f"Google Cloud Authentication failed: {auth_err}", exc_info=True)
+            logger.critical(
+                f"Google Cloud Authentication failed: {auth_err}", exc_info=True
+            )
             sys.exit(1)
 
         params = get_parameters_from_environment()
@@ -439,21 +516,31 @@ def main():
         # --- Process and Generate CSV based on arguments ---
         if args.cluster_intent_sot:
             logger.info("--- Processing for Intent SoT ---")
-            intent_df = process_data(raw_data, mode="intent", rename_rules=config_data["rename_rules"])
+            intent_df = process_data(
+                raw_data, mode="intent", rename_rules=config_data["rename_rules"]
+            )
             if not intent_df.empty:
                 logger.info("Generating Cluster Intent SoT CSV...")
-                generate_csv(intent_df, config_data["intent_columns"], OUTPUT_INTENT_CSV)
+                generate_csv(
+                    intent_df, config_data["intent_columns"], OUTPUT_INTENT_CSV
+                )
             else:
-                logger.warning(f"Skipping generation of '{OUTPUT_INTENT_CSV}' due to empty processed data.")
+                logger.warning(
+                    f"Skipping generation of '{OUTPUT_INTENT_CSV}' due to empty processed data."
+                )
 
         if args.cluster_data_sot:
             logger.info("--- Processing for Data SoT ---")
-            data_df = process_data(raw_data, mode="data", rename_rules=config_data["rename_rules"])
+            data_df = process_data(
+                raw_data, mode="data", rename_rules=config_data["rename_rules"]
+            )
             if not data_df.empty:
                 logger.info("Generating Cluster Data SoT CSV...")
                 generate_csv(data_df, config_data["data_columns"], OUTPUT_DATA_CSV)
             else:
-                logger.warning(f"Skipping generation of '{OUTPUT_DATA_CSV}' due to empty processed data.")
+                logger.warning(
+                    f"Skipping generation of '{OUTPUT_DATA_CSV}' due to empty processed data."
+                )
 
         logger.info("Script finished successfully.")
     except (FileNotFoundError, ValueError, ConfigParserError) as e:
