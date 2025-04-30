@@ -9,7 +9,7 @@ on:
       used_workflow_ref:
         description: |
           The 'uses' directive from the calling workflow, specifying the reusable workflow and its version.
-          Example: `my-org/reusable-workflows/.github/workflows/hydration_pipeline.yml@main`
+          Example: `my-org/reusable-workflows-repo/.github/workflows/hydration_pipeline.yml@main`
         required: true
         type: string
       target_csv_file:
@@ -77,7 +77,7 @@ on:
         description: "Python version to use"
         required: false
         type: string
-        default: "3.11"
+        default: "3.12"
       chatops_mode:
         description: "Set to 'check' or 'reconcile' to operate on an existing PR branch with EPS commands instead of creating a new PR."
         required: false
@@ -92,7 +92,7 @@ on:
         required: false
         type: string
       repo_full_name:
-        description: "Full name of the repository (e.g., kkram01/hello-world) (Required if chatops_mode is 'check' or 'reconcile')"
+        description: "Full name of the repository (e.g., my-org/my-repo) (Required if chatops_mode is 'check' or 'reconcile')"
         required: false
         type: string
 

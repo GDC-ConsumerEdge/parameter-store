@@ -19,7 +19,7 @@ This reusable workflow provides a standardized process for updating a Source of 
 
 To utilize this reusable workflow (`csv_updater_resuable_pipeline.yaml`), you need to call it from another GitHub Actions workflow file. The `uses:` keyword specifies the path to the reusable workflow in your caller workflows. You will need to provide specific `inputs` to control its behavior (like `source_of_truth_type` and `chatops_mode` as discussed above) and pass the necessary `secrets` and `inputs` for authentication and access (especially when interacting with EPS).
 
-Please refer to [call_hydration_pipeline_full](./call_hydration_pipeline_full.yaml), [eps_commands_pipeline](./eps_commands_pipeline.yaml), and [manual_update_sot](./manual_update_sot.yaml) and their [README](./README.md) for reference examples on how this can be utilized for different usecases.
+Please refer to [call_hydration_pipeline_full](./call_hydration_pipeline_full.yaml), [eps_commands_pipeline](./eps_commands_pipeline.yaml), and [manual_update_sot](./manual_update_sot.yaml) and their [README](./README.md) for reference examples on how this can be utilized for different use cases.
 
 
 ## Prerequisites
@@ -28,11 +28,11 @@ For this reusable workflow to function correctly, the following components and c
 
 1.  **Python Script and Dependencies file:**
     *   The Python script responsible for fetching data from EPS and generating the target CSV file
-    *   It is recommended to have it in a separate [resources](../resources/) folder in the resuable workflow repository under `./github` directory along with its `requirements.txt` file.
+    *   It is recommended to have it in a separate [resources](../resources) folder in the reusable workflow repository under `./github` directory along with its `requirements.txt` file.
     *   However, The path to this script can be provided via the `python_script_path` input (you can also set the defaults within the inputs section of the workflow if not provided).
     *   Please check the [Python Script README](../resources/README.md) file and make sure the required dependencies are met.
 
-4.  **Caller Workflow with Configuration (secrets and variables):**
+2. **Caller Workflow with Configuration (secrets and variables):**
     *   A correctly configured calling workflow that specifies the `uses:` path, provides the required `inputs`, and passes the necessary `secrets`.
     *   Necessary GitHub secrets (like `EPS_HOST`, `EPS_CLIENT_ID`, GCP WIF credentials) must be configured in the repository or organization settings and passed to the workflow.
 

@@ -87,9 +87,9 @@ jobs:
   trigger_drift_check:
     needs: parse_and_prepare
     if: needs.parse_and_prepare.outputs.command == 'fetch-eps' && needs.parse_and_prepare.outputs.pr_branch != ''
-    uses: kkram01/eps-workflows/.github/workflows/csv_updater_reusable_pipeline.yaml@main
+    uses: my-org/my-reusable-repo/.github/workflows/csv_updater_resuable_pipeline.yaml@main
     with:
-      used_workflow_ref: 'kkram01/eps-workflows/.github/workflows/csv_updater_reusable_pipeline.yaml@main'
+      used_workflow_ref: 'my-org/my-reusable-repo/.github/workflows/csv_updater_resuable_pipeline.yaml@main'
       target_csv_file: ${{ vars.SOURCE_OF_TRUTH_TYPE == 'intent' && 'cluster-intent-source-of-truth.csv' || 'templates/source_of_truth.csv' }}
       source_of_truth_type: ${{ vars.SOURCE_OF_TRUTH_TYPE }}
       config_ini_path: '.github/config/csv_settings.ini'
@@ -109,9 +109,9 @@ jobs:
   trigger_eps_reconcile:
     needs: parse_and_prepare
     if: needs.parse_and_prepare.outputs.command == 'sync-eps' && needs.parse_and_prepare.outputs.pr_branch != ''
-    uses: kkram01/eps-workflows/.github/workflows/csv_updater_reusable_pipeline.yaml@main
+    uses: my-org/my-reusable-repo/.github/workflows/csv_updater_resuable_pipeline.yaml@main
     with:
-      used_workflow_ref: 'kkram01/eps-workflows/.github/workflows/csv_updater_reusable_pipeline.yaml@main'
+      used_workflow_ref: 'my-org/my-reusable-repo/.github/workflows/csv_updater_resuable_pipeline.yaml@main'
       target_csv_file: ${{ vars.SOURCE_OF_TRUTH_TYPE == 'intent' && 'cluster-intent-source-of-truth.csv' || 'templates/source_of_truth.csv' }}
       source_of_truth_type: ${{ vars.SOURCE_OF_TRUTH_TYPE }}
       config_ini_path: '.github/config/csv_settings.ini'
