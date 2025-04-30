@@ -4,7 +4,7 @@ This document describes the GitHub Actions workflows defined in the `examples/ep
 
 ## Repository Operating Modes (`MODE` Variable)
 
-The behavior of several workflows depends on the value of the `MODE` repository variable. This variable dictates the primary source of truth for configuration:
+The behavior of the several caller workflows defined below depend on the value of the `MODE` repository variable. This variable dictates the primary source of truth for configuration:
 
 *   **`GIT` Mode:** In this mode, the configuration source of truth is considered to be the files directly within the Git repository (e.g., the `cluster-intent-source-of-truth.csv` file). Changes are typically managed through standard Git pull requests, and hydration processes might be triggered directly based on file modifications within the repository. There will be no interaction with the EPS.
 *   **`EPS` Mode:** In this mode, the primary source of truth is the external Edge Parameter Store (EPS). Workflows are designed to interact with EPS to:
@@ -13,11 +13,11 @@ The behavior of several workflows depends on the value of the `MODE` repository 
     *   Reconcile differences found during drift checks.
     This mode is typically used when EPS manages the definitive state, and the Git repository needs to be kept in sync or validated against it.
 
-The specific `MODE` set for the repository in the Github Actions variables determines which jobs within the workflows will execute.
+The specific `MODE` set for the repository in the GitHub Actions variables determine which jobs within the workflows will execute.
 
 ## Workflows Overview
 
-All the three workflows documented below call the resuable workflow [csv_updater_pipeline.yaml](./csv_updater_pipeline.yaml) with different parameters to invoke different jobs enabled by the resuable workflow. For more information on the configuration options of that workflow, please refer to [RESUABLE_WORKFLOW.md](./reusable_workflow.md)
+All the three workflows documented below call the reusable workflow [csv_updater_pipeline.yaml](./csv_updater_reusable_pipeline.yaml) with different parameters to invoke different jobs enabled by the reusable workflow. For more information on the configuration options of that workflow, please refer to [REUSABLE_WORKFLOW.md](./reusable_workflow.md)
 
 *   **`manual_update_sot.yaml`**: A workflow dispatch that allows manual trigger of the Source of Truth (SOT) CSV generation process, typically used for cluster additions or updates. To hydrate new clusters that are added to EPS.
 *   **`call_hydration_pipeline_full.yaml`**: Automatically checks for configuration drift against the Edge Parameter Store (EPS) when pull requests modify specific directories, and potentially triggers a hydration process if no drift is detected (when in EPS mode).
@@ -50,7 +50,7 @@ This workflow relies on the following repository variables being correctly confi
 *   `SOURCE_OF_TRUTH_TYPE`: Defines the type of SOT being generated. ('intent' or 'template')
 *   `GOOGLE_CLOUD_PROJECT`: GCP Project ID.
 *   `WIF_PROVIDER`: Workload Identity Federation Provider URL.
-*   `SERVICE_ACCOUNT`: GCP Service Account email with workload Identity Federation to Github Repo.
+*   `SERVICE_ACCOUNT`: GCP Service Account email with workload Identity Federation to GitHub Repo.
 *   `EPS_HOST`: Hostname/URL of the Edge Parameter Store.
 *   `EPS_CLIENT_ID`: Oauth IAP Client ID for authenticating with EPS.
 
@@ -88,7 +88,7 @@ This workflow relies on the following repository variables being correctly confi
 *   `WIF_PROVIDER`: Workload Identity Federation Provider URL (for `EPS` mode).
 *   `SERVICE_ACCOUNT`: GCP Service Account email (for `EPS` mode).
 *   `EPS_HOST`: Hostname/URL of the Edge Parameter Store (for `EPS` mode).
-*   `EPS_CLIENT_ID`: Oauth IAPClient ID for authenticating with EPS (for `EPS` mode).
+*   `EPS_CLIENT_ID`: Oauth IAP Client ID for authenticating with EPS (for `EPS` mode).
 
 ---
 
@@ -108,7 +108,7 @@ This workflow allows triggering actions related to the Edge Parameter Store (EPS
 4.  If any drift is detected, Run `\sync-eps` command to generate the latest source_of_truth from EPS and commit to your source branch on the Pull Request.
 5.  Because the pull_request is now synchronized, the [call_hydration_pipeline_full](./call_hydration_pipeline_full.yaml) workflow gets triggered and runs hydration.
 6.  Based on the command run, the workflow will trigger, add an initial "eyes" reaction as acknowledgement. 
-7.  It then run the reusable workflow with the required parameters, and update the comment reaction based on the outcome.
+7.  It then runs the reusable workflow with the required parameters, and update the comment reaction based on the outcome.
 8.  Results/reports from the reusable workflow are posted as separate comments on the PR.
 
 **Prerequisites/Repository Variables:**
@@ -127,4 +127,8 @@ This workflow relies on the following repository variables being correctly confi
 
 
 ## Installation
-please refer to [RESUABLE_WORKFLOW.md](./reusable_workflow.md) for setting up the Centralized reusable workflow. Once that is completed, simply place the [config](../config/) directory and [workflows](../workflows/) directory with the required caller workflows in your caller repository. Set the required environment variables and update the `uses:` and `used_workflow_ref` fields in the jobs in your caller workflows to point to the resuable workflow file. That's it!
+please refer to [REUSABLE_WORKFLOW.md](./reusable_workflow.md) for setting up the Centralized reusable workflow. Once that is completed, simply place the [config](../config) directory and [workflows](../workflows) directory with the required caller workflows in your caller repository. Set the required environment variables and update the `uses:` and `used_workflow_ref` fields in the jobs in your caller workflows to point to the reusable workflow file. That's it!
+
+## Reference Usage/Design
+
+Please see [this flowchart diagram](./eps_integration_workflows.png) on an opinionated usage of the above pipelines for Integrating EPS into your Edge pipelines in Gitops fashion.

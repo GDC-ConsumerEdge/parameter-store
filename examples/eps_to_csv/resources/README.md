@@ -62,7 +62,7 @@ This Python script orchestrates the entire process:
 
 ### Install Dependencies
 
-These can be installed from the utils directory using : 
+These can be installed from the requirements file in the same directory as the python script using : 
 
 ``` pip install -r requirements.txt```
 
