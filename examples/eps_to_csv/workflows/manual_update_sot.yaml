@@ -1,0 +1,47 @@
+name: Generate SOT CSV (Cluster Addition)
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch_suffix_override:
+        description: 'Optional suffix for the feature branch'
+        required: false
+        type: string
+      target_csv_file:
+        description: 'Path to the CSV file to be updated/replaced (relative to repo root)'
+        type: choice
+        required: true
+        options:
+          - 'cluster-intent-source-of-truth.csv'
+          - 'templates/source_of_truth.csv'
+
+jobs:
+  call_reusable_updater:
+    if: ${{ vars.MODE == 'EPS' }}
+    uses: my-org/my-reusable-repo/.github/workflows/csv_updater_resuable_pipeline.yaml@main
+    with:
+      used_workflow_ref: 'my-org/my-reusable-repo/.github/workflows/csv_updater_resuable_pipeline.yaml@main'
+      target_csv_file: ${{ github.event.inputs.target_csv_file }} # Path in the caller repo
+      source_of_truth_type: ${{ vars.SOURCE_OF_TRUTH_TYPE }}
+      config_ini_path: '.github/config/csv_settings.ini' # Path to config in the caller repo
+      branch_name_suffix: ${{ github.event.inputs.branch_suffix_override || 'auto' }}
+      base_branch: 'main'
+      pr_labels: 'automated pr,my-repo-data,needs review'
+      google_cloud_project: ${{ vars.GOOGLE_CLOUD_PROJECT }}
+      wif_provider: ${{ vars.WIF_PROVIDER }}
+      service_account: ${{ vars.SERVICE_ACCOUNT }}
+      eps_host: ${{ vars.EPS_HOST }}
+      eps_client_id: ${{ vars.EPS_CLIENT_ID }}
+    secrets: inherit
+  
+  notify_skipped_mode:
+    name: Notify Skipped (Incorrect Mode)
+    # Run only if MODE is NOT EPS
+    if: ${{ vars.MODE != 'EPS' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print skip message
+        run: |
+          echo "::warning::Workflow run skipped."
+          echo "This workflow can only be run when the repository MODE variable is set to 'EPS'."
+          echo "Current MODE is: ${{ vars.MODE }}"

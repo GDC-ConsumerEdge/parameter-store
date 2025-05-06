@@ -1,0 +1,169 @@
+name: EPS Commands Trigger
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write
+  pull-requests: write
+  contents: write
+  id-token: write
+  actions: write
+
+concurrency:
+  group: ${{ github.repository }}-${{ github.event.issue.number }}-csv-update
+  cancel-in-progress: ${{ github.event.sender.type != 'Bot' }}
+
+jobs:
+  # 1. Parse the command and gather PR info
+  parse_and_prepare:
+    if: |
+      vars.MODE == 'EPS' &&
+      github.event.issue.pull_request &&
+      github.event.issue.state == 'open' &&
+      github.event.sender.type != 'Bot' &&
+      (startsWith(github.event.comment.body, '/fetch-eps') || startsWith(github.event.comment.body, '/sync-eps'))
+    runs-on: ubuntu-latest
+    outputs:
+      command: ${{ steps.parse.outputs.command }}
+      pr_number: ${{ github.event.issue.number }}
+      repo_full_name: ${{ github.repository }}
+      pr_branch: ${{ steps.get_pr_branch.outputs.result }}
+      comment_id: ${{ github.event.comment.id }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Parse Comment Body (Case-Insensitive, Exact Match)
+        id: parse
+        run: |
+          comment_body="${{ github.event.comment.body }}"
+          command=""
+          trimmed_msg=$(echo "$comment_body" | xargs) # Trim whitespace
+          lower_trimmed_msg="${trimmed_msg,,}"
+          echo "Original trimmed body: '$trimmed_msg'"
+          echo "Lowercase trimmed body: '$lower_trimmed_msg'"
+          if [[ "$lower_trimmed_msg" == "/fetch-eps" ]]; then
+            command="fetch-eps"
+            echo "Detected command: /fetch-eps (case-insensitive)"
+          elif [[ "$lower_trimmed_msg" == "/sync-eps" ]]; then
+            command="sync-eps"
+            echo "Detected command: /sync-eps (case-insensitive)"
+          else
+            echo "Comment did not exactly match '/fetch-eps' or '/sync-eps' after trimming and lowercasing."
+            echo "Final processed value: '$lower_trimmed_msg'"
+          fi
+          echo "command=$command" >> $GITHUB_OUTPUT
+
+      - name: Add Reaction (Acknowledging Command)
+        if: steps.parse.outputs.command != ''
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          comment-id: ${{ github.event.comment.id }}
+          reactions: eyes
+
+      - name: Get PR Branch Name using gh CLI
+        if: steps.parse.outputs.command != ''
+        id: get_pr_branch
+        env:
+            GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+            echo "Attempting to get branch name for PR #${PR_NUMBER} using gh CLI..."
+            branch_name=$(gh pr view "$PR_NUMBER" --json headRefName -q .headRefName)
+            if [[ -z "$branch_name" ]]; then
+              echo "::error::gh pr view succeeded but returned an empty branch name for PR #${PR_NUMBER}."
+              exit 1
+            fi
+            echo "PR Branch for PR #${PR_NUMBER} is: ${branch_name}"
+            echo "result=${branch_name}" >> $GITHUB_OUTPUT
+
+
+  # 2. Trigger reusable workflow for /fetch-eps (Check Mode)
+  trigger_drift_check:
+    needs: parse_and_prepare
+    if: needs.parse_and_prepare.outputs.command == 'fetch-eps' && needs.parse_and_prepare.outputs.pr_branch != ''
+    uses: my-org/my-reusable-repo/.github/workflows/csv_updater_resuable_pipeline.yaml@main
+    with:
+      used_workflow_ref: 'my-org/my-reusable-repo/.github/workflows/csv_updater_resuable_pipeline.yaml@main'
+      target_csv_file: ${{ vars.SOURCE_OF_TRUTH_TYPE == 'intent' && 'cluster-intent-source-of-truth.csv' || 'templates/source_of_truth.csv' }}
+      source_of_truth_type: ${{ vars.SOURCE_OF_TRUTH_TYPE }}
+      config_ini_path: '.github/config/csv_settings.ini'
+      google_cloud_project: ${{ vars.GOOGLE_CLOUD_PROJECT }}
+      wif_provider: ${{ vars.WIF_PROVIDER }}
+      service_account: ${{ vars.SERVICE_ACCOUNT }}
+      eps_host: ${{ vars.EPS_HOST }}
+      eps_client_id: ${{ vars.EPS_CLIENT_ID }}
+      python_version: '3.11'
+      chatops_mode: 'check'
+      pr_branch: ${{ needs.parse_and_prepare.outputs.pr_branch }}
+      pr_number: ${{ needs.parse_and_prepare.outputs.pr_number }}
+      repo_full_name: ${{ needs.parse_and_prepare.outputs.repo_full_name }}
+    secrets: inherit
+
+  # 3. Trigger reusable workflow for /sync-eps (Reconcile Mode)
+  trigger_eps_reconcile:
+    needs: parse_and_prepare
+    if: needs.parse_and_prepare.outputs.command == 'sync-eps' && needs.parse_and_prepare.outputs.pr_branch != ''
+    uses: my-org/my-reusable-repo/.github/workflows/csv_updater_resuable_pipeline.yaml@main
+    with:
+      used_workflow_ref: 'my-org/my-reusable-repo/.github/workflows/csv_updater_resuable_pipeline.yaml@main'
+      target_csv_file: ${{ vars.SOURCE_OF_TRUTH_TYPE == 'intent' && 'cluster-intent-source-of-truth.csv' || 'templates/source_of_truth.csv' }}
+      source_of_truth_type: ${{ vars.SOURCE_OF_TRUTH_TYPE }}
+      config_ini_path: '.github/config/csv_settings.ini'
+      google_cloud_project: ${{ vars.GOOGLE_CLOUD_PROJECT }}
+      wif_provider: ${{ vars.WIF_PROVIDER }}
+      service_account: ${{ vars.SERVICE_ACCOUNT }}
+      eps_host: ${{ vars.EPS_HOST }}
+      eps_client_id: ${{ vars.EPS_CLIENT_ID }}
+      python_version: '3.11'
+      chatops_mode: 'reconcile'
+      pr_branch: ${{ needs.parse_and_prepare.outputs.pr_branch }}
+      pr_number: ${{ needs.parse_and_prepare.outputs.pr_number }}
+      repo_full_name: ${{ needs.parse_and_prepare.outputs.repo_full_name }}
+    secrets: inherit
+
+  # 4. Add Final Reaction
+  add_final_reaction:
+      needs: [parse_and_prepare, trigger_drift_check, trigger_eps_reconcile]
+      # Run always, but only add reaction if the first job wasn't skipped and found a command/branch
+      if: always() && needs.parse_and_prepare.result != 'skipped' && needs.parse_and_prepare.outputs.command != '' && needs.parse_and_prepare.outputs.pr_branch != ''
+      runs-on: ubuntu-latest
+      steps:
+        - name: React Success
+          if: |
+            (needs.parse_and_prepare.outputs.command == 'fetch-eps' && needs.trigger_drift_check.result == 'success') ||
+            (needs.parse_and_prepare.outputs.command == 'sync-eps' && needs.trigger_eps_reconcile.result == 'success')
+          uses: peter-evans/create-or-update-comment@v4
+          with:
+            token: ${{ secrets.GITHUB_TOKEN }}
+            repository: ${{ needs.parse_and_prepare.outputs.repo_full_name }}
+            comment-id: ${{ needs.parse_and_prepare.outputs.comment_id }}
+            reactions: hooray
+        - name: React Failure
+          if: |
+            (needs.parse_and_prepare.outputs.command == 'fetch-eps' && needs.trigger_drift_check.result == 'failure') ||
+            (needs.parse_and_prepare.outputs.command == 'sync-eps' && needs.trigger_eps_reconcile.result == 'failure')
+          uses: peter-evans/create-or-update-comment@v4
+          with:
+            token: ${{ secrets.GITHUB_TOKEN }}
+            repository: ${{ needs.parse_and_prepare.outputs.repo_full_name }}
+            comment-id: ${{ needs.parse_and_prepare.outputs.comment_id }}
+            reactions: confused
+  
+  notify_skipped_mode:
+    name: Notify Skipped (Incorrect Mode)
+    # Run only if MODE is NOT EPS
+    if: ${{ vars.MODE  != 'EPS' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print skip message
+        run: |
+          echo "::warning::Workflow run skipped."
+          echo "The current workflow can only be run when the repository variable MODE is set to 'EPS'."
+          echo "Current MODE is: ${{ vars.MODE }}"
+

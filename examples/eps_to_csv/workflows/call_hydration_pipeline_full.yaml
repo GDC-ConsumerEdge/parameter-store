@@ -1,0 +1,79 @@
+
+#This workflow orchestrates the hydration process based on the repository's MODE.
+#If MODE is 'GIT', it triggers hydration directly, using the CSV files present in the repo.
+#If MODE is 'EPS', it first checks for drift between the PR branch's Source of Truth (SoT) CSV and the live data in EPS. 
+# If no drift is detected, it triggers hydration. 
+# If drift is detected, it posts a comment on the PR indicating the drift (handled in the resuable workflow)
+name: Check and Run Hydration
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+    - 'hydrated/**'
+    - 'templates/**'
+
+permissions: write-all
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # GIT MODE
+  trigger_hydration_git_mode:
+    name: Trigger Hydration (GIT Mode)
+    if: ${{ vars.MODE == 'GIT' }}
+    runs-on: ubuntu-latest
+    steps:
+    - name: Trigger hydration (GIT Mode)
+      run: |
+        echo "SUCCESS: Hydration would be triggered here directly because you're using GIT mode"
+        echo "Mode: ${{ vars.MODE }}"
+    
+
+  # EPS MODE
+  check_drift_eps_mode:
+    name: Check Drift (EPS Mode)
+    if: ${{ vars.MODE == 'EPS' }}
+    uses: my-org/reusable-workflows-repo/.github/workflows/csv_updater_resuable_pipeline.yaml@main
+    with:
+      used_workflow_ref: 'my-org/my-reusable-repo/.github/workflows/csv_updater_resuable_pipeline.yaml@main'
+      target_csv_file: ${{ vars.SOURCE_OF_TRUTH_TYPE == 'intent' && 'cluster-intent-source-of-truth.csv' || 'templates/source_of_truth.csv' }}
+      # Pass the source of truth type (e.g., 'intent' or 'template') to the reusable workflow.
+      source_of_truth_type: ${{ vars.SOURCE_OF_TRUTH_TYPE }}
+      # Path to the configuration file for the EPS-to-CSV script within the repository.
+      config_ini_path: '.github/config/sot_csv_config.ini'
+      google_cloud_project: ${{ vars.GOOGLE_CLOUD_PROJECT }}
+      wif_provider: ${{ vars.WIF_PROVIDER }}
+      service_account: ${{ vars.SERVICE_ACCOUNT }}
+      # Hostname/URL of the EPS instance
+      eps_host: ${{ vars.EPS_HOST }}
+      # OAuth Client ID required for authenticating with the EPS API via IAP.
+      eps_client_id: ${{ vars.EPS_CLIENT_ID }}
+      python_version: '3.11'
+      # Set the reusable workflow mode to 'check' to perform a drift detection without modifying the branch.
+      chatops_mode: 'check'
+      # Provide the head branch name of the current pull request.
+      pr_branch: ${{ github.head_ref }}
+      # Provide the number of the current pull request for commenting.
+      pr_number: ${{ github.event.pull_request.number }}
+      repo_full_name: ${{ github.repository }}
+    secrets: inherit
+
+  trigger_hydration_eps_mode_no_drift:
+    name: Trigger Hydration (EPS Mode - No Drift)
+    needs: check_drift_eps_mode
+    # Run only if MODE is EPS AND the check_drift job ran successfully AND reported no drift
+    if: |
+      vars.MODE  == 'EPS' &&
+      needs.check_drift_eps_mode.result == 'success' &&
+      needs.check_drift_eps_mode.outputs.drift_detected == 'false'
+    runs-on: ubuntu-latest
+    steps:
+    # Placeholder step simulating the hydration trigger when EPS mode is active and no drift is found.
+    - name: Trigger hydration placeholder
+      run: |
+        echo "SUCCESS: Hydration would be triggered here because /check-drift succeeded and no diff is detected."
+        echo "Drift result: ${{ needs.check_drift_eps_mode.result }}"
+        echo "Drift Detection output: ${{ needs.check_drift_eps_mode.outputs.drift_detected }}"
+
