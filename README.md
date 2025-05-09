@@ -1,45 +1,53 @@
 # Edge Parameter Store
 
-- [Edge Parameter Store](#edge-parameter-store)
+* [Edge Parameter Store](#edge-parameter-store)
     * [Description](#description)
     * [Getting Started](#getting-started)
-        + [Preparation](#preparation)
-            - [Install required tools](#install-required-tools)
-            - [Configure GCP OAuth Consent Screen](#configure-gcp-oauth-consent-screen)
-            - [Parameter Store Domain Name](#parameter-store-domain-name)
-            - [Prepare fully-qualified domain name of Parameter Store app](#prepare-fully-qualified-domain-name-of-parameter-store-app)
-            - [TLS Certificate](#tls-certificate)
-        + [Build Image](#build-image)
-        + [Deploy to GCP](#deploy-to-gcp)
-            - [System Diagram](#system-diagram)
-            - [Initialize Terraform](#initialize-terraform)
-            - [Terraform Configuration Variables](#terraform-configuration-variables)
-            - [Deploy Parameter Store App](#deploy-parameter-store-app)
-            - [Rerun Terraform After First Apply](#rerun-terraform-after-first-apply)
-            - [Teardown](#teardown)
-    * [Cloudbuild Pipeline](#cloudbuild-pipeline)        
+        * [Preparation](#preparation)
+            * [Install required tools](#install-required-tools)
+            * [Configure GCP OAuth Consent Screen](#configure-gcp-oauth-consent-screen)
+            * [Parameter Store Domain Name](#parameter-store-domain-name)
+            * [Prepare fully-qualified domain name of Parameter Store app](#prepare-fully-qualified-domain-name-of-parameter-store-app)
+            * [TLS Certificate](#tls-certificate)
+        * [Build Image](#build-image)
+        * [Deploy to GCP](#deploy-to-gcp)
+            * [System Diagram](#system-diagram)
+            * [Initialize Terraform](#initialize-terraform)
+            * [Terraform Configuration Variables](#terraform-configuration-variables)
+            * [Deploy Parameter Store App](#deploy-parameter-store-app)
+            * [Rerun Terraform After First Apply](#rerun-terraform-after-first-apply)
+            * [Teardown](#teardown)
+    * [Cloudbuild Pipeline](#cloudbuild-pipeline)
     * [Operate Parameter Store](#operate-parameter-store)
     * [Data Loading](#data-loading)
-        + [Terraform](#terraform)
-        + [How Does Data Loading Work?](#how-does-data-loading-work)
+        * [Terraform](#terraform)
+        * [How Does Data Loading Work?](#how-does-data-loading-work)
     * [Local Dev](#local-dev)
-        + [Postgres Setup](#postgres-setup)
-        + [Python Setup](#python-setup)
-        + [Django Setup](#django-setup)
+        * [Postgres Setup](#postgres-setup)
+        * [Python Setup](#python-setup)
+        * [Django Setup](#django-setup)
+    * [Additional Documentation](#additional-documentation)
     * [Appendix](#appendix)
-        + [Possible Errors](#possible-errors)
-        + [Dev Hacks](#dev-hacks)
+        * [Possible Errors](#possible-errors)
+        * [Dev Hacks](#dev-hacks)
     * [Disclaimer](#disclaimer)
 
 ## Description
 
-This repository gets you started in deploying Edge Parameter Store. GDCc at scale uses a source of truth for the
-declartive intent during automated cluster provisioning. Edge Paramater Store enables users to manage the source of
-truth through a management portal. Benefits of using edge parameter store
+This repository contains the Edge Parameter Store, a Django application that is built to hold parameter data for
+deployments of Google Distributed Cloud Connected clusters where the number of clusters may scale to tens of
+thousands. It is meant to be deployed in support of other solutions and tools (in this Github organization) and as part
+of a broader suite of solutions. This tool conveys the following immediate benefits:
 
-- SSO login via Google IAM
-- Auditing - what happened when
-- Schema - provides guardrails
+* Stores cluster parameters specifically matching a retail edge use case
+    * Supporting integration
+      with [cluster provisioner](https://github.com/GDC-ConsumerEdge/automated-cluster-provisioner)
+    * Supporting integration with [hydrator](https://github.com/GDC-ConsumerEdge/hydrator)
+* Integrates with Google [IAP](https://cloud.google.com/security/products/iap?hl=en) for authentication and
+  authorization
+* Supports granular role-based access controls
+* Provides a REST API
+* Supports data validation workflows
 
 ## Getting Started
 
@@ -172,8 +180,8 @@ terraform init
 
 #### Terraform Configuration Variables
 
-The full set of Terraform variables are defined in [variables.tf](examples/terraform/variables.tf), though we will call out
-notable items here.
+The full set of Terraform variables are defined in [variables.tf](examples/terraform/variables.tf), though we will call
+out notable items here.
 
 `eps_project_id` is where the app (and nearly all) of its resources will be created. It is assumed this project already
 exists.
@@ -212,23 +220,32 @@ uses the username portion of the email address as its username. Simply drop the 
 permissions. This does not grant in-app permissions but merely allows these identities web access through IAP and into
 Cloud Run. This is probably a group of users the membership of which is managed externally to Terraform.
 
-`worker_pool_name` is a string used as a name of the private worker pool that Cloud Build will use to execute the build. This is part of the `_PRIVATE_POOL` substitution in the [cb.tf](examples/terraform/cb.tf).
+`worker_pool_name` is a string used as a name of the private worker pool that Cloud Build will use to execute the build.
+This is part of the `_PRIVATE_POOL` substitution in the [cb.tf](examples/terraform/cb.tf).
 
-`db_password_key` is a string used as a name or identifier of the secret in Secret Manager that stores the database password. This is passed as a substitution `_DATABASE_PASSWORD_KEY` to the [cb.tf](examples/terraform/cb.tf).
+`db_password_key` is a string used as a name or identifier of the secret in Secret Manager that stores the database
+password. This is passed as a substitution `_DATABASE_PASSWORD_KEY` to the [cb.tf](examples/terraform/cb.tf).
 
-`instance_connection_name` is a string used as a connection name for the Cloud SQL instance. This is used by the Cloud SQL Proxy to connect to the database. Passed as `_INSTANCE_CONNECTION_NAME` in the [cb.tf](examples/terraform/cb.tf).
+`instance_connection_name` is a string used as a connection name for the Cloud SQL instance. This is used by the Cloud
+SQL Proxy to connect to the database. Passed as `_INSTANCE_CONNECTION_NAME` in the [cb.tf](examples/terraform/cb.tf).
 
-`artifact_registry_project_id` is a string value for Google Cloud Project ID where the Artifact Registry is located. Passed as `_ARTIFACT_REGISTRY_PROJECT_ID` in the [cb.tf](examples/terraform/cb.tf).
+`artifact_registry_project_id` is a string value for Google Cloud Project ID where the Artifact Registry is located.
+Passed as `_ARTIFACT_REGISTRY_PROJECT_ID` in the [cb.tf](examples/terraform/cb.tf).
 
-`artifact_registry_repo` is a string used as a name of the repository within Artifact Registry where images will be stored/pulled. Passed as `_ARTIFACT_REGISTRY_REPO` in the [cb.tf](examples/terraform/cb.tf).
+`artifact_registry_repo` is a string used as a name of the repository within Artifact Registry where images will be
+stored/pulled. Passed as `_ARTIFACT_REGISTRY_REPO` in the [cb.tf](examples/terraform/cb.tf).
 
-`app_image_name` is a string used as a name of the application image to be built or used. Passed as `_APP_IMAGE_NAME` in the [cb.tf](examples/terraform/cb.tf).
+`app_image_name` is a string used as a name of the application image to be built or used. Passed as `_APP_IMAGE_NAME` in
+the [cb.tf](examples/terraform/cb.tf).
 
-`git_repo_url` is string value for URL of the Git repository that Cloud Build will clone. Passed as `_GIT_REPO_URL` in the [cb.tf](examples/terraform/cb.tf).
+`git_repo_url` is string value for URL of the Git repository that Cloud Build will clone. Passed as `_GIT_REPO_URL` in
+the [cb.tf](examples/terraform/cb.tf).
 
-`git_user_email` is a string value for email address to be configured for Git operations within the build environment. Passed as `_GIT_USER_EMAIL` in the [cb.tf](examples/terraform/cb.tf).
+`git_user_email` is a string value for email address to be configured for Git operations within the build environment.
+Passed as `_GIT_USER_EMAIL` in the [cb.tf](examples/terraform/cb.tf).
 
-`git_user_name` is a string value for username to be configured for Git operations within the build environment. Passed as `_GIT_USER_NAME` in the [cb.tf](examples/terraform/cb.tf).
+`git_user_name` is a string value for username to be configured for Git operations within the build environment. Passed
+as `_GIT_USER_NAME` in the [cb.tf](examples/terraform/cb.tf).
 
 ```terraform
 environment_name      = "dev"
@@ -289,38 +306,51 @@ Manual created resource requires manual deletion, including
 
 ## Cloudbuild Pipeline
 
-This Cloud Build pipeline is designed to automate the process of building EPS application, managing its database schema changes (migrations), and ensuring that these schema changes are version-controlled alongside your application code.
+This Cloud Build pipeline is designed to automate the process of building EPS application, managing its database schema
+changes (migrations), and ensuring that these schema changes are version-controlled alongside your application code.
 
 Files used are  [cb.tf](examples/terraform/cb.tf) and [cloudbuild.yaml](./cloudbuild.yaml)
 
 [cb.tf](examples/terraform/cb.tf) automates the deployment of a Cloud Build CI/CD pipeline by:
 
-**Establishing Secure GitHub Integration**: It creates a connection to your GitHub repository using the Cloud Build GitHub App and a stored OAuth token for authenticated access.
+**Establishing Secure GitHub Integration**: It creates a connection to your GitHub repository using the Cloud Build
+GitHub App and a stored OAuth token for authenticated access.
 
-**Granting Necessary Permissions**: It assigns the Cloud Build service agent permissions to manage secrets (specifically for the GitHub token) ensuring it can operate correctly.
+**Granting Necessary Permissions**: It assigns the Cloud Build service agent permissions to manage secrets (specifically
+for the GitHub token) ensuring it can operate correctly.
 
-**Defining Repository and Trigger**: It links your specific GitHub repository to Cloud Build and sets up a trigger that automatically starts a build process on pushes to the `main` branch.
+**Defining Repository and Trigger**: It links your specific GitHub repository to Cloud Build and sets up a trigger that
+automatically starts a build process on pushes to the `main` branch.
 
-**Configuring Build Execution**: It specifies that builds will run using a designated private worker pool and a dedicated service account, with build steps and parameters defined in an external `cloudbuild.yaml` file (customized via substitutions).
+**Configuring Build Execution**: It specifies that builds will run using a designated private worker pool and a
+dedicated service account, with build steps and parameters defined in an external `cloudbuild.yaml` file (customized via
+substitutions).
 
 [cloudbuild.yaml](./cloudbuild.yaml) file defines a multi-step build process including:
 
-**Download Cloud SQL Proxy (download-proxy)**: Fetches the specified version of the Cloud SQL Proxy binary required for database connectivity.
+**Download Cloud SQL Proxy (download-proxy)**: Fetches the specified version of the Cloud SQL Proxy binary required for
+database connectivity.
 
 **Make Cloud SQL Proxy Executable (chmod-proxy)**: Sets execution permissions for the downloaded Cloud SQL Proxy.
 
-**Build Temporary Docker Image (build-temp-image)**: Creates an initial Docker image of the application, tagged as :temp, to be used for running subsequent tasks like migrations.
+**Build Temporary Docker Image (build-temp-image)**: Creates an initial Docker image of the application, tagged as :
+temp, to be used for running subsequent tasks like migrations.
 
-**Run Database Migrations (run-migrations)**: Using the temporary image, starts the Cloud SQL Proxy, then runs Django's makemigrations to generate new database migration files for parameter_store and api apps, and copies these new migration files to the shared /workspace.
+**Run Database Migrations (run-migrations)**: Using the temporary image, starts the Cloud SQL Proxy, then runs Django's
+makemigrations to generate new database migration files for parameter_store and api apps, and copies these new migration
+files to the shared /workspace.
 
-**Check Copied Migrations (check-copied-migrations)**: Verifies that the database migration files generated in the previous step have been successfully copied to the /workspace.
+**Check Copied Migrations (check-copied-migrations)**: Verifies that the database migration files generated in the
+previous step have been successfully copied to the /workspace.
 
-**Build Final Docker Image (build-final-image)**: Builds the definitive application Docker image, incorporating any new migration files, and tags it with the current Git commit SHA.
+**Build Final Docker Image (build-final-image)**: Builds the definitive application Docker image, incorporating any new
+migration files, and tags it with the current Git commit SHA.
 
-**Push Final Image (push-final-image-latest)**: Pushes the final, commit-SHA-tagged Docker image to the specified Google Artifact Registry repository.
+**Push Final Image (push-final-image-latest)**: Pushes the final, commit-SHA-tagged Docker image to the specified Google
+Artifact Registry repository.
 
-**Commit Migrations (commit-migrations)**: Clones the application's Git repository, copies the newly generated migration files from /workspace into it, and then commits and pushes these files to a new branch in the remote Git repository.
-
+**Commit Migrations (commit-migrations)**: Clones the application's Git repository, copies the newly generated migration
+files from /workspace into it, and then commits and pushes these files to a new branch in the remote Git repository.
 
 ## Operate Parameter Store
 
@@ -486,6 +516,12 @@ python manage.py createsuperuser
 export DJANGO_DEBUG=True
 python manage.py runserver
 ```
+
+## Additional Documentation
+
+Please see [docs](./docs) for more documentation:
+
+* [Users and Permissions](docs/users-and-permissions.md)
 
 ## Appendix
 
