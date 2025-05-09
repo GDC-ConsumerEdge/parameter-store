@@ -15,10 +15,14 @@ __pycache__
 build.sh
 compose.yaml
 doc_assets/
+docs/
 env.template
 removed-requirements.txt
 staticfiles/
 terraform/
-venv/
+.venv/
 **/migrations
 examples/
+/.release-please-manifest.json
+/release-please-config.json
+/cloudbuild.yaml
