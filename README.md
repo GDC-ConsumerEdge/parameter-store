@@ -77,7 +77,7 @@ This section outlines steps that is need to be done by the user in the for their
 #### Configure GCP OAuth Consent Screen
 
 1. Login [GCP Console](https://console.cloud.google.com) and select your target project
-2. Go to **Google Auth Platform** and configure OAuth consent screen.  
+2. Go to **Google Auth Platform** and configure OAuth consent screen.
    Configure the app as **External** and **In Production** app
    ![oauth_consent.gif](./doc_assets/oauth_consent.gif)
 
@@ -132,9 +132,9 @@ Artifact Registry is available and GCP account running the build script has suff
     ./build.sh [VERSION] [APP]
     ```
 
-* Both **VERSION** and **APP** are optional.  
+* Both **VERSION** and **APP** are optional.
   **VERSION** default to *0.1*, while **APP** default to *parameter-store*.
-* The generated image is tagged as `${REPO_HOST}/${PROJECT_ID}/${REPO_FOLDER}/${APP}:v${VERSION}`  
+* The generated image is tagged as `${REPO_HOST}/${PROJECT_ID}/${REPO_FOLDER}/${APP}:v${VERSION}`
   e.g. `gcr.io/test-proj-1234/parameter-store/parameter-store:v0.1`
 * The `latest` tag is always attached to the most recently built image
 
@@ -301,7 +301,7 @@ When done, rerun `terraform apply`.
 terrform destroy
 ```
 
-This command will tear down all the GCP resources provisioned by Terraform.  
+This command will tear down all the GCP resources provisioned by Terraform.
 Manual created resource requires manual deletion, including
 
 ## Cloudbuild Pipeline
@@ -363,13 +363,15 @@ files from /workspace into it, and then commits and pushes these files to a new 
 ## Data Loading
 
 EPS can support data loading while running in Cloud SQL. Terraform sets up EPS infrastructure to deploy Cloud SQL with
-fully private networking, making it impossible to access as an operator without resorting to creative hacks. To make this
+fully private networking, making it impossible to access as an operator without resorting to creative hacks. To make
+this
 less challenging, there is an optional data loading mechanism using Cloud Build and private workers, which is
 temporarily provisioned in the EPS network with access to Cloud SQL via a private networking path.
 
 ### Terraform
 
-The Terraform folder contains optional [resources](examples/terraform/opt-gcb-data-loader.tf) to stand up infrastructure for a
+The Terraform folder contains optional [resources](examples/terraform/opt-gcb-data-loader.tf) to stand up infrastructure
+for a
 Cloud Build data loader pipeline. If you do not want these resources, you should comment out or delete the resources in
 this folder. In addtion to this file, there are references to these resources elsewhere — search the folder for TODO
 lines related to the data loader and remove them.
@@ -522,6 +524,7 @@ python manage.py runserver
 Please see [docs](./docs) for more documentation:
 
 * [Users and Permissions](docs/users-and-permissions.md)
+* [Programmatic Access with Google Service Accounts via IAP](docs/iap-programmatic-access.md)
 
 ## Appendix
 
