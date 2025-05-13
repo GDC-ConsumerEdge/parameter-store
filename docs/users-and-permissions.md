@@ -3,7 +3,7 @@
 This document assumes a default architecture for EPS deployed to GCP using the products and services outlined in the
 below architecture diagram.
 
-![eps_arch_complex.png](../doc_assets/eps_arch_complex.png)
+![eps_arch_complex.png](./doc_assets/eps_arch_complex.png)
 
 ## IAM Access
 
@@ -52,7 +52,7 @@ user so like users, GSAs...
 * have NO permissions within EPS unless explicitly granted
 * may have permissions granted to them like any other user object and may belong to groups as well
 * are automatically populated in EPS as user objects within the admin portal upon first login
-  ![shot7.png](../doc_assets/users_perms/shot7.png)
+  ![shot7.png](./doc_assets/users_perms/shot7.png)
 
 **Note**: The method by which you distinguish a GSA from a human user within the user admin panel is the email address.
 A GSA will have a GSA email using a @your-project.iam.gserviceaccount.com format.
@@ -101,12 +101,12 @@ In this example, we create a "viewers" group that can see objects and query the 
 
 1. Navigate to `/admin` within EPS
 2. Go to groups
-   ![shot1.png](../doc_assets/users_perms/shot1.png)
+   ![shot1.png](./doc_assets/users_perms/shot1.png)
 3. Give the group a descriptive name, select the permissions you need, and add them to the group.
     1. Note that the permissions being assigned are all "view" permissions for the "Parameter Store" app and API.
-       ![shot2.png](../doc_assets/users_perms/shot2.png)
+       ![shot2.png](./doc_assets/users_perms/shot2.png)
 4. Once added, you should see the roles on the right panel indicating they are now assigned.
-   ![shot3.png](../doc_assets/users_perms/shot3.png)
+   ![shot3.png](./doc_assets/users_perms/shot3.png)
 5. Save the group.
 
 ### Add users to the group
@@ -116,13 +116,13 @@ permissions within EPS. In this example, we assign the "viewers" group created i
 
 1. Navigate to `/admin` within EPS
 2. Go to Users
-   ![shot4.png](../doc_assets/users_perms/shot4.png)
+   ![shot4.png](./doc_assets/users_perms/shot4.png)
 3. Pick a user from this list to assign to a group and click their name
     1. Note: The user must exist before they may be assigned a group!
 4. Scroll down to the _Groups_ section. Select the viewer group and add it.
-   ![shot5.png](../doc_assets/users_perms/shot5.png)
+   ![shot5.png](./doc_assets/users_perms/shot5.png)
 5. Verify groups are added in the right multi-select box.
-   ![shot6.png](../doc_assets/users_perms/shot6.png)
+   ![shot6.png](./doc_assets/users_perms/shot6.png)
 6. _Save_.
 
 ## EPS Superusers
@@ -166,5 +166,26 @@ in the [run.tf](../examples/terraform/run.tf) file. EPS uses a comma-separated l
 1. Navigate to `/admin` within EPS
 2. Pick an existing user or create one
 3. Under permissions, tick to enable the toggle for `Superuser status`
-   ![shot8.png](../doc_assets/users_perms/shot8.png)
+   ![shot8.png](./doc_assets/users_perms/shot8.png)
 4. Click save
+
+## Granular object permissions
+
+EPS supports granular object-level permissions for every object in its database. It is likely, however, that operators
+wish to constrain access to certain objects (like specific clusters or cluster groups). This section presumes you have
+already created persona groups which map to your specific use case.
+
+**Note:** Copy (into your pasteboard/clipboard) the name of the group you wish to use to assign permissions _first_
+before starting the below steps.
+
+1. Select an object. In this example, we wish to grant explicit permission to _one_ cluster.
+   ![shot9.png](doc_assets/users_perms/shot9.png)
+2. Click _Object Permission_ in the upper right hand corner.
+   ![shot10.png](doc_assets/users_perms/shot10.png)
+3. Type/paste the name of the group for whom you wish to manage object permissions. Note that this is not a select box
+   or search; you have to know what group you are assigning to.
+   ![shot11.png](doc_assets/users_perms/shot11.png)
+4. Add the permissions which are appropriate for this object from those that are available. The left box is the
+   permissions that are available, the right contains the assigned permissions. Select the permission and click on the
+   arrow to move from available to assigned (or vice versa, as appropriate. Click _Save_.
+   ![shot12.png](doc_assets/users_perms/shot12.png)

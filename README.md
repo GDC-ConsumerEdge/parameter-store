@@ -1,5 +1,7 @@
 # Edge Parameter Store
 
+<!-- TOC -->
+
 * [Edge Parameter Store](#edge-parameter-store)
     * [Description](#description)
     * [Getting Started](#getting-started)
@@ -32,6 +34,8 @@
         * [Dev Hacks](#dev-hacks)
     * [Disclaimer](#disclaimer)
 
+<!-- TOC -->
+
 ## Description
 
 This repository contains the Edge Parameter Store, a Django application that is built to hold parameter data for
@@ -59,15 +63,11 @@ Go through all of the steps below to get started
 
 ### Preparation
 
-This section outlines steps that is need to be done by the user in the for their respective actions:
-
-- in the GCP portal. i.e to configure OAuth, create CloudSql..etc
-- in preferred Domain/SSL provider. i.e Entrust,..etc
-- in a terminal session, i.e to generate OpenSSL
+This section outlines steps that the user must perform
 
 #### Install required tools
 
-* [Python 3.13](https://www.python.org/downloads/)
+* [Python 3.12](https://www.python.org/downloads/)
 * [gcloud](https://cloud.google.com/sdk/docs/install)
 * [terraform](https://developer.hashicorp.com/terraform/install)
 * [docker](https://docs.docker.com/engine/install/)
@@ -77,17 +77,18 @@ This section outlines steps that is need to be done by the user in the for their
 #### Configure GCP OAuth Consent Screen
 
 1. Login [GCP Console](https://console.cloud.google.com) and select your target project
-2. Go to **Google Auth Platform** and configure OAuth consent screen.
-   Configure the app as **External** and **In Production** app
-   ![oauth_consent.gif](./doc_assets/oauth_consent.gif)
+2. Navigate to 'APIs & Services' -> 'OAuth consent screen' in the GCP Console.
+   Configure the OAuth consent screen as External and set the publishing status to In Production.
+   ![oauth_consent.gif](./docs/doc_assets/oauth_consent.gif)
 
 #### Parameter Store Domain Name
 
 #### Prepare fully-qualified domain name of Parameter Store app
 
-Choose a fully qualified domain name for your application. The Terraform takes provides an opinionated configuration for
-the utilization of your FQDN, creating a manged zone in the deployment project. This assumes you will create a delegated
-zone in your application project to which an A-record for the EPS apps load balancer will be created. In doing so, it
+Choose a fully qualified domain name for your application. The Terraform provides an opinionated configuration for
+the utilization of your FQDN, creating a managed zone in the deployment project. This assumes you will create a
+delegated
+zone in your application project to which an A-record for the EPS app's load balancer will be created. In doing so, it
 wires the application up end-to-end. If this is not your desired configuration, you will need to modify the provided
 Terraform [here](examples/terraform/dns.tf)
 
@@ -114,8 +115,9 @@ example Terraform does not support this configuration and would require modifica
 
 ### Build Image
 
-We will build a docker image and push to an Artifact Registry in the target deployment GCP project. Please make sure the
-Artifact Registry is available and GCP account running the build script has sufficient permission to push image to it.
+We will build a Docker image and push to an Artifact Registry in the target deployment GCP project. Please make sure the
+Artifact Registry is available and the GCP account running the build script has sufficient permissions to push images to
+it.
 
 1. Clone this project and go to the project workspace
 
@@ -124,7 +126,7 @@ Artifact Registry is available and GCP account running the build script has suff
     cd parameter-store
     ```
 
-2. Update `terraform.tfvars`
+2. Update `terraform.tfvars` with your correct values.
 
 3. build the docker image and push to Artifact Registry
 
@@ -138,20 +140,17 @@ Artifact Registry is available and GCP account running the build script has suff
   e.g. `gcr.io/test-proj-1234/parameter-store/parameter-store:v0.1`
 * The `latest` tag is always attached to the most recently built image
 
-### Deploy to GCP
+### Deploy GCP Infrastructure
 
-Use Terraform to deploy parameter store infrastructure. Optionally deploy Parameter Store app with Terraform, though
-this is not recommended in production.
-
-<!---TODO: Update with instructions regarding Cloud Build.)--->
+Use Terraform to deploy parameter store infrastructure.
 
 #### System Diagram
 
-![eps_arch.png](./doc_assets/eps_arch.png)
+![eps_arch.png](./docs/doc_assets/eps_arch.png)
 
 #### Initialize Terraform
 
-For the first time to deploy parameter store, we need to initialize terraform state.
+To deploy the parameter store for the first time, initialize the Terraform state.
 
 1. go to `examples/terraform` folder
 
@@ -165,15 +164,15 @@ cd examples/terraform
 terraform init
 ```
 
-* For better collaboration, most of the time we need to save the terraform state file to a shared place, e.g. a GCP
+* For better collaboration, we typically need to save the Terraform state file to a shared location, e.g. a GCP
   bucket. To achieve this, we need to configure a GCP bucket as terraform backend.
-    1. Create or using an existing GCS bucket. Make sure your current account has write permission to it.
-    2. Create/Modify a terraform backend config file in [terraform/main.tf](examples/terraform/main.tf).
+    1. Create or use an existing GCS bucket. Make sure your current account has write permission to it.
+    2. Create a backend configuration file (e.g., env/testing.gcs.tfbackend) with content like this:
         ```terraform
-        bucket = "my-bucket"
-        prefix = "testing"
+        bucket = "my-gcs-bucket-for-tfstate"
+        prefix = "eps/testing"
         ```
-    3. initialize terraform with backend config
+    3. Initialize Terraform with this backend configuration: terraform init -backend-config=env/testing.gcs.tfbackend
     ```bash
     terraform init -backend-config=env/testing.gcs.tfbackend
     ```
@@ -186,7 +185,7 @@ out notable items here.
 `eps_project_id` is where the app (and nearly all) of its resources will be created. It is assumed this project already
 exists.
 
-`secrets_project_id` is the name of a Google Cloud Project where app-related secrets are to be configured. This may be
+`secrets_project_id` is the ID of a Google Cloud Project where app-related secrets are to be configured. This may be
 the same as the `eps_project_id` or yet another separate project.
 
 `eps_image` is the full name and tag of the image to be deployed by Terraform to Cloud Run on its first invocation.
@@ -196,7 +195,8 @@ account.
 
 `iap_audience` is the "audience" against which IAP JWT tokens are compared. This comes from the backend service
 associated with your load balancer stack. This value is not known until Terraform is run the first time, so on its first
-invocation, an empty string (`""`) is appropriate. This value takes the form of:
+invocation, an empty string (`""`) is appropriate. **After deploying infrastructure, you must fill in this value and
+deploy it a second time. This value takes the form of:
 
 ```bash
 "/projects/${EPS project ID}/us-central1/backendServices/${EPS load balancer backend service number}"
@@ -248,25 +248,25 @@ Passed as `_GIT_USER_EMAIL` in the [cb.tf](examples/terraform/cb.tf).
 as `_GIT_USER_NAME` in the [cb.tf](examples/terraform/cb.tf).
 
 ```terraform
-environment_name      = "dev"
-eps_project_id        = "example-eps"
-secrets_project_id    = "example-eps"
-eps_image             = "us-docker.pkg.dev/example-eps/hsp/parameter_store:v15"
-terraform_principal   = "serviceAccount:terraform@example-eps.iam.gserviceaccount.com"
-app_fqdn              = "example.eps.corp.net"
-csrf_trusted_origins  = ["localhost"]
-iap_audience          = "/projects/22368248810/us-central1/backendServices/506473743633145264"
-superusers            = ["example"]
+environment_name             = "dev"
+eps_project_id               = "example-eps"
+secrets_project_id           = "example-eps"
+eps_image                    = "us-docker.pkg.dev/example-eps/hsp/parameter_store:v15"
+terraform_principal          = "serviceAccount:terraform@example-eps.iam.gserviceaccount.com"
+app_fqdn                     = "example.eps.corp.net"
+csrf_trusted_origins = ["localhost"]
+iap_audience                 = "/projects/22368248810/us-central1/backendServices/506473743633145264"
+superusers = ["example"]
 eps_allowed_accessors = ["group:eps@example.corp.net"]
-worker_pool_name                = "eps-private-pool"
-db_password_key                 = "eps-db-pass" # Or fetch from a secure source if needed at plan time
-instance_connection_name        = "example-eps:us-central1:eps-015b"
-artifact_registry_project_id    = ""example-eps
-artifact_registry_repo          = "eps"
-app_image_name                  = "parameter_store"
-git_repo_url                    = "https://github.com/example-eps/parameter-store.git"
-git_user_email                  = ""example-eps@xyz.com"
-git_user_name                   = "example-eps-gituser"
+worker_pool_name             = "eps-private-pool"
+db_password_key = "eps-db-pass" # Or fetch from a secure source if needed at plan time
+instance_connection_name     = "example-eps:us-central1:eps-015b"
+artifact_registry_project_id = "example-eps"
+artifact_registry_repo       = "eps"
+app_image_name               = "parameter_store"
+git_repo_url                 = "https://github.com/example-eps/parameter-store.git"
+git_user_email               = "example-eps@xyz.com"
+git_user_name                = "example-eps-gituser"
 ```
 
 #### Deploy Parameter Store App
@@ -287,7 +287,9 @@ terraform apply
 
 The IAP audience is not known until after the first run due to unfortunate cycles in the Terraform dependency graph.
 
-Take the output value of `jwt_audence` and set as the variable `iap_audience`. It should look something like:
+Take the output value of `jwt_audience` and set as the variable `iap_audience`. This value is available as a Terraform
+output after the first successful apply. You can retrieve it using `terraform output jwt_audience`. It should look
+something like:
 
 ```
 /projects/22368248810/us-central1/backendServices/6252277272778218001
@@ -298,15 +300,16 @@ When done, rerun `terraform apply`.
 #### Teardown
 
 ```bash
-terrform destroy
+terraform destroy
 ```
 
-This command will tear down all the GCP resources provisioned by Terraform.
-Manual created resource requires manual deletion, including
+This command will tear down all the GCP resources provisioned by Terraform. Note that resources not managed by
+Terraform (e.g., GCS buckets for state if manually created and not imported) may require separate manual deletion.
 
 ## Cloudbuild Pipeline
 
-This Cloud Build pipeline is designed to automate the process of building EPS application, managing its database schema
+This Cloud Build pipeline is designed to automate the process of building the EPS application, managing its database
+schema
 changes (migrations), and ensuring that these schema changes are version-controlled alongside your application code.
 
 Files used are  [cb.tf](examples/terraform/cb.tf) and [cloudbuild.yaml](./cloudbuild.yaml)
@@ -333,15 +336,15 @@ database connectivity.
 
 **Make Cloud SQL Proxy Executable (chmod-proxy)**: Sets execution permissions for the downloaded Cloud SQL Proxy.
 
-**Build Temporary Docker Image (build-temp-image)**: Creates an initial Docker image of the application, tagged as :
-temp, to be used for running subsequent tasks like migrations.
+**Build Temporary Docker Image (build-temp-image)**: Creates an initial Docker image of the application tagged as
+`:temp`, to be used for running subsequent tasks like migrations.
 
 **Run Database Migrations (run-migrations)**: Using the temporary image, starts the Cloud SQL Proxy, then runs Django's
-makemigrations to generate new database migration files for parameter_store and api apps, and copies these new migration
-files to the shared /workspace.
+`makemigrations` to generate new database migration files for `parameter_store` and `api` apps, and copies these new
+migration files to the shared `/workspace`.
 
 **Check Copied Migrations (check-copied-migrations)**: Verifies that the database migration files generated in the
-previous step have been successfully copied to the /workspace.
+previous step have been successfully copied to the `/workspace`.
 
 **Build Final Docker Image (build-final-image)**: Builds the definitive application Docker image, incorporating any new
 migration files, and tags it with the current Git commit SHA.
@@ -350,31 +353,31 @@ migration files, and tags it with the current Git commit SHA.
 Artifact Registry repository.
 
 **Commit Migrations (commit-migrations)**: Clones the application's Git repository, copies the newly generated migration
-files from /workspace into it, and then commits and pushes these files to a new branch in the remote Git repository.
+files from `/workspace` into it, and then commits and pushes these files to a new branch in the remote Git repository.
 
 ## Operate Parameter Store
 
-* After initial deployment, there is no user configuration for EPS if Terraform `superusers` variable was set
-* All the following users will be assigned with minimum permissions, i.e. they can just log in system but not do
-  anything else
-* The superuser will be responsible to assign permission to users. But users must log in **at least once** so that the
-  superuser can see them in the system.
+* After initial deployment there is no user configuration for EPS if Terraform `superusers` variable was set
+* All other users will initially have minimum permissions, allowing them to log into the system but not perform other
+  actions.
+* The superuser will assign permissions to users.
+    * Users may log in **at least once** so that the superuser can see them in the system.
+    * Alternatively, the superuser may prepopulate users based on user identity information. Please refer
+      to [users-and-permissions.md](docs/users-and-permissions.md) for more information.
 
 ## Data Loading
 
 EPS can support data loading while running in Cloud SQL. Terraform sets up EPS infrastructure to deploy Cloud SQL with
 fully private networking, making it impossible to access as an operator without resorting to creative hacks. To make
-this
-less challenging, there is an optional data loading mechanism using Cloud Build and private workers, which is
+this less challenging, there is an optional data loading mechanism using Cloud Build and private workers, which is
 temporarily provisioned in the EPS network with access to Cloud SQL via a private networking path.
 
 ### Terraform
 
 The Terraform folder contains optional [resources](examples/terraform/opt-gcb-data-loader.tf) to stand up infrastructure
-for a
-Cloud Build data loader pipeline. If you do not want these resources, you should comment out or delete the resources in
-this folder. In addtion to this file, there are references to these resources elsewhere — search the folder for TODO
-lines related to the data loader and remove them.
+for a Cloud Build data loader pipeline. If you do not want these [resources](examples/terraform/opt-gcb-data-loader.tf),
+you should comment out or delete the resources in this folder. In addtion to this file, there are references to these
+resources elsewhere — search the folder for TODO lines related to the data loader and remove them.
 
 ### How Does Data Loading Work?
 
@@ -387,8 +390,9 @@ The `load_db.py` file is an example one-time data loader. It provides a command-
 files (CSVs) into the application, and to add some basic validators. This example file demonstrates how to load the
 database with clusters and validators and should be modified to the specific use case.
 
-The cloud build file is expected to be submitted by a user with Cloud Build submitter IAM permissions to the Cloud Build
-API. To get started, copy the load_db.py file into an empty directory and colocate SoT files adjacent to it.
+The build file is expected to be submitted by a user withCloud Build Submitter IAM role (or equivalent permissions)
+to the Cloud Build API. To get started, copy the `load_db.py` file into an empty directory and colocate SoT files
+adjacent to it.
 
 ```shell
 mkdir db_loader
@@ -407,16 +411,17 @@ gcloud beta builds submit . --config=cloudbuild-data-loader.yaml --region=us-cen
 ```
 
 Cloud Build will then kick off and run the data loader script, but not before establishing a private connection from its
-private pool to the private IP of the database. The SoT files will be read, prepared, and loaded into the database. The
-data loader script can be modified bespoke to your use case and even extend so that it may be run more than once. Note
-it also has a `--wipe` flag so that you can erase user-loaded data and start from a fresh dataset if needed.
+private pool to the private IP of the database. The "Source of Truth (SoT) files" will be read, prepared, and loaded
+into the database. The data loader script can be modified bespoke to your use case and even extended so that it may be
+run more than once. Note it also has a `--wipe` flag so that you can erase user-loaded data and start from a fresh
+dataset if needed.
 
 ## Local Dev
 
 ### Postgres Setup
 
-1. Install Postgres 16
-2. Log in to PostgresSQL as a Superuser: Use the psql command-line utility to log in as the postgres user.
+1. Install PostgreSQL 16
+2. Log in to PostgreSQL as a Superuser: Use the psql command-line utility to log in as the postgres user.
 
 ```bash
 psql -U postgres
@@ -434,14 +439,14 @@ sudo -u postgres psql
 CREATE DATABASE eps;
 ```
 
-4. Create a New User: Create a new user named eps with a specified password. Replace your_password with a strong
+4. Create a New User: Create a new user named eps with a specified password. Replace `your_password` with a strong
    password of your choice.
 
 ```sql
 CREATE USER eps WITH PASSWORD 'your_password';
 ```
 
-5. Change Ownership of the Database: Alter the ownership of the eps database to the new user eps.
+5. Change Ownership of the Database: Alter the ownership of the `eps` database to the new user `eps`.
 
 ```sql
 ALTER DATABASE eps OWNER TO eps;
@@ -538,7 +543,7 @@ python3 manage.py makemigrations parameter_store
 python3 manage.py migrate
 ```
 
-If succesful, it looks something like:
+If successful, it looks something like:
 
 ```shell
 $ python3 manage.py makemigrations parameter_store
@@ -565,7 +570,8 @@ Running migrations:
 
 ### Dev Hacks
 
-I have Postgres running on my cloudtop while I dev locally, so I port-forward to psql on the cloudtop:
+I have Postgres running on a remote Linux device (called `cloudtop`) while I develop locally, so I port-forward to psql
+on that device:
 
 ```shell
 ssh -TL 5432:localhost:5432 cloudtop
