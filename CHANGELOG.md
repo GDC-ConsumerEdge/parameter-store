@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.0](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v1.1.0...v1.2.0) (2025-05-15)
+
+
+### Features
+
+* add eps_to_csv_converter utility ([#37](https://github.com/GDC-ConsumerEdge/parameter-store/issues/37)) ([ba6018e](https://github.com/GDC-ConsumerEdge/parameter-store/commit/ba6018ed0206eefceabd7c66b3d602ab722f4358))
+* add GH Actions integration workflow examples for HRM and cluster provisioner ([#56](https://github.com/GDC-ConsumerEdge/parameter-store/issues/56)) ([c897127](https://github.com/GDC-ConsumerEdge/parameter-store/commit/c89712740d2693ea7a582d5bdf7b2e34032d814e))
+
 ## [1.1.0](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v1.0.0...v1.1.0) (2025-04-18)
 
 
