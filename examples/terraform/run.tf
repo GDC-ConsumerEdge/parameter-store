@@ -43,8 +43,11 @@ resource "google_cloud_run_v2_service" "eps" {
     service_account = google_service_account.eps.account_id
 
     vpc_access {
-      connector = google_vpc_access_connector.eps_vpc_access.id
-      egress    = "PRIVATE_RANGES_ONLY" # Route only internal traffic through the connector
+      network_interfaces {
+        network    = module.eps-network.network_id
+        subnetwork = module.eps-network.subnets["${var.region}/${var.app_name_short}-${var.region}"].id
+      }
+      egress = "PRIVATE_RANGES_ONLY" # Route only internal traffic through the connector
     }
 
     containers {
@@ -167,7 +170,6 @@ resource "google_cloud_run_v2_service" "eps" {
   }
 
   depends_on = [
-    google_vpc_access_connector.eps_vpc_access,
     google_service_account_iam_policy.terraform,
     google_secret_manager_secret_iam_policy.eps-db-pass
   ]

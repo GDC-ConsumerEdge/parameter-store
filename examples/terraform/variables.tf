@@ -180,9 +180,9 @@ variable "superusers" {
 }
 
 variable "worker_pool_name" {
-   description = "Name of the private worker pool."
-   type        = string
-   default     = "eps-private-pool" # Or make it required by removing default
+  description = "Name of the private worker pool."
+  type        = string
+  default     = "eps-private-pool" # Or make it required by removing default
 }
 
 variable "db_password_key" {
@@ -229,9 +229,9 @@ variable "app_image_name" {
 # Note: _DB_HOST uses another substitution, so we pass the template string
 # It could be made more dynamic if needed, but this keeps the Cloud Build logic
 variable "db_host_template" {
-   description = "Template for DB host using Cloud Build substitution for instance connection name."
-   type        = string
-   default     = "/cloudsql/$${_INSTANCE_CONNECTION_NAME}" # Note the $$ to escape Terraform interpolation
+  description = "Template for DB host using Cloud Build substitution for instance connection name."
+  type        = string
+  default     = "/cloudsql/$${_INSTANCE_CONNECTION_NAME}" # Note the $$ to escape Terraform interpolation
 }
 
 
@@ -257,9 +257,9 @@ variable "git_user_name" {
 }
 
 variable "git_host" {
-   description = "Hostname of the Git provider (e.g., github.com)."
-   type        = string
-   default     = "github.com"
+  description = "Hostname of the Git provider (e.g., github.com)."
+  type        = string
+  default     = "github.com"
 }
 
 
@@ -270,13 +270,13 @@ variable "source_branch_name" {
 }
 
 variable "trigger_service_account_email" {
-   description = "Email of the service account for the trigger."
-   type        = string
+  description = "Email of the service account for the trigger."
+  type        = string
 }
 
 variable "github_app_id" {
   description = "Cloud build app id for your github organisation"
   type        = number # Using number type as it's an ID. String would also work.
   nullable    = false  # Make it mandatory to provide a value
-  default     = {your github cloudbuild app id}
+  default     = null  # {your github cloudbuild app id}"
 }
