@@ -15,18 +15,6 @@
 #
 ###############################################################################
 
-# Serverless VPC access
-resource "google_vpc_access_connector" "eps_vpc_access" {
-  name           = "${var.app_name_short}-vpc-access"
-  region         = var.region
-  ip_cidr_range  = var.eps_vpc_access_cidr
-  network        = module.eps-network.network_id
-  min_throughput = var.eps_vpc_access_min_throughput
-  max_throughput = var.eps_vpc_access_max_throughput
-  # min_instances = 2
-  # max_instances = 10
-}
-
 #
 # Private services access
 #
