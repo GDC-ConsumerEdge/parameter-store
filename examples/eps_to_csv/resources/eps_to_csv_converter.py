@@ -409,6 +409,15 @@ def process_data(data: Dict, mode: str, rename_rules: Dict[str, str]) -> pd.Data
             logger.info(
                 f"No specific column rename rules were applicable for mode '{mode}'."
             )
+            
+        # Convert 'cluster_tags' lists to comma-separated strings if the column exists
+        if 'cluster_tags' in flattened_df.columns:
+            logger.info("Processing 'cluster_tags' column: converting lists to comma-separated strings.")
+            flattened_df['cluster_tags'] = flattened_df['cluster_tags'].apply(
+                lambda x: ','.join(map(str, x)) if isinstance(x, list) else x
+            )
+        else:
+            logger.debug("'cluster_tags' column not found after processing, skipping list to string conversion for it.")
 
         logger.info(f"Data processing completed successfully for mode '{mode}'.")
         return flattened_df

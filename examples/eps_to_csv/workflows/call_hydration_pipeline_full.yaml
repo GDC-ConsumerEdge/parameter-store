@@ -3,7 +3,7 @@
 #If MODE is 'GIT', it triggers hydration directly, using the CSV files present in the repo.
 #If MODE is 'EPS', it first checks for drift between the PR branch's Source of Truth (SoT) CSV and the live data in EPS. 
 # If no drift is detected, it triggers hydration. 
-# If drift is detected, it posts a comment on the PR indicating the drift (handled in the resuable workflow)
+# If drift is detected, it posts a comment on the PR indicating the drift (handled in the reusable workflow)
 name: Check and Run Hydration
 on:
   pull_request:
@@ -35,9 +35,9 @@ jobs:
   check_drift_eps_mode:
     name: Check Drift (EPS Mode)
     if: ${{ vars.MODE == 'EPS' }}
-    uses: my-org/reusable-workflows-repo/.github/workflows/csv_updater_resuable_pipeline.yaml@main
+    uses: my-org/reusable-workflows-repo/.github/workflows/csv_updater_reusable_pipeline.yaml@main
     with:
-      used_workflow_ref: 'my-org/my-reusable-repo/.github/workflows/csv_updater_resuable_pipeline.yaml@main'
+      used_workflow_ref: 'my-org/my-reusable-repo/.github/workflows/csv_updater_reusable_pipeline.yaml@main'
       target_csv_file: ${{ vars.SOURCE_OF_TRUTH_TYPE == 'intent' && 'cluster-intent-source-of-truth.csv' || 'templates/source_of_truth.csv' }}
       # Pass the source of truth type (e.g., 'intent' or 'template') to the reusable workflow.
       source_of_truth_type: ${{ vars.SOURCE_OF_TRUTH_TYPE }}

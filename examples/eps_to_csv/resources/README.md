@@ -1,6 +1,6 @@
 # EPS to CSV Converter
 
-This set of script and csv configuration defined in [config directory](../config) is designed to fetch cluster data from an EPS API and generate CSV files suitable for use as Source of Truth (SoT) data, specifically for cluster intent and cluster template data.
+This set of script (`eps_to_csv_converter.py`) and csv configuration defined in [config directory](../config) is designed to fetch cluster data from an EPS API and generate CSV files suitable for use as Source of Truth (SoT) data, specifically for cluster intent and cluster template data.
 
 ## Purpose
 

@@ -1,0 +1,61 @@
+name: Update Template SoT For Cluster Registry (Merge)
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch_suffix_override:
+        description: 'Optional suffix for the feature branch'
+        required: false
+        type: string
+        default: "auto"
+      default_platform_revision:
+        description: 'Default platform_repository_revision for new clusters during merge (optional).'
+        required: false
+        type: string
+        default: ""
+      default_workload_revision:
+        description: 'Default workload_repository_revision for new clusters during merge (optional).'
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  call_reusable_updater_for_merge:
+    # This job will only run if the repository variable MODE is set to 'EPS'.
+    if: ${{ vars.MODE == 'EPS' }}
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+    uses: my-org/reusable-workflows-repo/.github/workflows/csv_updater_reusable_pipeline.yaml@main # Path to your reusable workflow
+    with:
+      used_workflow_ref: 'my-org/reusable-workflows-repo/.github/workflows/csv_updater_reusable_pipeline.yaml@main'
+      config_ini_path: '.github/config/sot_csv_config.ini' # Path to config in this (caller) repo
+      branch_name_suffix: ${{ github.event.inputs.branch_suffix_override || 'auto' }}
+      base_branch: 'main'
+      pr_labels: 'automated pr,template-sot-update,needs review'
+      pr_title_prefix: "feat: Update Template SoT via Merge"
+
+      # --- Inputs specific to enabling the merge mechanism ---
+      target_csv_file: 'templates/source_of_truth.csv' # Fixed target for this merge workflow
+      source_of_truth_type: 'template' # Must be 'template' for the merge logic in reusable workflow. This value is hard-coded so that the workflow can be run regardless of the SOURCE_OF_TRUTH_TYPE Github variable.
+      default_platform_revision_for_merge: ${{ github.event.inputs.default_platform_revision }}
+      default_workload_revision_for_merge: ${{ github.event.inputs.default_workload_revision }}
+
+      google_cloud_project: ${{ vars.GOOGLE_CLOUD_PROJECT }}
+      wif_provider: ${{ vars.WIF_PROVIDER }}
+      service_account: ${{ vars.SERVICE_ACCOUNT }}
+      eps_host: ${{ vars.EPS_HOST }}
+      eps_client_id: ${{ vars.EPS_CLIENT_ID }}
+    secrets: inherit
+  
+  notify_skipped_mode:
+    name: Notify Skipped (Incorrect Mode)
+    if: ${{ vars.MODE != 'EPS' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print skip message
+        run: |
+          echo "::warning::Workflow run skipped."
+          echo "This workflow can only be run when the repository MODE variable is set to 'EPS'."
+          echo "Current MODE is: ${{ vars.MODE }}"
