@@ -3,6 +3,9 @@
 # on an existing PR based on PR commands.
 name: Reusable - Update EPS CSV and Manage PRs/Drift
 
+env: 
+  ALLOWED_MERGE_CALLER_REPOS: "edge-cluster-registry,my-sample-cluster-registry-repo,sandbox-cluster-registry,dev-cluster-registry"
+
 on:
   workflow_call:
     inputs:
@@ -181,16 +184,19 @@ jobs:
           SOURCE_OF_TRUTH_TYPE_INPUT: ${{ inputs.source_of_truth_type }}
           TARGET_FILENAME_INPUT: ${{ inputs.target_csv_file }} # Relative to caller_repo
           CALLER_REPO_FULL_NAME: ${{ github.event.repository.name }}
+          ALLOWED_MERGE_CALLER_REPOS_CSL: ${{ env.ALLOWED_MERGE_CALLER_REPOS }} # Comma-Separated List from repo variable
         run: |
           source_type_orig="${{ env.SOURCE_OF_TRUTH_TYPE_INPUT }}"
           source_type_lower="${source_type_orig,,}" # Convert to lowercase for case-insensitive check
           target_filename="${{ env.TARGET_FILENAME_INPUT }}"
           FLAG_TO_ADD=""
           caller_repo_name=$(echo "$CALLER_REPO_FULL_NAME" | cut -d'/' -f2)
+          allowed_merge_caller_repos_csl="${{ env.ALLOWED_MERGE_CALLER_REPOS_CSL }}"
 
           is_cluster_registry_repo_bool="false" # Default to false
 
           echo "Received SOURCE_OF_TRUTH_TYPE: '$source_type_orig' (Processing as '$source_type_lower')"
+          echo "Received ALLOWED_MERGE_CALLER_REPOS_CSL: '$allowed_merge_caller_repos_csl'"
           echo "Received Target Filepath: '$target_filename'"
           echo "Received Caller Repo full name: '$CALLER_REPO_FULL_NAME'"
 
@@ -216,13 +222,20 @@ jobs:
               ;;
           esac
           
-          # Check if the caller repository name contains "cluster-registry"
-          if [[ "$caller_repo_name" == *"cluster-registry"* ]]; then
-            echo "Caller repository name '$caller_repo_name' contains 'cluster-registry'."
-            is_cluster_registry_repo_bool="true"
-          else
-            echo "Caller repository name '$caller_repo_name' does not contain 'cluster-registry'."
+          # Check if the caller repository name is in the list of allowed repositories
+          if [[ -n "$allowed_merge_caller_repos_csl" && -n "$caller_repo_name" ]]; then
+            IFS=',' read -r -a allowed_repos_array <<< "$allowed_merge_caller_repos_csl"
+            for allowed_repo in "${allowed_repos_array[@]}"; do
+              # Trim potential whitespace from allowed_repo (though CSL shouldn't have it)
+              trimmed_allowed_repo=$(echo "$allowed_repo" | xargs)
+              if [[ "$caller_repo_name" == "$trimmed_allowed_repo" ]]; then
+                echo "Caller repository name '$caller_repo_name' matches allowed repo '$trimmed_allowed_repo'."
+                is_cluster_registry_repo_bool="true"
+                break # Found a match, no need to check further
+              fi
+            done
           fi
+          echo "Final check: is_cluster_registry_repo_bool is $is_cluster_registry_repo_bool (based on caller '$caller_repo_name' and allowed list '$allowed_merge_caller_repos_csl')"
 
           echo "Flag determined: '$FLAG_TO_ADD'"
           echo "flag=$FLAG_TO_ADD" >> $GITHUB_OUTPUT

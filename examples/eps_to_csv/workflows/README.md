@@ -165,7 +165,7 @@ When dispatching the workflow, the following inputs can be provided:
 This workflow calls the reusable `csv_updater_reusable_pipeline.yaml` with specific parameters to activate the merge logic:
 
 *   `target_csv_file`: Set to `'templates/source_of_truth.csv'`.
-*   `source_of_truth_type`: Set to `'template'`. This is a key condition, along with the calling repository name containing "cluster-registry" (as handled by the reusable workflow), for the merge logic to be triggered within the reusable workflow.
+*   `source_of_truth_type`: Set to `'template'`. This is a key condition, along with the repository name calling the workflow being present in "ALLOWED_MERGE_CALLER_REPOS" env variable defined at the top in the `csv_updater_reusable_pipeline.yaml` file, for the merge logic to be triggered within the reusable workflow.
 *   It passes the `default_platform_revision` and `default_workload_revision` inputs to the reusable workflow's `default_platform_revision_for_merge` and `default_workload_revision_for_merge` inputs, respectively.
 
 ---

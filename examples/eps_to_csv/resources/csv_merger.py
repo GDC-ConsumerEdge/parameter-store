@@ -13,8 +13,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Define the fixed columns for the target CSV
-EXPECTED_TARGET_COLUMNS = [
+# Define the default columns for the target CSV, used if the target is new or its structure is invalid.
+DEFAULT_EXPECTED_TARGET_COLUMNS = [
     "cluster_name",
     "cluster_group",
     "cluster_tags",
@@ -34,10 +34,11 @@ def update_csv_with_new_rows(
 
     - If a 'cluster_name' from source exists in target, the target row is kept as is.
     - If a 'cluster_name' from source does not exist in target, a new row is added.
-        - 'cluster_name', 'cluster_group', 'cluster_tags' are taken from the source.
-        - 'platform_repository_revision' and 'workload_repository_revision' for
-          new rows are set to provided defaults or left blank.
-    - The target CSV will strictly contain the 5 EXPECTED_TARGET_COLUMNS.
+        - For new rows, 'cluster_name', 'cluster_group', 'cluster_tags' are taken from the source.
+        - 'platform_repository_revision' and 'workload_repository_revision' are set to provided defaults or left blank.
+        - Other columns (if the target structure has more than the defaults) will be populated from the source if available, otherwise left blank.
+    - The target CSV will conform to the column structure of the existing target file, provided it's valid (contains 'cluster_name').
+      If the target file is new, empty, or has an invalid structure, DEFAULT_EXPECTED_TARGET_COLUMNS will be used.
       No other columns from the source will be added. Existing extra columns in target will be removed.
 
     Args:
@@ -48,6 +49,7 @@ def update_csv_with_new_rows(
     """
     source_csv_path = Path(source_csv_path_str)
     target_csv_path = Path(target_csv_path_str)
+    current_expected_columns = DEFAULT_EXPECTED_TARGET_COLUMNS[:]
 
     if not source_csv_path.is_file():
         logger.error(f"Source CSV file not found: {source_csv_path}")
@@ -59,7 +61,7 @@ def update_csv_with_new_rows(
         logger.info(f"Source CSV '{source_csv_path}' is empty. No new rows to add.")
         if not target_csv_path.exists():
             logger.info(f"Target CSV '{target_csv_path}' does not exist. Creating an empty one with expected columns (as source was empty).")
-            pd.DataFrame(columns=EXPECTED_TARGET_COLUMNS).to_csv(target_csv_path, index=False, encoding="utf-8")
+            pd.DataFrame(columns=current_expected_columns).to_csv(target_csv_path, index=False, encoding="utf-8")
         return
     except Exception as e:
         logger.error(f"Error reading source CSV '{source_csv_path}': {e}", exc_info=True)
@@ -77,15 +79,28 @@ def update_csv_with_new_rows(
             target_df = pd.read_csv(target_csv_path)
             logger.info(f"Read {len(target_df)} row(s) from existing target CSV: {target_csv_path}")
             num_rows_in_original_target = len(target_df)
+            if not target_df.empty and target_df.columns.any():
+                derived_columns = target_df.columns.tolist()
+                if "cluster_name" not in derived_columns:
+                    logger.warning(
+                        f"Existing target CSV '{target_csv_path}' does not contain the required 'cluster_name' column. "
+                        f"Falling back to default column structure: {current_expected_columns}"
+                    )
+                else:
+                    current_expected_columns = derived_columns
+                    logger.info(f"Using column structure from existing target: {current_expected_columns}")
+            else: # Target existed but was empty or had no columns
+                logger.info(f"Target CSV '{target_csv_path}' is empty or has no columns. Using default column structure: {current_expected_columns}")
         except pd.errors.EmptyDataError:
             logger.info(f"Target CSV '{target_csv_path}' exists but is empty. Will treat as new.")
             target_df = pd.DataFrame() # Start with empty DataFrame
             original_target_df_existed = False
+            logger.info(f"Using default column structure for empty target: {current_expected_columns}")
         except Exception as e:
             logger.error(f"Error reading target CSV '{target_csv_path}': {e}", exc_info=True)
             raise
     else:
-        logger.info(f"Target CSV '{target_csv_path}' not found or is empty. Will create it.")
+        logger.info(f"Target CSV '{target_csv_path}' not found. Using default column structure for new file: {current_expected_columns}")
         target_df = pd.DataFrame() # Start with empty DataFrame
 
     # Identify new cluster_names from source_df
@@ -113,15 +128,24 @@ def update_csv_with_new_rows(
             source_row = source_row_series.iloc[0]
             
             new_row_data = {}
-
-            # Populate based on EXPECTED_TARGET_COLUMNS
-            new_row_data['cluster_name'] = source_row['cluster_name']
-            new_row_data['cluster_group'] = source_row.get('cluster_group', pd.NA)
-            new_row_data['cluster_tags'] = source_row.get('cluster_tags', pd.NA)
-
-            new_row_data['platform_repository_revision'] = default_platform_rev if default_platform_rev is not None else pd.NA
-            new_row_data['workload_repository_revision'] = default_workload_rev if default_workload_rev is not None else pd.NA
-
+            # Populate based on current_expected_columns
+            for col_name in current_expected_columns:
+                if col_name == 'cluster_name':
+                    # cluster_name must exist in source_row if this logic is reached. though these conditions for cluster_name, cluster_group and cluster_tags..
+                    # are not neccessary, keeping them explicitly for better readability and future changes on these important fields.
+                    new_row_data[col_name] = source_row.get('cluster_name', pd.NA)
+                elif col_name == 'cluster_group':
+                    new_row_data[col_name] = source_row.get('cluster_group', pd.NA)
+                elif col_name == 'cluster_tags':
+                    new_row_data[col_name] = source_row.get('cluster_tags', pd.NA)
+                elif col_name == 'platform_repository_revision':
+                    new_row_data[col_name] = default_platform_rev if default_platform_rev is not None else pd.NA
+                elif col_name == 'workload_repository_revision':
+                    new_row_data[col_name] = default_workload_rev if default_workload_rev is not None else pd.NA
+                else:
+                    # For any other columns expected in the target, try to get them from source,
+                    # otherwise they will be NA (blank in CSV).
+                    new_row_data[col_name] = source_row.get(col_name, pd.NA)
             new_rows_list.append(new_row_data)
     else:
         logger.info("No new cluster_names found in source to add to target.")
@@ -129,9 +153,9 @@ def update_csv_with_new_rows(
     if new_rows_list:
         new_rows_df = pd.DataFrame(new_rows_list)
         # Ensure new_rows_df has exactly the EXPECTED_TARGET_COLUMNS in the correct order
-        new_rows_df = new_rows_df.reindex(columns=EXPECTED_TARGET_COLUMNS)
+        new_rows_df = new_rows_df.reindex(columns=current_expected_columns)
     else:
-        new_rows_df = pd.DataFrame(columns=EXPECTED_TARGET_COLUMNS) # Empty DF with correct columns
+        new_rows_df = pd.DataFrame(columns=current_expected_columns) # Empty DF with correct columns
 
     # Combine original target_df with the processed new_rows_df
     if not new_rows_df.empty:
@@ -145,9 +169,9 @@ def update_csv_with_new_rows(
     # Ensure the final DataFrame has exactly the EXPECTED_TARGET_COLUMNS in the specified order
     # This will drop any columns not in EXPECTED_TARGET_COLUMNS and add any missing ones with NaN
     if not updated_df.empty:
-        updated_df = updated_df.reindex(columns=EXPECTED_TARGET_COLUMNS)
+        updated_df = updated_df.reindex(columns=current_expected_columns)
     else: # If updated_df is empty (e.g. target was empty and no new rows)
-        updated_df = pd.DataFrame(columns=EXPECTED_TARGET_COLUMNS)
+        updated_df = pd.DataFrame(columns=current_expected_columns)
 
 
     num_rows_in_updated_df = len(updated_df)
@@ -194,7 +218,8 @@ def main():
             "Update a target CSV file with new rows from a source CSV file, keyed by 'cluster_name'.\n"
             "If a 'cluster_name' from source exists in target, the target row is kept as is.\n"
             "If a 'cluster_name' from source does not exist in target, a new row is added using source data.\n"
-            "The target CSV will strictly conform to the columns: " + ", ".join(EXPECTED_TARGET_COLUMNS) + ".\n"
+            "The target CSV will conform to the columns of the existing target file (if valid and contains 'cluster_name').\n"
+            "If the target file is new, empty, or invalid, it will use the columns defined at DEFAULT_EXPECTED_TARGET_COLUMNS global variable to create the target CSV "
             "For new rows, 'platform_repository_revision' and 'workload_repository_revision' "
             "can be set to defaults or left blank."
         ),
