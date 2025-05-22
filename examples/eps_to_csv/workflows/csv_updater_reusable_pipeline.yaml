@@ -3,6 +3,9 @@
 # on an existing PR based on PR commands.
 name: Reusable - Update EPS CSV and Manage PRs/Drift
 
+env: 
+  ALLOWED_MERGE_CALLER_REPOS: "edge-cluster-registry,my-sample-cluster-registry-repo,sandbox-cluster-registry,dev-cluster-registry"
+
 on:
   workflow_call:
     inputs:
@@ -95,6 +98,16 @@ on:
         description: "Full name of the repository (e.g., my-org/my-repo) (Required if chatops_mode is 'check' or 'reconcile')"
         required: false
         type: string
+      default_platform_revision_for_merge:
+        description: "Default platform_repository_revision for new clusters when enable_merge_into_target is true (optional)."
+        required: false
+        type: string
+        default: ""
+      default_workload_revision_for_merge:
+        description: "Default workload_repository_revision for new clusters when enable_merge_into_target is true (optional)."
+        required: false
+        type: string
+        default: ""
 
     secrets:
       PAT_TOKEN:
@@ -170,14 +183,22 @@ jobs:
         env:
           SOURCE_OF_TRUTH_TYPE_INPUT: ${{ inputs.source_of_truth_type }}
           TARGET_FILENAME_INPUT: ${{ inputs.target_csv_file }} # Relative to caller_repo
+          CALLER_REPO_FULL_NAME: ${{ github.event.repository.name }}
+          ALLOWED_MERGE_CALLER_REPOS_CSL: ${{ env.ALLOWED_MERGE_CALLER_REPOS }} # Comma-Separated List from repo variable
         run: |
           source_type_orig="${{ env.SOURCE_OF_TRUTH_TYPE_INPUT }}"
           source_type_lower="${source_type_orig,,}" # Convert to lowercase for case-insensitive check
           target_filename="${{ env.TARGET_FILENAME_INPUT }}"
           FLAG_TO_ADD=""
+          caller_repo_name=$(echo "$CALLER_REPO_FULL_NAME" | cut -d'/' -f2)
+          allowed_merge_caller_repos_csl="${{ env.ALLOWED_MERGE_CALLER_REPOS_CSL }}"
+
+          is_cluster_registry_repo_bool="false" # Default to false
 
           echo "Received SOURCE_OF_TRUTH_TYPE: '$source_type_orig' (Processing as '$source_type_lower')"
+          echo "Received ALLOWED_MERGE_CALLER_REPOS_CSL: '$allowed_merge_caller_repos_csl'"
           echo "Received Target Filepath: '$target_filename'"
+          echo "Received Caller Repo full name: '$CALLER_REPO_FULL_NAME'"
 
           # Ensure target filename is provided
           if [[ -z "$target_filename" ]]; then
@@ -200,11 +221,37 @@ jobs:
               exit 1
               ;;
           esac
+          
+          # Check if the caller repository name is in the list of allowed repositories
+          if [[ -n "$allowed_merge_caller_repos_csl" && -n "$caller_repo_name" ]]; then
+            IFS=',' read -r -a allowed_repos_array <<< "$allowed_merge_caller_repos_csl"
+            for allowed_repo in "${allowed_repos_array[@]}"; do
+              # Trim potential whitespace from allowed_repo (though CSL shouldn't have it)
+              trimmed_allowed_repo=$(echo "$allowed_repo" | xargs)
+              if [[ "$caller_repo_name" == "$trimmed_allowed_repo" ]]; then
+                echo "Caller repository name '$caller_repo_name' matches allowed repo '$trimmed_allowed_repo'."
+                is_cluster_registry_repo_bool="true"
+                break # Found a match, no need to check further
+              fi
+            done
+          fi
+          echo "Final check: is_cluster_registry_repo_bool is $is_cluster_registry_repo_bool (based on caller '$caller_repo_name' and allowed list '$allowed_merge_caller_repos_csl')"
 
           echo "Flag determined: '$FLAG_TO_ADD'"
           echo "flag=$FLAG_TO_ADD" >> $GITHUB_OUTPUT
-          # Construct full path to the target CSV within the checked-out caller repo
-          echo "output_csv_path=${{ github.workspace }}/caller_repo/${target_filename}" >> $GITHUB_OUTPUT
+          echo "source_type_lower=$source_type_lower" >> $GITHUB_OUTPUT # Output the lowercase version
+          echo "caller_repo_name=$caller_repo_name" >> $GITHUB_OUTPUT # Output the extracted caller repo name
+          echo "is_cluster_registry_repo=$is_cluster_registry_repo_bool" >> $GITHUB_OUTPUT # Output the boolean check result
+
+          # Determine the output path for eps_to_csv_converter.py
+          # It should be intermediate only if conditions for merging are met (template type, contains cluster-registry).
+          if [[ "$source_type_lower" == "template" && "$is_cluster_registry_repo_bool" == "true" ]]; then
+            echo "eps_script_output_path=${{ github.workspace }}/intermediate_eps_data.csv" >> $GITHUB_OUTPUT
+          else
+            echo "eps_script_output_path=${{ github.workspace }}/caller_repo/${target_filename}" >> $GITHUB_OUTPUT
+          fi
+          # The final target file in the caller repo (for git operations)
+          echo "final_target_csv_in_caller_path=${{ github.workspace }}/caller_repo/${target_filename}" >> $GITHUB_OUTPUT
           # Construct full path to the config INI within the checked-out caller repo
           echo "config_ini_path=${{ github.workspace }}/caller_repo/${{ inputs.config_ini_path }}" >> $GITHUB_OUTPUT
         shell: bash
@@ -235,14 +282,14 @@ jobs:
           SERVICE_ACCOUNT: ${{ inputs.service_account }}
           GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.google-auth.outputs.credentials_file_path }}
           CONFIG_INI_PATH: ${{ steps.determine_params.outputs.config_ini_path }}
-          # Set the correct output CSV environment variable based on the flag
-          ${{ steps.determine_params.outputs.flag == '-intent' && 'OUTPUT_INTENT_CSV' || 'OUTPUT_DATA_CSV' }}: ${{ steps.determine_params.outputs.output_csv_path }}
+          # Set the correct output CSV environment variable for eps_to_csv_converter.py
+          ${{ steps.determine_params.outputs.flag == '-intent' && 'OUTPUT_INTENT_CSV' || 'OUTPUT_DATA_CSV' }}: ${{ steps.determine_params.outputs.eps_script_output_path }}
         run: |
           echo "Google Credentials File: $GOOGLE_APPLICATION_CREDENTIALS"
           echo "Config INI Path (caller repo): $CONFIG_INI_PATH"
           SCRIPT_PATH=".reusable_workflow_repo/.github/resources/eps_to_csv_converter.py" # Adjust path as needed
           SCRIPT_FLAG="${{ steps.determine_params.outputs.flag }}"
-          USER_TARGET_PATH="${{ steps.determine_params.outputs.output_csv_path }}" # Full path
+          EPS_SCRIPT_OUTPUT_TARGET_PATH="${{ steps.determine_params.outputs.eps_script_output_path }}" # Full path for eps_script output
 
           # Just Logging the output variable being set for easier debugging
           if [[ "$SCRIPT_FLAG" == "-intent" ]]; then
@@ -264,18 +311,53 @@ jobs:
           fi
 
           # Verify that the expected output file was actually created
-          if [ ! -f "$USER_TARGET_PATH" ]; then
-             echo "Error: Expected output file '$USER_TARGET_PATH' was not created by the script!" >&2
+          if [ ! -f "$EPS_SCRIPT_OUTPUT_TARGET_PATH" ]; then
+             echo "Error: Expected output file '$EPS_SCRIPT_OUTPUT_TARGET_PATH' was not created by eps_to_csv_converter.py!" >&2
 
              # List directory contents for easier debugging
-             ls -l "$(dirname "$USER_TARGET_PATH")" || ls -la .
+             ls -l "$(dirname "$EPS_SCRIPT_OUTPUT_TARGET_PATH")" || ls -la .
              exit 1
           fi
 
-          echo "Script finished successfully. CSV updated/created at '$USER_TARGET_PATH'"
+          echo "eps_to_csv_converter.py finished successfully. Output at '$EPS_SCRIPT_OUTPUT_TARGET_PATH'"
         shell: bash
 
-      # Configure Git user details (only for where commits might happen).
+      - name: Merge EPS Data into Target CSV (if enabled)
+        if: steps.determine_params.outputs.source_type_lower == 'template' && steps.determine_params.outputs.is_cluster_registry_repo == 'true'
+        env:
+          DEFAULT_PLATFORM_REV_FOR_MERGE: ${{ inputs.default_platform_revision_for_merge }}
+          DEFAULT_WORKLOAD_REV_FOR_MERGE: ${{ inputs.default_workload_revision_for_merge }}
+        run: |
+          MERGER_SCRIPT_PATH=".reusable_workflow_repo/.github/resources/csv_merger.py"
+          SOURCE_EPS_DATA_FILE="${{ steps.determine_params.outputs.eps_script_output_path }}" # Output from eps_to_csv_converter.py
+          FINAL_TARGET_FILE_IN_CALLER="${{ steps.determine_params.outputs.final_target_csv_in_caller_path }}" # e.g., caller_repo/templates/source_of_truth.csv
+
+          echo "Attempting to merge '$SOURCE_EPS_DATA_FILE' into '$FINAL_TARGET_FILE_IN_CALLER'"
+
+          if [ ! -f "$SOURCE_EPS_DATA_FILE" ]; then
+            echo "Error: Source file for merge '$SOURCE_EPS_DATA_FILE' not found!" >&2
+            exit 1
+          fi
+          # csv_merger.py will create the target if it doesn't exist, or update it if it does.
+
+          COMMAND_ARGS=()
+          if [[ -n "$DEFAULT_PLATFORM_REV_FOR_MERGE" ]]; then
+            COMMAND_ARGS+=("--default-platform-revision" "$DEFAULT_PLATFORM_REV_FOR_MERGE")
+          fi
+          if [[ -n "$DEFAULT_WORKLOAD_REV_FOR_MERGE" ]]; then
+            COMMAND_ARGS+=("--default-workload-revision" "$DEFAULT_WORKLOAD_REV_FOR_MERGE")
+          fi
+
+          echo "Running command: python \"$MERGER_SCRIPT_PATH\" \"$SOURCE_EPS_DATA_FILE\" \"$FINAL_TARGET_FILE_IN_CALLER\" ${COMMAND_ARGS[*]}"
+          python "$MERGER_SCRIPT_PATH" "$SOURCE_EPS_DATA_FILE" "$FINAL_TARGET_FILE_IN_CALLER" "${COMMAND_ARGS[@]}"
+          MERGER_EXIT_CODE=$?
+          if [ $MERGER_EXIT_CODE -ne 0 ]; then
+            echo "csv_merger.py script failed with exit code $MERGER_EXIT_CODE!" >&2
+            exit $MERGER_EXIT_CODE
+          fi
+          echo "Merge successful. Final data in '$FINAL_TARGET_FILE_IN_CALLER'"
+
+      # Configure Git user details
       - name: Configure Git for Diff/Commit
         if: inputs.chatops_mode == 'check' || inputs.chatops_mode == 'reconcile'
         working-directory: ./caller_repo # Operate in the checked-out caller repo
@@ -291,8 +373,8 @@ jobs:
         run: |
           # Print commands and exit on unexpected errors *except* where handled
 
-          TARGET_FILE_RELATIVE="${{ inputs.target_csv_file }}" # Path relative to repo root
-          TARGET_FILE_FULL="${{ steps.determine_params.outputs.output_csv_path }}" # Full path
+          TARGET_FILE_RELATIVE="${{ inputs.target_csv_file }}" # Path relative to caller_repo root
+          TARGET_FILE_FULL="${{ steps.determine_params.outputs.final_target_csv_in_caller_path }}" # Full path to the final target file
 
           echo "Checking existence of generated file: $TARGET_FILE_FULL"
           if [[ ! -f "$TARGET_FILE_FULL" ]]; then
@@ -386,7 +468,7 @@ jobs:
         working-directory: ./caller_repo
         run: |
           TARGET_FILE_RELATIVE="${{ inputs.target_csv_file }}"
-          TARGET_FILE_FULL="${{ steps.determine_params.outputs.output_csv_path }}"
+          TARGET_FILE_FULL="${{ steps.determine_params.outputs.final_target_csv_in_caller_path }}"
 
           if [[ ! -f "$TARGET_FILE_FULL" ]]; then
             echo "::warning::Generated file $TARGET_FILE_FULL not found. Cannot reconcile."

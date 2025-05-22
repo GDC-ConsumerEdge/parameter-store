@@ -7,6 +7,7 @@ on:
         description: 'Optional suffix for the feature branch'
         required: false
         type: string
+        default: "auto"
       target_csv_file:
         description: 'Path to the CSV file to be updated/replaced (relative to repo root)'
         type: choice
@@ -15,15 +16,22 @@ on:
           - 'cluster-intent-source-of-truth.csv'
           - 'templates/source_of_truth.csv'
 
+permissions:
+  issues: write
+  pull-requests: write
+  contents: write
+  id-token: write
+  actions: write
+
 jobs:
   call_reusable_updater:
     if: ${{ vars.MODE == 'EPS' }}
-    uses: my-org/my-reusable-repo/.github/workflows/csv_updater_resuable_pipeline.yaml@main
+    uses: my-org/my-reusable-repo/.github/workflows/csv_updater_reusable_pipeline.yaml@main
     with:
-      used_workflow_ref: 'my-org/my-reusable-repo/.github/workflows/csv_updater_resuable_pipeline.yaml@main'
+      used_workflow_ref: 'my-org/my-reusable-repo/.github/workflows/csv_updater_reusable_pipeline.yaml@main'
       target_csv_file: ${{ github.event.inputs.target_csv_file }} # Path in the caller repo
       source_of_truth_type: ${{ vars.SOURCE_OF_TRUTH_TYPE }}
-      config_ini_path: '.github/config/csv_settings.ini' # Path to config in the caller repo
+      config_ini_path: '.github/config/sot_csv_config.ini' # Path to config in the caller repo
       branch_name_suffix: ${{ github.event.inputs.branch_suffix_override || 'auto' }}
       base_branch: 'main'
       pr_labels: 'automated pr,my-repo-data,needs review'
