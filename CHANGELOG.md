@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.2.0](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v1.1.0...v1.2.0) (2025-05-22)
+
+
+### Features
+
+* [eps-integrations] add ability to merge csv for cluster-registry sot files ([#61](https://github.com/GDC-ConsumerEdge/parameter-store/issues/61)) ([0172933](https://github.com/GDC-ConsumerEdge/parameter-store/commit/0172933f74e1f1dc224325f282931c085e4f5b38))
+* add eps_to_csv_converter utility ([#37](https://github.com/GDC-ConsumerEdge/parameter-store/issues/37)) ([ba6018e](https://github.com/GDC-ConsumerEdge/parameter-store/commit/ba6018ed0206eefceabd7c66b3d602ab722f4358))
+* add GH Actions integration workflow examples for HRM and cluster provisioner ([#56](https://github.com/GDC-ConsumerEdge/parameter-store/issues/56)) ([c897127](https://github.com/GDC-ConsumerEdge/parameter-store/commit/c89712740d2693ea7a582d5bdf7b2e34032d814e))
+
 ## [1.1.0](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v1.0.0...v1.1.0) (2025-04-18)
 
 
