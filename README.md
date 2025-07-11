@@ -480,20 +480,24 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO eps;
 
 ### Python Setup
 
+These setup instructions assume the use of [uv](https://docs.astral.sh/uv/)
+
 1. Install Python 3.12
+
+```shell
+uv python install cpython-3.12
+```
 
 2. Create virtualenv
 
 ```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
+uv venv --python cpython-3.12 && source .venv/bin/activate
 ```
 
-3. Install dev requirements
+3. Install requirements
 
 ```bash
-pip3 install -r requirements-dev.txt
-pip3 install -r requirements.txt
+uv sync
 ```
 
 ### Django Setup

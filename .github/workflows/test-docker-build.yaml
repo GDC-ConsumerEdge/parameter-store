@@ -12,7 +12,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: docker build
         run: docker build -t eps .
+
       - name: invoke built image
-        run: docker run -i eps:latest python3 manage.py check
+        run: docker run -i eps:latest uv run python3 manage.py check
