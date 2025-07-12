@@ -1,14 +1,24 @@
-FROM python:3.12-alpine
+FROM python:3.12-slim
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # Set working directoryx
 WORKDIR /app
-# Copy your source code
-COPY . .
 
 # Install dependencies.
 # Collect static files. This will generate a folder named `staticfiles` in working directory
-RUN pip3 install -r requirements.txt --require-hashes --no-cache-dir && \
-    python3 manage.py collectstatic --noinput
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --frozen --no-install-project --verbose
+
+ # Copy your source code
+COPY . .
+
+# Sync the project
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --frozen --verbose
 
 # explicitly set a fallback log level in case no log level is defined by Kubernetes
 ENV DJANGO_LOG_LEVEL INFO
@@ -25,4 +35,5 @@ ENV NUM_WORKERS=${DEFAULT_NUM_WORKERS}
 
 # Start server using gunicorn
 # CMD cat /app/logging.conf && echo $PORT && echo $LOG_LEVEL && gunicorn -b :$PORT --threads 2 --log-config /app/logging.conf --log-level=$LOG_LEVEL "api:create_app()"
-CMD ["sh", "-c", "gunicorn parameter_store.asgi:application --workers ${NUM_WORKERS} -k uvicorn.workers.UvicornWorker --preload --bind :${DJANGO_PORT}"]
+#CMD ["sh", "-c", "gunicorn parameter_store.asgi:application --workers ${NUM_WORKERS} -k uvicorn.workers.UvicornWorker --preload --bind :${DJANGO_PORT}"]
+CMD ["sh", "-c", "uv run gunicorn parameter_store.asgi:application --workers ${NUM_WORKERS} -k uvicorn.workers.UvicornWorker --preload --bind :${DJANGO_PORT}"]
