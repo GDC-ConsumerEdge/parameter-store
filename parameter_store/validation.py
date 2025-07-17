@@ -61,8 +61,8 @@ class IPv4AddressWithCIDR(BaseValidator):
         if self.allow_empty and (value == '' or value is None):
             return
 
-        if not '/' in value:
-            raise ValidationError(f'Expected an explict CIDR value')
+        if '/' not in value:
+            raise ValidationError('Expected an explict CIDR value')
 
         try:
             # Parse the CIDR notation using ip_network

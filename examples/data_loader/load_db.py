@@ -53,7 +53,7 @@ def main(*, wipe, cluster_intent_csv, platform_csv, workload_csv):
 
 
 def get_or_create(cache: dict, model: models.Model, id_: str, id_field: str = 'name'):
-    if not id_ in cache:
+    if id_ not in cache:
         # print(f'Creating {model} {id_field} = {id_}')
         cache[id_] = model.objects.get_or_create(**{id_field: id_})[0]
     return cache[id_]
