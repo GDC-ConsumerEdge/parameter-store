@@ -166,4 +166,3 @@ jobs:
           echo "::warning::Workflow run skipped."
           echo "The current workflow can only be run when the repository variable MODE is set to 'EPS'."
           echo "Current MODE is: ${{ vars.MODE }}"
-
