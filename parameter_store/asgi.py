@@ -37,7 +37,7 @@ if not hasattr(django, "apps"):
 
 from django.core.management import call_command
 
-# Migrations should be an explict operation run elsewhere. We don't want to have the app
+# Migrations should be an explicit operation run elsewhere. We don't want to have the app
 # makemigrations in prod dynamically at runtime in an uncontrolled manner.
 # call_command('makemigrations')
 

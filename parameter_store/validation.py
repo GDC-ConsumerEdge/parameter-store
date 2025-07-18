@@ -66,7 +66,7 @@ class IPv4AddressWithCIDR(BaseValidator):
             return
 
         if "/" not in value:
-            raise ValidationError("Expected an explict CIDR value")
+            raise ValidationError("Expected an explicit CIDR value")
 
         try:
             # Parse the CIDR notation using ip_network
@@ -94,9 +94,9 @@ class CommaSeparatedEmailsValidator(BaseValidator):
     by a specified separator.
     """
 
-    def __init__(self, seperator=",", message=None, code=None, allowlist=None, allow_empty=True):
+    def __init__(self, separator=",", message=None, code=None, allowlist=None, allow_empty=True):
         super().__init__(allow_empty=allow_empty)
-        self.seperator = seperator
+        self.separator = separator
         self.validator = EmailValidator(message=message, code=code, allowlist=allowlist)
 
     def validate(self, value):
@@ -104,7 +104,7 @@ class CommaSeparatedEmailsValidator(BaseValidator):
             return
 
         if isinstance(value, str):
-            for item in value.split(self.seperator):
+            for item in value.split(self.separator):
                 self.validator(item)
         else:
             raise ValidationError(f"Expected a string value, got {type(value)}")
