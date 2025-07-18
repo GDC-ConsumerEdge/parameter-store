@@ -3,20 +3,20 @@ from typing import Type
 
 from django.core.cache import cache
 from django.db.models import Model
-from django.db.models.signals import post_save, post_delete
+from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 from django.utils import timezone
 
 from .models import (
-    CustomDataField,
-    Tag,
-    ClusterTag,
-    ClusterIntent,
-    ClusterFleetLabel,
-    ClusterData,
     Cluster,
-    GroupData,
+    ClusterData,
+    ClusterFleetLabel,
+    ClusterIntent,
+    ClusterTag,
+    CustomDataField,
     Group,
+    GroupData,
+    Tag,
 )
 
 

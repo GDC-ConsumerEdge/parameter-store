@@ -22,7 +22,7 @@ from urllib.parse import urlparse
 
 import gitlab
 import google_crc32c
-from github import Github, Auth
+from github import Auth, Github
 from google.cloud import secretmanager
 
 # Get an instance of a logger
