@@ -62,42 +62,40 @@ class IapJwtMiddleware:
             The response returned by the next middleware or view.
         """
         # IAP should have JWT in header 'x_goog_iap_jwt_assertion'
-        jwt = request.META.get('HTTP_X_GOOG_IAP_JWT_ASSERTION')
+        jwt = request.META.get("HTTP_X_GOOG_IAP_JWT_ASSERTION")
 
         if jwt:
             try:
                 req = requests.Request()
                 # IAP public keys are stored in a different URL than generic google public keys
                 token = id_token.verify_token(
-                    jwt,
-                    req,
-                    audience=settings.IAP_AUDIENCE,
-                    certs_url="https://www.gstatic.com/iap/verify/public_key")
+                    jwt, req, audience=settings.IAP_AUDIENCE, certs_url="https://www.gstatic.com/iap/verify/public_key"
+                )
 
                 # Extract the email
-                email = token.get('email')
+                email = token.get("email")
                 if not email:
-                    logger.error(f'No email found in JWT: {json.dumps(token, indent=4)}')
+                    logger.error(f"No email found in JWT: {json.dumps(token, indent=4)}")
                     return self.get_response(request)
 
-                username = email.split('@')[0]
+                username = email.split("@")[0]
 
                 # Get or create the user
                 user, created = User.objects.get_or_create(
                     username=username,
                     defaults={
-                        'email': email,
-                        'is_staff': True,
-                        'is_superuser': True if username in settings.SUPERUSERS else False
-                    }
+                        "email": email,
+                        "is_staff": True,
+                        "is_superuser": True if username in settings.SUPERUSERS else False,
+                    },
                 )
 
                 if created:
-                    logger.info(f'Created new user via IAP JWT: {user.username}')
+                    logger.info(f"Created new user via IAP JWT: {user.username}")
 
                 # Trust the JWT and Authenticate the user
-                login(request, user, backend='django.contrib.auth.backends.ModelBackend')
-                logger.info(f'Logged in via IAP JWT: {user.username}')
+                login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+                logger.info(f"Logged in via IAP JWT: {user.username}")
 
             except ValueError as err:
                 logger.error(f'Failed to validate JWT "{jwt[:10]}...": {err}')
@@ -105,6 +103,6 @@ class IapJwtMiddleware:
             except google.auth.exceptions.GoogleAuthError as err:
                 logger.error(err)
         else:
-            logger.info('IAP middleware is enabled but no IAP JWT found in headers')
+            logger.info("IAP middleware is enabled but no IAP JWT found in headers")
 
         return self.get_response(request)

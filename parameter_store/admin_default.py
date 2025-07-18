@@ -24,15 +24,15 @@ from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationFo
 
 
 class CustomAdminSite(unfold.sites.UnfoldAdminSite):
-    site_header = 'Parameter Store Admin'
-    site_title = 'Parameter Store Admin'
-    index_title = 'Parameter Store Admin'
+    site_header = "Parameter Store Admin"
+    site_title = "Parameter Store Admin"
+    index_title = "Parameter Store Admin"
 
     def has_permission(self, request):
         return request.user.is_superuser
 
 
-admin_site = CustomAdminSite(name='custom_admin')
+admin_site = CustomAdminSite(name="custom_admin")
 
 
 class UserAdmin(BaseUserAdmin, uadmin.ModelAdmin):

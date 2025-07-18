@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class DynamicValidatingModel(models.Model):
-    """ Provides an abstract base class with dynamic validation capabilities.
+    """Provides an abstract base class with dynamic validation capabilities.
 
     This class serves as a foundation for models requiring dynamic validation
     based on external validator configurations. It accomplishes this by
@@ -65,10 +65,10 @@ class DynamicValidatingModel(models.Model):
         :raises ValidationError: If any of the validators fail validation.
         """
 
-        logger.debug(f'Validating {self.__class__.__name__} with parameters: {self.__dict__!r} ')
+        logger.debug(f"Validating {self.__class__.__name__} with parameters: {self.__dict__!r} ")
         super().clean()
 
-        this_class = self.__class__.__module__ + '.' + self.__class__.__name__
+        this_class = self.__class__.__module__ + "." + self.__class__.__name__
 
         errors = defaultdict(list)
         for va in ValidatorAssignment.objects.filter(model=this_class):
@@ -77,17 +77,17 @@ class DynamicValidatingModel(models.Model):
             try:
                 validator = Validator(**va.validator.parameters)
             except TypeError:
-                logger.error(f'Invalid parameters for validator '
-                             f'{va.validator.name}: {va.validator.parameters}')
+                logger.error(f"Invalid parameters for validator {va.validator.name}: {va.validator.parameters}")
                 raise
 
-            model, field_name = va.model_field.split('.')
+            model, field_name = va.model_field.split(".")
 
             try:
                 field = getattr(self, field_name)
             except AttributeError:
-                logger.error(f'ValidatorAssignment {va.id} references invalid '
-                             f'field {va.model_field} for model {this_class}')
+                logger.error(
+                    f"ValidatorAssignment {va.id} references invalid field {va.model_field} for model {this_class}"
+                )
                 raise
 
             try:
@@ -111,8 +111,7 @@ class Group(DynamicValidatingModel):
 
 
 class Tag(DynamicValidatingModel):
-    name = models.CharField(max_length=30, blank=False, unique=True, null=False,
-                            verbose_name='tag name')
+    name = models.CharField(max_length=30, blank=False, unique=True, null=False, verbose_name="tag name")
     description = models.CharField(max_length=255, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -133,15 +132,12 @@ class ClusterManager(models.Manager):
         """
         return (
             self.get_queryset()
-            .select_related('group', 'intent')
+            .select_related("group", "intent")
             .prefetch_related(
-                'tags',
-                'fleet_labels',
-                'secondary_groups',
-                Prefetch(
-                    'cluster_data',
-                    queryset=ClusterData.objects.select_related('field')
-                )
+                "tags",
+                "fleet_labels",
+                "secondary_groups",
+                Prefetch("cluster_data", queryset=ClusterData.objects.select_related("field")),
             )
         )
 
@@ -150,15 +146,8 @@ class Cluster(DynamicValidatingModel):
     name = models.CharField(db_index=True, max_length=30, blank=False, unique=True, null=False)
     description = models.CharField(max_length=255, null=True, blank=True)
     group = models.ForeignKey(Group, on_delete=models.DO_NOTHING)
-    secondary_groups = models.ManyToManyField(
-        Group,
-        blank=True,
-        related_name='secondary_clusters')
-    tags = models.ManyToManyField(
-        'Tag',
-        through='ClusterTag',
-        blank=True,
-        related_name='clusters')
+    secondary_groups = models.ManyToManyField(Group, blank=True, related_name="secondary_clusters")
+    tags = models.ManyToManyField("Tag", through="ClusterTag", blank=True, related_name="clusters")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -182,8 +171,8 @@ class Cluster(DynamicValidatingModel):
 
 class ClusterTag(DynamicValidatingModel):
     class Meta:
-        verbose_name = 'Cluster Tag'
-        verbose_name_plural = 'Cluster Tags'
+        verbose_name = "Cluster Tag"
+        verbose_name_plural = "Cluster Tags"
 
     cluster = models.ForeignKey(Cluster, on_delete=models.DO_NOTHING)
     tag = models.ForeignKey(Tag, on_delete=models.CASCADE)
@@ -191,120 +180,85 @@ class ClusterTag(DynamicValidatingModel):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f'{self.cluster.name} - {self.tag.name}'
+        return f"{self.cluster.name} - {self.tag.name}"
 
 
 class ClusterIntent(DynamicValidatingModel):
     class Meta:
-        verbose_name = 'Cluster Intent'
-        verbose_name_plural = 'Cluster Intent'
+        verbose_name = "Cluster Intent"
+        verbose_name_plural = "Cluster Intent"
 
     cluster = models.OneToOneField(Cluster, on_delete=models.CASCADE, related_name="intent")
     unique_zone_id = models.CharField(
         max_length=64,
         unique=True,
-        verbose_name='Unique Zone ID',
-        help_text='This is a user-defined name of the zone and is sometimes '
-                  'referred to as "store_id"')
+        verbose_name="Unique Zone ID",
+        help_text='This is a user-defined name of the zone and is sometimes referred to as "store_id"',
+    )
     zone_name = models.CharField(
         max_length=100,
         null=True,
         blank=True,
-        help_text='Name of the zone as an object in the GDCC API; ex: us-west1-edge-mtv55')
-    location = models.CharField(
-        max_length=30,
-        null=False,
-        help_text="This is a GCP region")
+        help_text="Name of the zone as an object in the GDCC API; ex: us-west1-edge-mtv55",
+    )
+    location = models.CharField(max_length=30, null=False, help_text="This is a GCP region")
     machine_project_id = models.CharField(
         max_length=30,
         null=False,
-        verbose_name='Machine Project ID',
-        help_text='Project ID where machines are associated')
+        verbose_name="Machine Project ID",
+        help_text="Project ID where machines are associated",
+    )
     fleet_project_id = models.CharField(
-        max_length=30,
-        null=False,
-        verbose_name='Fleet Project ID',
-        help_text='Project ID of the fleet')
-    secrets_project_id = models.CharField(
-        max_length=30,
-        null=False,
-        help_text='Project ID for secrets')
-    node_count = models.IntegerField(
-        null=False,
-        default=3,
-        help_text='Number of nodes in the cluster; defaults to 3')
+        max_length=30, null=False, verbose_name="Fleet Project ID", help_text="Project ID of the fleet"
+    )
+    secrets_project_id = models.CharField(max_length=30, null=False, help_text="Project ID for secrets")
+    node_count = models.IntegerField(null=False, default=3, help_text="Number of nodes in the cluster; defaults to 3")
     cluster_ipv4_cidr = models.CharField(
         max_length=18,
         null=False,
-        verbose_name='Cluster IPv4 CIDR',
-        help_text='IPv4 CIDR with which to provision the control plane of the cluster')
+        verbose_name="Cluster IPv4 CIDR",
+        help_text="IPv4 CIDR with which to provision the control plane of the cluster",
+    )
     services_ipv4_cidr = models.CharField(
         max_length=18,
         null=False,
-        verbose_name='Services IPv4 CIDR',
-        help_text='IPv4 to use as the Kubernetes services range')
+        verbose_name="Services IPv4 CIDR",
+        help_text="IPv4 to use as the Kubernetes services range",
+    )
     external_load_balancer_ipv4_address_pools = models.CharField(
         max_length=180,
         null=False,
-        verbose_name='External Load Balancer IPv4 Address Pools',
-        help_text='IPv4 CIDR used by Kubernetes for services of type LoadBalancer')
-    sync_repo = models.CharField(
-        max_length=128,
-        null=False,
-        help_text='This is the full URL to a Git repository')
+        verbose_name="External Load Balancer IPv4 Address Pools",
+        help_text="IPv4 CIDR used by Kubernetes for services of type LoadBalancer",
+    )
+    sync_repo = models.CharField(max_length=128, null=False, help_text="This is the full URL to a Git repository")
     sync_branch = models.CharField(
-        max_length=50,
-        null=False,
-        default='main',
-        help_text='For; example: "main" or "master"')
+        max_length=50, null=False, default="main", help_text='For; example: "main" or "master"'
+    )
     sync_dir = models.CharField(
         max_length=50,
         null=False,
-        default='hydrated/clusters/',
-        help_text='Directory with a repo to sync for this cluster')
+        default="hydrated/clusters/",
+        help_text="Directory with a repo to sync for this cluster",
+    )
     git_token_secrets_manager_name = models.CharField(
-        max_length=255,
-        null=False,
-        help_text='Name of a Secret Manager secret that contains Git token')
+        max_length=255, null=False, help_text="Name of a Secret Manager secret that contains Git token"
+    )
     cluster_version = models.CharField(
-        max_length=30,
-        null=False,
-        help_text='This is the GDCC control plane version, i.e. "1.7.1"')
-    maintenance_window_start = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text=None)
-    maintenance_window_end = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text=None)
+        max_length=30, null=False, help_text='This is the GDCC control plane version, i.e. "1.7.1"'
+    )
+    maintenance_window_start = models.DateTimeField(null=True, blank=True, help_text=None)
+    maintenance_window_end = models.DateTimeField(null=True, blank=True, help_text=None)
     maintenance_window_recurrence = models.CharField(
         max_length=128,
         null=True,
         blank=True,
-        help_text="This is an RFC 5545 recurrence rule, ex: FREQ=WEEKLY;BYDAY=WE,TH,FR"
+        help_text="This is an RFC 5545 recurrence rule, ex: FREQ=WEEKLY;BYDAY=WE,TH,FR",
     )
-    maintenance_exclusion_name_1 = models.CharField(
-        null=True,
-        blank=True,
-        max_length=64,
-        help_text=None
-    )
-    maintenance_exclusion_start_1 = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text=None
-    )
-    maintenance_exclusion_end_1 = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text=None
-    )
-    subnet_vlans = models.CharField(
-        max_length=128,
-        null=True,
-        help_text='Comma-separated list of VLAN IDs for subnets'
-    )
+    maintenance_exclusion_name_1 = models.CharField(null=True, blank=True, max_length=64, help_text=None)
+    maintenance_exclusion_start_1 = models.DateTimeField(null=True, blank=True, help_text=None)
+    maintenance_exclusion_end_1 = models.DateTimeField(null=True, blank=True, help_text=None)
+    subnet_vlans = models.CharField(max_length=128, null=True, help_text="Comma-separated list of VLAN IDs for subnets")
     recreate_on_delete = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -315,11 +269,9 @@ class ClusterIntent(DynamicValidatingModel):
 
 class ClusterFleetLabel(DynamicValidatingModel):
     class Meta:
-        verbose_name = 'Cluster Fleet Label'
-        verbose_name_plural = 'Cluster Fleet Labels'
-        constraints = [
-            models.UniqueConstraint(fields=['cluster', 'key'], name='unique_cluster_key')
-        ]
+        verbose_name = "Cluster Fleet Label"
+        verbose_name_plural = "Cluster Fleet Labels"
+        constraints = [models.UniqueConstraint(fields=["cluster", "key"], name="unique_cluster_key")]
 
     cluster = models.ForeignKey(Cluster, on_delete=models.CASCADE, related_name="fleet_labels")
     key = models.CharField(max_length=63, blank=False, null=False)
@@ -333,8 +285,8 @@ class ClusterFleetLabel(DynamicValidatingModel):
 
 class CustomDataField(models.Model):
     class Meta:
-        verbose_name = 'Custom Data Field'
-        verbose_name_plural = 'Custom Data Fields'
+        verbose_name = "Custom Data Field"
+        verbose_name_plural = "Custom Data Fields"
 
     name = models.CharField(max_length=64, blank=False, unique=True, null=False)
     description = models.CharField(max_length=255, null=True, blank=True)
@@ -366,7 +318,7 @@ class CustomDataValidatingModel(models.Model):
             invalid field for the model.
         :raises ValidationError: If any of the validators fail validation.
         """
-        logger.debug(f'Validating {self.__class__.__name__} with parameters: {self.__dict__!r} ')
+        logger.debug(f"Validating {self.__class__.__name__} with parameters: {self.__dict__!r} ")
         super().clean()
 
         errors = defaultdict(list)
@@ -376,16 +328,14 @@ class CustomDataValidatingModel(models.Model):
             try:
                 validator = Validator(**va.validator.parameters)
             except TypeError:
-                logger.error(
-                    f'Invalid parameters for validator '
-                    f'{va.validator.name}: {va.validator.parameters}')
+                logger.error(f"Invalid parameters for validator {va.validator.name}: {va.validator.parameters}")
                 raise
 
             try:
                 validator.validate(self.value)
             except ValidationError as e:
                 logger.info("Validation error", e)
-                errors['field'].append(e)
+                errors["field"].append(e)
 
         if errors:
             raise ValidationError(errors)
@@ -393,11 +343,9 @@ class CustomDataValidatingModel(models.Model):
 
 class ClusterData(CustomDataValidatingModel):
     class Meta:
-        verbose_name = 'Cluster Custom Data'
-        verbose_name_plural = 'Cluster Custom Data'
-        constraints = [
-            models.UniqueConstraint(fields=['cluster', 'field'], name='unique_cluster_field')
-        ]
+        verbose_name = "Cluster Custom Data"
+        verbose_name_plural = "Cluster Custom Data"
+        constraints = [models.UniqueConstraint(fields=["cluster", "field"], name="unique_cluster_field")]
 
     cluster = models.ForeignKey(Cluster, on_delete=models.CASCADE, related_name="cluster_data")
     field = models.ForeignKey(CustomDataField, on_delete=models.CASCADE)
@@ -411,11 +359,9 @@ class ClusterData(CustomDataValidatingModel):
 
 class GroupData(CustomDataValidatingModel):
     class Meta:
-        verbose_name = 'Group Custom Data'
-        verbose_name_plural = 'Group Custom Data'
-        constraints = [
-            models.UniqueConstraint(fields=['group', 'field'], name='unique_group_field')
-        ]
+        verbose_name = "Group Custom Data"
+        verbose_name_plural = "Group Custom Data"
+        constraints = [models.UniqueConstraint(fields=["group", "field"], name="unique_group_field")]
 
     group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="group_data")
     field = models.ForeignKey(CustomDataField, on_delete=models.CASCADE)
@@ -428,40 +374,34 @@ class GroupData(CustomDataValidatingModel):
 
 
 def get_validator_choices():
-    """Returns a list of tuples representing custom validator classes.
-    """
+    """Returns a list of tuples representing custom validator classes."""
     validators = [cls for cls in BaseValidator.__subclasses__()]
-    return [(val.__module__ + '.' + val.__name__, val.__name__) for val in validators]
+    return [(val.__module__ + "." + val.__name__, val.__name__) for val in validators]
 
 
 def get_model_choices():
-    """ This is where models which should have validation enabled should be registered.  Add or
+    """This is where models which should have validation enabled should be registered.  Add or
     remove models from the `_validation_enabled_models` tuple below.
 
     Returns a list of tuples representing Django model classes.
     Each tuple contains a string representing the import path of the model
     and a string representing the name of the model.
     """
-    _validation_enabled_models = (
-        Group, Cluster, Tag, ClusterTag, ClusterIntent, ClusterFleetLabel
-    )
+    _validation_enabled_models = (Group, Cluster, Tag, ClusterTag, ClusterIntent, ClusterFleetLabel)
 
-    choices = [(model.__module__ + '.' + model.__name__, model.__name__)
-               for model in _validation_enabled_models]
+    choices = [(model.__module__ + "." + model.__name__, model.__name__) for model in _validation_enabled_models]
     return choices
 
 
 def get_model_field_choices():
     """Return a list of tuples representing all fields of all registered models."""
 
-    _validation_enabled_models = (
-        Group, Cluster, Tag, ClusterTag, ClusterIntent, ClusterFleetLabel
-    )
+    _validation_enabled_models = (Group, Cluster, Tag, ClusterTag, ClusterIntent, ClusterFleetLabel)
 
     model_field_choices = []
     for ModelClass in _validation_enabled_models:
         for field in ModelClass._meta.fields:
-            if field.name != 'id':
+            if field.name != "id":
                 model_field_path = f"{ModelClass.__name__}.{field.name}"
                 model_field_choices.append((model_field_path, model_field_path))
 
@@ -469,23 +409,16 @@ def get_model_field_choices():
 
 
 class Validator(models.Model):
-    name = models.CharField(
-        max_length=255,
-        unique=True,
-        blank=False,
-        null=False)
-    validator = models.CharField(
-        max_length=255,
-        blank=False,
-        null=False,
-        choices=get_validator_choices())
+    name = models.CharField(max_length=255, unique=True, blank=False, null=False)
+    validator = models.CharField(max_length=255, blank=False, null=False, choices=get_validator_choices())
     parameters = models.JSONField(
         default=dict,
         blank=True,
         null=False,
         help_text="Enter parameters for the validator in JSON format. Due to limitations in the "
-                  "UI, arguments for validators cannot be displayed dynamically. Contents of "
-                  "this field will be validated and feedback will be provided.")
+        "UI, arguments for validators cannot be displayed dynamically. Contents of "
+        "this field will be validated and feedback will be provided.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -503,32 +436,29 @@ class Validator(models.Model):
         print(all_args, required_args)
         for k in self.parameters:
             if k not in all_args:
-                errors['parameters'].append(
-                    f'Parameter "{k}" not supported in validator "{validator.__name__}"')
+                errors["parameters"].append(f'Parameter "{k}" not supported in validator "{validator.__name__}"')
 
         for k in required_args:
             if k not in self.parameters:
-                errors['parameters'].append(
-                    f'Parameter "{k}" is required in validator "{validator.__name__}"')
+                errors["parameters"].append(f'Parameter "{k}" is required in validator "{validator.__name__}"')
 
         if errors:
-            errors['parameters'].append(f'Expected arguments: {required_args or 'none'}')
+            errors["parameters"].append(f"Expected arguments: {required_args or 'none'}")
             raise ValidationError(errors)
 
 
 class ValidatorAssignment(models.Model):
     validator = models.ForeignKey(Validator, on_delete=models.CASCADE)
     model = models.CharField(
-        max_length=255,
-        null=False,
-        choices=get_model_choices(),
-        help_text="Model to apply validator")
+        max_length=255, null=False, choices=get_model_choices(), help_text="Model to apply validator"
+    )
     model_field = models.CharField(
         max_length=255,
         blank=False,
         null=False,
         choices=get_model_field_choices(),
-        help_text="Select model and its field")
+        help_text="Select model and its field",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -536,29 +466,24 @@ class ValidatorAssignment(models.Model):
         verbose_name = "Standard Data Validator Assignment"
         verbose_name_plural = "Standard Data Validator Assignments"
         constraints = [
-            models.UniqueConstraint(
-                fields=['model', 'model_field', 'validator'], name='unique_model_field_validator')
+            models.UniqueConstraint(fields=["model", "model_field", "validator"], name="unique_model_field_validator")
         ]
 
     def __str__(self):
-        return f'{self.model_field} - {self.validator.name}'
+        return f"{self.model_field} - {self.validator.name}"
 
     def clean(self):
         cls = get_class_from_full_path(self.model)
-        model, field_name = self.model_field.split('.')
+        model, field_name = self.model_field.split(".")
         if not hasattr(cls, field_name):
-            raise ValidationError({
-                'model_field': f'Model "{cls.__name__}" does not have field "{self.model_field}"'
-            })
+            raise ValidationError({"model_field": f'Model "{cls.__name__}" does not have field "{self.model_field}"'})
 
 
 class CustomDataFieldValidatorAssignment(models.Model):
     class Meta:
-        verbose_name = 'Custom Data Validator Assignment'
-        verbose_name_plural = 'Custom Data Validator Assignments'
-        constraints = [
-            models.UniqueConstraint(fields=['field', 'validator'], name='unique_field_validator')
-        ]
+        verbose_name = "Custom Data Validator Assignment"
+        verbose_name_plural = "Custom Data Validator Assignments"
+        constraints = [models.UniqueConstraint(fields=["field", "validator"], name="unique_field_validator")]
 
     field = models.ForeignKey(CustomDataField, on_delete=models.DO_NOTHING)
     validator = models.ForeignKey(Validator, on_delete=models.DO_NOTHING)

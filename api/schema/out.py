@@ -26,13 +26,12 @@ class FleetLabelResponse(Schema):
     value: str
 
 
-ClusterIntentResponse = create_schema(
-    ClusterIntent, exclude=('id', 'cluster', 'created_at', 'updated_at'))
+ClusterIntentResponse = create_schema(ClusterIntent, exclude=("id", "cluster", "created_at", "updated_at"))
 
 
 class LogicalExpression(enum.StrEnum):
-    AND = 'and'
-    OR = 'or'
+    AND = "and"
+    OR = "or"
 
 
 class ClusterResponse(Schema):
@@ -59,7 +58,7 @@ class HealthResponse(Schema):
 
 
 class PingResponse(Schema):
-    status: str = 'ok'
+    status: str = "ok"
 
 
 class GroupResponse(Schema):

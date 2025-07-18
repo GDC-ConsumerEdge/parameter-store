@@ -21,5 +21,5 @@ router = DefaultRouter()
 
 urlpatterns = [
     # path('update_sot/', UpdateSot.as_view(), name='update-sot'),  # Existing APIView
-    path('', include(router.urls)),  # Include the router's URLs
+    path("", include(router.urls)),  # Include the router's URLs
 ]

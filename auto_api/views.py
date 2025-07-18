@@ -34,7 +34,7 @@ class UpdateSot(APIView):
                 sot.update_source_of_truth(content)
                 return Response({"message": "SoT updated successfully"}, status=status.HTTP_200_OK)
             else:
-                raise Exception('Failed to read SoT from database.')
+                raise Exception("Failed to read SoT from database.")
         except Exception as e:
             print(type(e))
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
