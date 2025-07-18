@@ -1,0 +1,27 @@
+default_language_version:
+  python: python3.12
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+    - id: trailing-whitespace
+      name: Remove trailing whitespace
+      # Preserve Markdown hard linebreaks
+      args: [--markdown-linebreak-ext=md]
+
+    - id: end-of-file-fixer
+      name: Enforce newline at end of file
+
+    - id: detect-private-key
+      name: Detect private keys
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.4
+    hooks:
+      # Run the linter.
+      - id: ruff
+        name: Lint with Ruff
+        args: [ --fix ]
+      # Run the formatter.
+      - id: ruff-format
+        name: Code formatting with Ruff
