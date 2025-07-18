@@ -1,15 +1,19 @@
+# Source: https://docs.astral.sh/ruff/settings/
+
 # Additional directories to exclude from Ruff linting and formatting
 exclude = []
 
 line-length  = 120
 indent-width = 4
 
+# Sort imports
+extend-select = ["I"]
+
 # Allow fix for all enabled rules (when `--fix`) is provided.
 fixable   = ["ALL"]
 unfixable = []
 
 [format]
-  # Use double quotes for strings.
   quote-style  = "double"
   indent-style = "space"
 
