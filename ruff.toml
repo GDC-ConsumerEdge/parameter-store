@@ -6,12 +6,13 @@ exclude = []
 line-length  = 120
 indent-width = 4
 
-# Sort imports
-extend-select = ["I"]
+[lint]
+  # Sort imports
+  extend-select = ["I"]
 
-# Allow fix for all enabled rules (when `--fix`) is provided.
-fixable   = ["ALL"]
-unfixable = []
+  # Allow fix for all enabled rules (when `--fix`) is provided.
+  fixable   = ["ALL"]
+  unfixable = []
 
 [format]
   quote-style  = "double"
