@@ -3,7 +3,7 @@
 # on an existing PR based on PR commands.
 name: Reusable - Update EPS CSV and Manage PRs/Drift
 
-env: 
+env:
   ALLOWED_MERGE_CALLER_REPOS: "edge-cluster-registry,my-sample-cluster-registry-repo,sandbox-cluster-registry,dev-cluster-registry"
 
 on:
@@ -153,7 +153,7 @@ jobs:
         run: |
             used_workflow_ref="${{ inputs.used_workflow_ref }}"
             refspec="${used_workflow_ref##*@}" # Extract part after '@' (branch/tag/sha)
-            IFS='/' read -ra parts <<< "${used_workflow_ref}" 
+            IFS='/' read -ra parts <<< "${used_workflow_ref}"
             org_repo="${parts[0]}/${parts[1]}"
             echo "org_repo=${org_repo}" >> ${GITHUB_OUTPUT}
             echo "refspec=${refspec}" >> ${GITHUB_OUTPUT}
@@ -221,7 +221,7 @@ jobs:
               exit 1
               ;;
           esac
-          
+
           # Check if the caller repository name is in the list of allowed repositories
           if [[ -n "$allowed_merge_caller_repos_csl" && -n "$caller_repo_name" ]]; then
             IFS=',' read -r -a allowed_repos_array <<< "$allowed_merge_caller_repos_csl"
