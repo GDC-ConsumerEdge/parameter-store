@@ -18,8 +18,7 @@ import unfold.admin as uadmin
 import unfold.sites
 from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from django.contrib.auth.models import Group
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Group, User
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 
 

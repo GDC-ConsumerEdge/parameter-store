@@ -20,25 +20,25 @@ from django.contrib import admin
 from guardian.admin import GuardedModelAdmin
 
 from .admin_inlines import (
+    ClusterDataInline,
+    ClusterFleetLabelsInline,
     ClusterIntentInline,
     ClusterTagInline,
-    ClusterFleetLabelsInline,
-    ClusterDataInline,
     GroupDataInline,
 )
 from .models import (
     Cluster,
+    ClusterData,
+    ClusterFleetLabel,
     ClusterIntent,
     ClusterTag,
-    ClusterFleetLabel,
+    CustomDataField,
+    CustomDataFieldValidatorAssignment,
     Group,
+    GroupData,
     Tag,
     Validator,
     ValidatorAssignment,
-    ClusterData,
-    CustomDataField,
-    CustomDataFieldValidatorAssignment,
-    GroupData,
 )
 
 

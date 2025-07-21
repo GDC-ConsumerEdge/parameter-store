@@ -25,20 +25,21 @@ from ninja.pagination import LimitOffsetPagination
 from ninja.pagination import paginate as ninja_paginate
 from ninja.security import django_auth
 
-from parameter_store.models import Cluster, Group, Tag, GroupData
+from parameter_store.models import Cluster, Group, GroupData, Tag
+
 from .schema.filters import ClusterFilter
 from .schema.out import (
-    HealthResponse,
-    NameDescResponse,
-    ClustersResponse,
     ClusterResponse,
+    ClustersResponse,
     FleetLabelResponse,
-    PingResponse,
     GroupResponse,
-    MessageResponse,
     GroupsResponse,
+    HealthResponse,
+    MessageResponse,
+    NameDescResponse,
+    PingResponse,
 )
-from .utils import require_permissions, paginate
+from .utils import paginate, require_permissions
 
 api_v1 = NinjaAPI(title="Parameter Store API", version="1.0.0", csrf=True, docs_decorator=staff_member_required)
 

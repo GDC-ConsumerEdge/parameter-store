@@ -5,13 +5,13 @@ from django.forms import ModelForm
 from unfold import admin as uadmin
 
 from parameter_store.models import (
-    ClusterIntent,
-    Tag,
-    ClusterTag,
-    ClusterFleetLabel,
-    CustomDataField,
     ClusterData,
+    ClusterFleetLabel,
+    ClusterIntent,
+    ClusterTag,
+    CustomDataField,
     GroupData,
+    Tag,
 )
 
 

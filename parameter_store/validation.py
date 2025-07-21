@@ -20,8 +20,8 @@ from abc import ABC, abstractmethod
 from django.core.exceptions import ValidationError
 from django.core.validators import (
     EmailValidator,
-    MinValueValidator,
     MaxValueValidator,
+    MinValueValidator,
     RegexValidator,
     validate_ipv4_address,
 )
@@ -70,7 +70,7 @@ class IPv4AddressWithCIDR(BaseValidator):
 
         try:
             # Parse the CIDR notation using ip_network
-            net = ipaddress.IPv4Network(value, strict=False)
+            ipaddress.IPv4Network(value, strict=False)
         except (ipaddress.AddressValueError, ValueError) as e:
             raise ValidationError(f"Invalid CIDR value: {value}. Error: {e}")
 

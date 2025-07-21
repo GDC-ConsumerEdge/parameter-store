@@ -211,7 +211,7 @@ def generate_hls_palette(hex_color):
     g = int(hex_color[2:4], 16) / 255.0
     b = int(hex_color[4:6], 16) / 255.0
 
-    h, l, s = colorsys.rgb_to_hls(r, g, b)
+    h, l, s = colorsys.rgb_to_hls(r, g, b)  # noqa: E741 (l is an accepted variable name in this context)
     palette = {}
 
     shades = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950]
