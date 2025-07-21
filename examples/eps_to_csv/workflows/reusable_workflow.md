@@ -35,7 +35,3 @@ For this reusable workflow to function correctly, the following components and c
 2. **Caller Workflow with Configuration (secrets and variables):**
     *   A correctly configured calling workflow that specifies the `uses:` path, provides the required `inputs`, and passes the necessary `secrets`.
     *   Necessary GitHub secrets (like `EPS_HOST`, `EPS_CLIENT_ID`, GCP WIF credentials) must be configured in the repository or organization settings and passed to the workflow.
-
-
-
-

@@ -48,7 +48,7 @@ jobs:
       eps_host: ${{ vars.EPS_HOST }}
       eps_client_id: ${{ vars.EPS_CLIENT_ID }}
     secrets: inherit
-  
+
   notify_skipped_mode:
     name: Notify Skipped (Incorrect Mode)
     if: ${{ vars.MODE != 'EPS' }}
