@@ -35,13 +35,13 @@ def cluster_intent_to_csv() -> Optional[bytes]:
         row = [str(getattr(intent, field)) for field in field_names]
         writer.writerow(row)
 
-    return output.getvalue().encode('utf-8')  # Encode the string to bytes
+    return output.getvalue().encode("utf-8")  # Encode the string to bytes
 
 
 def map_cluster_intent_names(name):
-    if name == 'cluster':
-        return 'cluster_name'
-    elif name == 'zone_id':
-        return 'store_id'
+    if name == "cluster":
+        return "cluster_name"
+    elif name == "zone_id":
+        return "store_id"
     else:
         return name

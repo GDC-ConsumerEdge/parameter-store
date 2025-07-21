@@ -28,11 +28,11 @@ import os
 from django.conf import settings
 from servestatic import ServeStatic
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'parameter_store.settings')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "parameter_store.settings")
 
 import django
 
-if not hasattr(django, 'apps'):
+if not hasattr(django, "apps"):
     django.setup()
 
 from django.core.management import call_command
@@ -42,7 +42,7 @@ from django.core.management import call_command
 # call_command('makemigrations')
 
 # Database migrations
-call_command('migrate')
+call_command("migrate")
 
 from django.core.wsgi import get_wsgi_application
 

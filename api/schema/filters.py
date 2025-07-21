@@ -12,48 +12,50 @@ from api.schema.out import LogicalExpression
 class ClusterFilter(FilterSchema):
     group: Annotated[
         str | None,
-        Field(q=['group__name', 'secondary_groups__name'],
-              description="Cluster group to match; accepts only one")
+        Field(q=["group__name", "secondary_groups__name"], description="Cluster group to match; accepts only one"),
     ] = None
 
     tags: Annotated[
         str | None,
-        Field(q='tags__name',
-              description="Comma-separated list of clusters tags; set tags_logical_operator " \
-                          "to define how tags are to be queried")
+        Field(
+            q="tags__name",
+            description="Comma-separated list of clusters tags; set tags_logical_operator "
+            "to define how tags are to be queried",
+        ),
     ] = None
 
     # tags_expression should be ignored in a filter expression and is only used to define
     # how tag queries are to be performed, either with a logical AND or OR
     # this field is popped out of the generated filter in overridden `get_filter_expression`
     tags_logical_operator: Annotated[
-        LogicalExpression,
-        Field(q=None, description="The logical operation to use when querying for tags")
+        LogicalExpression, Field(q=None, description="The logical operation to use when querying for tags")
     ] = LogicalExpression.AND
 
     updated_at: Annotated[
         datetime | None,
-        Field(alias='updated_since',
-              q='updated_at__gte',
-              description='Find clusters that were updated after this datetime in ISO 8601 or '
-                          'Unix timestamps; ex: 2025-04-02T12:40:01-05:00')
+        Field(
+            alias="updated_since",
+            q="updated_at__gte",
+            description="Find clusters that were updated after this datetime in ISO 8601 or "
+            "Unix timestamps; ex: 2025-04-02T12:40:01-05:00",
+        ),
     ] = None
 
     def get_filter_expression(self) -> Q:
-        """ Overrides parent method to remove the "tags_logical_operator" from the resulting
+        """Overrides parent method to remove the "tags_logical_operator" from the resulting
         filter expression because it is a meta filter
         """
         exp = super().get_filter_expression()
         for i, q in enumerate(exp.children):
-            if isinstance(q, tuple) and q[0] == 'tags_logical_operator':
+            if isinstance(q, tuple) and q[0] == "tags_logical_operator":
                 del exp.children[i]
                 break
         return exp
 
-    @pydantic.field_validator('tags')
+    @pydantic.field_validator("tags")
     def validate_tags(cls, v: Any) -> list[str]:
         if v:
-            return v.split(',')
+            return v.split(",")
         return v
 
     def filter_tags(self, value: list[str]) -> Q:
