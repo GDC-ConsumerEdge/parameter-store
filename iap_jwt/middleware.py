@@ -105,6 +105,6 @@ class IapJwtMiddleware:
             except google.auth.exceptions.GoogleAuthError as err:
                 logger.error(err)
         else:
-            logger.info(f'IAP middleware is enabled but no IAP JWT found in headers')
+            logger.info('IAP middleware is enabled but no IAP JWT found in headers')
 
         return self.get_response(request)
