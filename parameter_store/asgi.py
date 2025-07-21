@@ -25,17 +25,16 @@ https://docs.djangoproject.com/en/5.1/howto/deployment/asgi/
 
 import os
 
+import django
 from django.conf import settings
+from django.core.asgi import get_asgi_application
+from django.core.management import call_command
 from servestatic import ServeStaticASGI
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "parameter_store.settings")
 
-import django
-
 if not hasattr(django, "apps"):
     django.setup()
-
-from django.core.management import call_command
 
 # Migrations should be an explicit operation run elsewhere. We don't want to have the app
 # makemigrations in prod dynamically at runtime in an uncontrolled manner.
@@ -43,8 +42,6 @@ from django.core.management import call_command
 
 # Database migrations
 call_command("migrate")
-
-from django.core.asgi import get_asgi_application
 
 application = get_asgi_application()
 application = ServeStaticASGI(application, root=settings.STATIC_ROOT)
