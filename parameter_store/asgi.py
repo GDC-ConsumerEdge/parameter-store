@@ -36,7 +36,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "parameter_store.settings")
 if not hasattr(django, "apps"):
     django.setup()
 
-# Migrations should be an explict operation run elsewhere. We don't want to have the app
+# Migrations should be an explicit operation run elsewhere. We don't want to have the app
 # makemigrations in prod dynamically at runtime in an uncontrolled manner.
 # call_command('makemigrations')
 

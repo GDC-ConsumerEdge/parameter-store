@@ -7,7 +7,7 @@
 2. You may now add a new cluster. Required fields are marked with a red asterisk. Related objects are shown inline in
    the add cluster view.
    ![new cluster.png](doc_assets/cujs/new%20cluster.png)
-3. When complete, click the appropriate _Save_ button at the bottom of the scren
+3. When complete, click the appropriate _Save_ button at the bottom of the screen
 4. Validators are run against fields if defined and will report any data errors
 
 ### Notes
@@ -24,7 +24,7 @@
 1. In the left pane, click _Clusters_
 2. Search for the requisite cluster and click on its row in the table
    ![new cluster.png](doc_assets/cujs/new%20cluster.png)
-3. When complete, click the appropriate _Save_ button at the bottom of the scren
+3. When complete, click the appropriate _Save_ button at the bottom of the screen
 4. Validators are run against fields if defined and will report any data errors
 
 ### Notes
@@ -38,7 +38,7 @@
 
 ## Fleet Labels
 
-Fleet labels are key/value pairs associated with a cluster. THey are the EPS representation of fleet memebership labels,
+Fleet labels are key/value pairs associated with a cluster. THey are the EPS representation of fleet membership labels,
 and example of which may be
 found [here](https://cloud.google.com/config-connector/docs/reference/resource-docs/gkehub/gkehubmembership).
 
@@ -93,7 +93,7 @@ with a cluster and provide a cluster-specific value to that field.
 2. Add a custom data field name to _Name_
    ![custom data add.png](doc_assets/cujs/custom%20data%20add.png)
 3. Click the appropriate _Save_ button when complete.
-4. You may now assoicate this field with a cluster. To associate with a cluster, [add](#adding-clusters)
+4. You may now associate this field with a cluster. To associate with a cluster, [add](#adding-clusters)
    or [edit](#editing-clusters) a cluster.
 5. Scroll down to _Cluster Custom Data_ and click _Add Another Cluster Custom Data_
 6. Select the field from the dropdown and fill in the field value
@@ -157,7 +157,7 @@ validator.
 
 Now, check your validator. In this example, we associated a "Valid Region" validator to the "my_custom_field" cluster
 custom data field, using a _Cluster Data Validator Assignment_. To check this, find a cluster where you wish to use this
-field. Then, select the custom field and suppy an invalid value. You should see the value rejected as below with a
+field. Then, select the custom field and supply an invalid value. You should see the value rejected as below with a
 helpful error message.  
 
 

@@ -317,7 +317,7 @@ def process_data(data: Dict, mode: str, rename_rules: Dict[str, str]) -> pd.Data
         else:
             logger.info(f"No non-conflicting prefix removals needed for mode '{mode}'.")
 
-        #  Handle duplicates already present in source JSON after flattening. First occurence is kept assuming the data is the same in both the fields.
+        #  Handle duplicates already present in source JSON after flattening. First occurrence is kept assuming the data is the same in both the fields.
         cols_after_rename = flattened_df.columns
         if cols_after_rename.has_duplicates:
             duplicate_mask = cols_after_rename.duplicated(keep="first")

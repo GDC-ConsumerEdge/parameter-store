@@ -144,7 +144,7 @@ def update_csv_with_new_rows(
             for col_name in current_expected_columns:
                 if col_name == "cluster_name":
                     # cluster_name must exist in source_row if this logic is reached. though these conditions for cluster_name, cluster_group and cluster_tags..
-                    # are not neccessary, keeping them explicitly for better readability and future changes on these important fields.
+                    # are not necessary, keeping them explicitly for better readability and future changes on these important fields.
                     new_row_data[col_name] = source_row.get("cluster_name", pd.NA)
                 elif col_name == "cluster_group":
                     new_row_data[col_name] = source_row.get("cluster_group", pd.NA)
