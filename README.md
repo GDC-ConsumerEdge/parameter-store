@@ -376,7 +376,7 @@ temporarily provisioned in the EPS network with access to Cloud SQL via a privat
 
 The Terraform folder contains optional [resources](examples/terraform/opt-gcb-data-loader.tf) to stand up infrastructure
 for a Cloud Build data loader pipeline. If you do not want these [resources](examples/terraform/opt-gcb-data-loader.tf),
-you should comment out or delete the resources in this folder. In addtion to this file, there are references to these
+you should comment out or delete the resources in this folder. In addition to this file, there are references to these
 resources elsewhere — search the folder for TODO lines related to the data loader and remove them.
 
 ### How Does Data Loading Work?

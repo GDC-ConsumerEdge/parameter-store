@@ -1,6 +1,6 @@
 ### Project Enabled Services (before running Terraform)
 * serviceconsumermanagement.googleapis.com
-* sqladmin.googleapis.com 
+* sqladmin.googleapis.com
 * compute.googleapis.com
 
 ### Terraform GSA IAM Perms
@@ -11,22 +11,22 @@
 * Compute Load Balancer Admin
   * App related load balancer components
 * Compute Network Admin
-  * Create VPC, subnets, 
+  * Create VPC, subnets,
 * Secret Manager Admin
   * To create EPS-related app secrets  
 * Serverless VPC Access Admin
   * To create serverless VPC connector
 * Service Usage Admin
   * Enable EPS-required services
-* Service Account Admin 
+* Service Account Admin
   * for Cloud Run GSA
 * Project IAM Admin
-  * to grant Cloud Run GSA IAM access to Cloud SQL 
+  * to grant Cloud Run GSA IAM access to Cloud SQL
 * Artifact Registry Reader (
   * on repo for EPS Cloud Run image
-* Certificate Manager Owner 
+* Certificate Manager Owner
   * Generates a Google-managed cert for LB that fronts the EPS app
-* DNS Admin 
+* DNS Admin
   * Managing zones in GCP to be used by Cert Manager and as app FQDN
 * IAP Policy Admin
   * Grant user access to EPS app through IAP
@@ -41,7 +41,7 @@
 
 File: `terraform/opt-gcb-data-loader.tf` ([here](./opt-gcb-data-loader.tf))
 
-This Cloud Build setup is used to run data loader scripts into the Cloud SQL database.  It used Cloud Build to provide 
+This Cloud Build setup is used to run data loader scripts into the Cloud SQL database.  It used Cloud Build to provide
 a preconfigured environment from which to load data through EPS into the Cloud SQL database.  
 
 The Google Cloud Build Service Account email (which looks like `gcb-eps-data-loader@my-project.iam.gserviceaccount.com`) requires

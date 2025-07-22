@@ -11,10 +11,10 @@ def require_permissions(api: NinjaAPI, *permissions: list[str]) -> Callable:
     def decorator(func):
         @functools.wraps(func)
         def wrapped(request, *args, **kwargs):
-            logger.info(f'Checking permissions on {func.__name__} for {request.user}')
+            logger.info(f"Checking permissions on {func.__name__} for {request.user}")
             has_perms = request.user.has_perms(permissions)
             if not has_perms:
-                return api.create_response(request, {'message': 'Permission denied'}, status=403)
+                return api.create_response(request, {"message": "Permission denied"}, status=403)
             return func(request, *args, **kwargs)
 
         return wrapped
@@ -23,7 +23,7 @@ def require_permissions(api: NinjaAPI, *permissions: list[str]) -> Callable:
 
 
 def paginate(queryset, limit, offset):
-    """ Paginates a queryset by applying a limit and offset.
+    """Paginates a queryset by applying a limit and offset.
 
     Args:
         queryset (QuerySet): The Django QuerySet to paginate.
@@ -34,4 +34,4 @@ def paginate(queryset, limit, offset):
         QuerySet: A subset of the original queryset based on the limit and offset.
     """
 
-    return queryset[offset:offset + limit]
+    return queryset[offset : offset + limit]

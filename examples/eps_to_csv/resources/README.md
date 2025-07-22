@@ -19,17 +19,17 @@ The script requires Google Cloud [Application Default Credentials](https://cloud
 ### Required Environment Variables
 
 *   EPS\_CLIENT\_ID: The [OAuth 2.0 Client ID](https://console.cloud.google.com/auth/clients) associated with the IAP protecting the EPS API. The script uses this as the audience when generating the ID token.
-    
+
 *   EPS\_HOST: The hostname of the EPS API (e.g., eps.example.com). This could be a FQDN or an IP address only.
-    
+
 *   SERVICE\_ACCOUNT: The email address of the Google Service Account that the script will impersonate to generate the ID token for IAP.
-    
+
 *   GOOGLE\_APPLICATION\_CREDENTIALS: Path to the Google Cloud credentials file. This file should contain credentials that have permission to impersonate the target SERVICE\_ACCOUNT specified above (see Permissions section). This could be a Workload Identity Federation credential file when run in GitHub Actions or a standard service account key file for local execution (though using Workload Identity is generally preferred).
-    
+
 *   OUTPUT\_INTENT\_CSV (Optional): Overrides the default output path for the intent CSV (cluster\_intent\_sot.csv). Used when the -intent flag is passed.
-    
+
 *   OUTPUT\_DATA\_CSV (Optional): Overrides the default output path for the data CSV (source\_of\_truth.csv). Used when the -data flag is passed.
-    
+
 *   LOG\_LEVEL (Optional): Sets the logging level (e.g., DEBUG, INFO, WARNING). Defaults to INFO.
 
 ### Configuration File (`config.ini`)
@@ -62,7 +62,7 @@ This Python script orchestrates the entire process:
 
 ### Install Dependencies
 
-These can be installed from the requirements file in the same directory as the python script using : 
+These can be installed from the requirements file in the same directory as the python script using :
 
 ``` pip install -r requirements.txt```
 
@@ -90,14 +90,14 @@ Authentication and Permissions
 The Google Service Account specified by the `SERVICE_ACCOUNT` environment variable needs the following permissions:
 
 1.  **IAM Permissions**:
-    
+
     *   `iam.serviceAccounts.getOpenIdToken` (typically included in the `Service Account Token Creator role : roles/iam.serviceAccountTokenCreator`). This permission is required for the generate\_id\_token call made by the script. The principal running the script (e.g., the GitHub Actions workflow identity or the user running it locally) needs to have this role on the target SERVICE\_ACCOUNT.
-        
+
 2.  **IAP Permissions**:
-    
+
     *   The service account needs to be granted access to the IAP-protected EPS API. This is typically done by adding the service account email to the `IAP-secured Web App User` role (roles/iap.httpsResourceAccessor) on the IAP configuration for the backend service hosting the EPS API.
 
-If a User Identity is used to generate the application default credentials : 
+If a User Identity is used to generate the application default credentials :
 
 1. * The user identity should have the following permissions on the impersonated service Account :
      * Service Account Token Creator (roles/iam.serviceAccountTokenCreator)

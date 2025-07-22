@@ -1,8 +1,8 @@
 
 #This workflow orchestrates the hydration process based on the repository's MODE.
 #If MODE is 'GIT', it triggers hydration directly, using the CSV files present in the repo.
-#If MODE is 'EPS', it first checks for drift between the PR branch's Source of Truth (SoT) CSV and the live data in EPS. 
-# If no drift is detected, it triggers hydration. 
+#If MODE is 'EPS', it first checks for drift between the PR branch's Source of Truth (SoT) CSV and the live data in EPS.
+# If no drift is detected, it triggers hydration.
 # If drift is detected, it posts a comment on the PR indicating the drift (handled in the reusable workflow)
 name: Check and Run Hydration
 on:
@@ -29,7 +29,7 @@ jobs:
       run: |
         echo "SUCCESS: Hydration would be triggered here directly because you're using GIT mode"
         echo "Mode: ${{ vars.MODE }}"
-    
+
 
   # EPS MODE
   check_drift_eps_mode:
@@ -76,4 +76,3 @@ jobs:
         echo "SUCCESS: Hydration would be triggered here because /check-drift succeeded and no diff is detected."
         echo "Drift result: ${{ needs.check_drift_eps_mode.result }}"
         echo "Drift Detection output: ${{ needs.check_drift_eps_mode.outputs.drift_detected }}"
-

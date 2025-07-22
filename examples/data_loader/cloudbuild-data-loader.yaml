@@ -11,7 +11,7 @@ steps:
     id: setup-cloud-sql-proxy
     script: |
       #!/usr/bin/env bash
-      chmod +x cloud-sql-proxy; 
+      chmod +x cloud-sql-proxy;
       ./cloud-sql-proxy -h;
 
   - name: ${_EPS_IMAGE}
@@ -26,7 +26,7 @@ steps:
       env | sort
       mkdir -p /cloudsql
       chmod 777 /cloudsql
-      ./cloud-sql-proxy --unix-socket /cloudsql --debug-logs --private-ip ${_INSTANCE_CONNECTION_NAME} & 
+      ./cloud-sql-proxy --unix-socket /cloudsql --debug-logs --private-ip ${_INSTANCE_CONNECTION_NAME} &
       export PYTHONPATH=/app;
       python3 load_db.py ${_LOADER_ARGS}
     secretEnv:

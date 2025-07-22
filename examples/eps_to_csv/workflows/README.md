@@ -58,13 +58,13 @@ This workflow relies on the following repository variables being correctly confi
 
 ### 2. `call_hydration_pipeline_full.yaml` - Check and Run Hydration
 
-This workflow automatically runs on pull requests that modify files within the `hydrated/` or `templates/` directories. 
+This workflow automatically runs on pull requests that modify files within the `hydrated/` or `templates/` directories.
 
-In `EPS` mode : 
-* It checks for configuration drift against the Edge Parameter Store (EPS). 
-* If no drift is detected, it proceeds ** trigger the actual hydration process. 
+In `EPS` mode :
+* It checks for configuration drift against the Edge Parameter Store (EPS).
+* If no drift is detected, it proceeds ** trigger the actual hydration process.
 
-If `GIT` mode : 
+If `GIT` mode :
 *  Upon trigger, directly runs hydration bypassing the step for checking drift from EPS.
 
 **Trigger:**
@@ -74,7 +74,7 @@ If `GIT` mode :
 
 **Usage:**
 
-*   This workflow runs automatically when pull requests meeting the trigger criteria are opened or updated. 
+*   This workflow runs automatically when pull requests meeting the trigger criteria are opened or updated.
 *   It is intended for when template file changes are made in the cluster manifest repositories like `edge-workloads`, `edge-platform`.
 *   When pull requests are created to the main branch, this workflow orchestrates the process of validation of SourceOfTruth and hydration.
 
@@ -107,7 +107,7 @@ This workflow allows triggering actions related to the Edge Parameter Store (EPS
 3.  Run `/fetch-eps` to verify if the repository source_of_truth is up-to-date with the EPS data.
 4.  If any drift is detected, Run `\sync-eps` command to generate the latest source_of_truth from EPS and commit to your source branch on the Pull Request.
 5.  Because the pull_request is now synchronized, the [call_hydration_pipeline_full](./call_hydration_pipeline_full.yaml) workflow gets triggered and runs hydration.
-6.  Based on the command run, the workflow will trigger, add an initial "eyes" reaction as acknowledgement. 
+6.  Based on the command run, the workflow will trigger, add an initial "eyes" reaction as acknowledgement.
 7.  It then runs the reusable workflow with the required parameters, and update the comment reaction based on the outcome.
 8.  Results/reports from the reusable workflow are posted as separate comments on the PR.
 

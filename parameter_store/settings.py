@@ -26,6 +26,7 @@ https://docs.djangoproject.com/en/5.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
+
 import colorsys
 import os
 from pathlib import Path
@@ -41,56 +42,52 @@ version = "v1.0.0"
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DJANGO_DEBUG', 'false').lower() == 'true'
+DEBUG = os.environ.get("DJANGO_DEBUG", "false").lower() == "true"
 
 # SECURITY WARNING: keep the secret key used in production secret!
 # TODO: Update this when deploying into production
 # THIS VALUE IS NOT SECURE FOR PRODUCTION USE
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY',
-                            'django-insecure-%yzr3^+)s&c2$4sxk702l#m0(52xd81^e40bg3tq4j+xo$wy@v')
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "django-insecure-%yzr3^+)s&c2$4sxk702l#m0(52xd81^e40bg3tq4j+xo$wy@v")
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ["*"]
 
-CSRF_TRUSTED_ORIGINS = [
-    'https://' + x.strip()
-    for x in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',')
-]
+CSRF_TRUSTED_ORIGINS = ["https://" + x.strip() for x in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",")]
 
 # Application definition
 INSTALLED_APPS = [
-    'unfold',
-    'unfold.contrib.inlines',
-    'unfold.contrib.filters',
-    'unfold.contrib.guardian',
-    'guardian',
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'parameter_store',
+    "unfold",
+    "unfold.contrib.inlines",
+    "unfold.contrib.filters",
+    "unfold.contrib.guardian",
+    "guardian",
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "parameter_store",
     "api",
 ]
 
 if DEBUG:
-    INSTALLED_APPS += ['debug_toolbar']
+    INSTALLED_APPS += ["debug_toolbar"]
 
-MIDDLEWARE = ['debug_toolbar.middleware.DebugToolbarMiddleware'] if DEBUG else []
+MIDDLEWARE = ["debug_toolbar.middleware.DebugToolbarMiddleware"] if DEBUG else []
 
 MIDDLEWARE += [
-    'django.middleware.security.SecurityMiddleware',
-    'servestatic.middleware.ServeStaticMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'iap_jwt.middleware.IapJwtMiddleware',
+    "django.middleware.security.SecurityMiddleware",
+    "servestatic.middleware.ServeStaticMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "iap_jwt.middleware.IapJwtMiddleware",
 ]
 
-ROOT_URLCONF = 'parameter_store.urls'
+ROOT_URLCONF = "parameter_store.urls"
 
 TEMPLATES = [
     {
@@ -113,19 +110,19 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'parameter_store.wsgi.application'
+WSGI_APPLICATION = "parameter_store.wsgi.application"
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('DB_NAME', 'eps'),  # Default database name is 'eps'
-        'USER': os.environ.get('DB_USER', 'eps'),  # Default username
-        'PASSWORD': os.environ.get('DB_PASSWORD', 's2K_Nz_gwRtjf.BCCPTmctkZ'),  # Default password
-        'HOST': os.environ.get('DB_HOST', 'localhost'),  # Default host
-        'PORT': os.environ.get('DB_PORT', '5432'),  # Default port
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("DB_NAME", "eps"),  # Default database name is 'eps'
+        "USER": os.environ.get("DB_USER", "eps"),  # Default username
+        "PASSWORD": os.environ.get("DB_PASSWORD", "s2K_Nz_gwRtjf.BCCPTmctkZ"),  # Default password
+        "HOST": os.environ.get("DB_HOST", "localhost"),  # Default host
+        "PORT": os.environ.get("DB_PORT", "5432"),  # Default port
     }
 }
 
@@ -134,39 +131,36 @@ DATABASES = {
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
 
-AUTHENTICATION_BACKENDS = [
-    'django.contrib.auth.backends.ModelBackend',
-    'guardian.backends.ObjectPermissionBackend'
-]
+AUTHENTICATION_BACKENDS = ["django.contrib.auth.backends.ModelBackend", "guardian.backends.ObjectPermissionBackend"]
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.1/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = "en-us"
 
 USE_I18N = True
 
 USE_TZ = True
-TIME_ZONE = os.environ.get('TIME_ZONE', 'UTC')
+TIME_ZONE = os.environ.get("TIME_ZONE", "UTC")
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
-STATIC_ROOT = 'staticfiles'
+STATIC_ROOT = "staticfiles"
 
-STATIC_URL = 'static/'
+STATIC_URL = "static/"
 
 STORAGES = {
     "staticfiles": {
@@ -177,47 +171,47 @@ STORAGES = {
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
         },
     },
-    'root': {
-        'handlers': ['console'],
-        'level': 'WARNING',
+    "root": {
+        "handlers": ["console"],
+        "level": "WARNING",
     },
-    'loggers': {
-        'django': {
-            'handlers': ['console'],
-            'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
-            'propagate': False,
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": os.getenv("DJANGO_LOG_LEVEL", "INFO"),
+            "propagate": False,
         },
     },
 }
 
-INTERNAL_IPS = ['127.0.0.1']
+INTERNAL_IPS = ["127.0.0.1"]
 
 SECURE_SSL_REDIRECT = False
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 CORS_ALLOW_CREDENTIALS = True
-SESSION_COOKIE_AGE = os.environ.get('PARAM_STORE_COOKIE_TTL', 3600)  # one hour default
+SESSION_COOKIE_AGE = os.environ.get("PARAM_STORE_COOKIE_TTL", 3600)  # one hour default
 
 
 # generate hls color palette based on company color hex
 def generate_hls_palette(hex_color):
-    hex_color = hex_color.lstrip('#')
+    hex_color = hex_color.lstrip("#")
 
     r = int(hex_color[0:2], 16) / 255.0
     g = int(hex_color[2:4], 16) / 255.0
     b = int(hex_color[4:6], 16) / 255.0
 
-    h, l, s = colorsys.rgb_to_hls(r, g, b)
+    h, l, s = colorsys.rgb_to_hls(r, g, b)  # noqa: E741 (l is an accepted variable name in this context)
     palette = {}
 
     shades = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950]
@@ -230,7 +224,7 @@ def generate_hls_palette(hex_color):
 
         new_r, new_g, new_b = colorsys.hls_to_rgb(h, new_l, s)
         r, g, b = int(new_r * 255), int(new_g * 255), int(new_b * 255)
-        new_hex = f'#{r:02x}{g:02x}{b:02x}'
+        new_hex = f"#{r:02x}{g:02x}{b:02x}"
 
         palette[str(shade)] = new_hex
 
@@ -273,21 +267,14 @@ UNFOLD = {
 if img_path:
     UNFOLD["SITE_ICON"] = lambda request: static(img_path)
     UNFOLD["SITE_FAVICONS"] = [
-        {
-            "rel": "icon",
-            "sizes": "32x32",
-            "type": "image/svg+xml",
-            "href": lambda request: static(img_path)
-        }
+        {"rel": "icon", "sizes": "32x32", "type": "image/svg+xml", "href": lambda request: static(img_path)}
     ]
 
 # Defaults to enabled
-IAP_ENABLED = str_to_bool(os.environ.get('PARAM_STORE_IAP_ENABLED', True))
-IAP_AUDIENCE = os.environ.get('PARAM_STORE_IAP_AUDIENCE') if os.environ.get(
-    'PARAM_STORE_IAP_AUDIENCE') else None
-SUPERUSERS = {i for i in os.environ.get('PARAM_STORE_SUPERUSERS', '').split(',')}
+IAP_ENABLED = str_to_bool(os.environ.get("PARAM_STORE_IAP_ENABLED", True))
+IAP_AUDIENCE = os.environ.get("PARAM_STORE_IAP_AUDIENCE") if os.environ.get("PARAM_STORE_IAP_AUDIENCE") else None
+SUPERUSERS = {i for i in os.environ.get("PARAM_STORE_SUPERUSERS", "").split(",")}
 
-API_INTERNAL_STATICFILES = str_to_bool(
-    os.environ.get('PARAM_STORE_API_INTERNAL_STATICFILES', True))
+API_INTERNAL_STATICFILES = str_to_bool(os.environ.get("PARAM_STORE_API_INTERNAL_STATICFILES", True))
 if API_INTERNAL_STATICFILES:
-    INSTALLED_APPS.insert(0, 'ninja')
+    INSTALLED_APPS.insert(0, "ninja")

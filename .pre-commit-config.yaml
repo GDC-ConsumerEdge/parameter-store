@@ -1,5 +1,10 @@
 default_language_version:
   python: python3.12
+
+default_install_hook_types:
+  - pre-commit
+  - commit-msg
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -25,3 +30,11 @@ repos:
       # Run the formatter.
       - id: ruff-format
         name: Code formatting with Ruff
+
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.2.0
+    hooks:
+      - id: conventional-pre-commit
+        name: Validate conventional commit message
+        stages: [commit-msg]
+        args: [--verbose]

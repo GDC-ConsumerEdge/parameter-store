@@ -25,26 +25,23 @@ https://docs.djangoproject.com/en/5.1/howto/deployment/wsgi/
 
 import os
 
+import django
 from django.conf import settings
+from django.core.management import call_command
+from django.core.wsgi import get_wsgi_application
 from servestatic import ServeStatic
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'parameter_store.settings')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "parameter_store.settings")
 
-import django
-
-if not hasattr(django, 'apps'):
+if not hasattr(django, "apps"):
     django.setup()
 
-from django.core.management import call_command
-
-# Migrations should be an explict operation run elsewhere. We don't want to have the app
+# Migrations should be an explicit operation run elsewhere. We don't want to have the app
 # makemigrations in prod dynamically at runtime in an uncontrolled manner.
 # call_command('makemigrations')
 
 # Database migrations
-call_command('migrate')
-
-from django.core.wsgi import get_wsgi_application
+call_command("migrate")
 
 application = get_wsgi_application()
 application = ServeStatic(application, root=settings.STATIC_ROOT)

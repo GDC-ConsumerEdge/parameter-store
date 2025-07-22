@@ -18,21 +18,20 @@ import unfold.admin as uadmin
 import unfold.sites
 from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from django.contrib.auth.models import Group
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Group, User
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 
 
 class CustomAdminSite(unfold.sites.UnfoldAdminSite):
-    site_header = 'Parameter Store Admin'
-    site_title = 'Parameter Store Admin'
-    index_title = 'Parameter Store Admin'
+    site_header = "Parameter Store Admin"
+    site_title = "Parameter Store Admin"
+    index_title = "Parameter Store Admin"
 
     def has_permission(self, request):
         return request.user.is_superuser
 
 
-admin_site = CustomAdminSite(name='custom_admin')
+admin_site = CustomAdminSite(name="custom_admin")
 
 
 class UserAdmin(BaseUserAdmin, uadmin.ModelAdmin):

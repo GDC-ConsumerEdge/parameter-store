@@ -154,7 +154,7 @@ jobs:
             repository: ${{ needs.parse_and_prepare.outputs.repo_full_name }}
             comment-id: ${{ needs.parse_and_prepare.outputs.comment_id }}
             reactions: confused
-  
+
   notify_skipped_mode:
     name: Notify Skipped (Incorrect Mode)
     # Run only if MODE is NOT EPS
@@ -166,4 +166,3 @@ jobs:
           echo "::warning::Workflow run skipped."
           echo "The current workflow can only be run when the repository variable MODE is set to 'EPS'."
           echo "Current MODE is: ${{ vars.MODE }}"
-

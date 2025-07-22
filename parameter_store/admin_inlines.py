@@ -4,8 +4,15 @@ from django.core.exceptions import ValidationError
 from django.forms import ModelForm
 from unfold import admin as uadmin
 
-from parameter_store.models import ClusterIntent, Tag, ClusterTag, ClusterFleetLabel, \
-    CustomDataField, ClusterData, GroupData
+from parameter_store.models import (
+    ClusterData,
+    ClusterFleetLabel,
+    ClusterIntent,
+    ClusterTag,
+    CustomDataField,
+    GroupData,
+    Tag,
+)
 
 
 class ClusterIntentInline(uadmin.StackedInline):
@@ -16,10 +23,10 @@ class ClusterIntentInline(uadmin.StackedInline):
 
 def get_tag_choices():
     """Caches Tag choices for inline forms."""
-    cache_key = 'tag_choices_inline'  # Distinct cache key for inlines
+    cache_key = "tag_choices_inline"  # Distinct cache key for inlines
     choices = cache.get(cache_key)
     if choices is None:
-        choices = list(Tag.objects.values_list('id', 'name'))
+        choices = list(Tag.objects.values_list("id", "name"))
         cache.set(cache_key, choices, timeout=300)  # Cache for 5 minutes
     return choices
 
@@ -29,10 +36,10 @@ class ClusterTagInlineForm(forms.ModelForm):
 
     class Meta:
         model = ClusterTag
-        fields = '__all__'
+        fields = "__all__"
 
     def clean_tag(self):
-        field_id = self.cleaned_data.get('tag')
+        field_id = self.cleaned_data.get("tag")
         if field_id:
             try:
                 return Tag.objects.get(pk=field_id)
@@ -47,7 +54,7 @@ class ClusterTagInline(uadmin.TabularInline):
     extra = 0
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('cluster', 'tag')
+        return super().get_queryset(request).select_related("cluster", "tag")
 
 
 class ClusterFleetLabelsInline(uadmin.TabularInline):
@@ -55,16 +62,15 @@ class ClusterFleetLabelsInline(uadmin.TabularInline):
     extra = 0
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('cluster')
+        return super().get_queryset(request).select_related("cluster")
 
 
 def get_data_field_choices():
     """Caches ClusterDataField choices."""
-    cache_key = 'cluster_data_field_choices'
+    cache_key = "cluster_data_field_choices"
     choices = cache.get(cache_key)
     if choices is None:
-        choices = list(
-            CustomDataField.objects.values_list('id', 'name'))
+        choices = list(CustomDataField.objects.values_list("id", "name"))
         cache.set(cache_key, choices, timeout=300)  # Cached for 5 minutes
     return choices
 
@@ -73,7 +79,7 @@ class DataInlineForm(ModelForm):
     field = forms.ChoiceField(choices=get_data_field_choices)
 
     def clean_field(self):
-        field_id = self.cleaned_data.get('field')
+        field_id = self.cleaned_data.get("field")
         if field_id:
             try:
                 return CustomDataField.objects.get(pk=field_id)
@@ -85,7 +91,7 @@ class DataInlineForm(ModelForm):
 class ClusterDataInlineForm(DataInlineForm):
     class Meta:
         model = ClusterData
-        fields = '__all__'
+        fields = "__all__"
 
 
 class ClusterDataInline(uadmin.TabularInline):
@@ -94,13 +100,13 @@ class ClusterDataInline(uadmin.TabularInline):
     extra = 0
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('cluster', 'field')
+        return super().get_queryset(request).select_related("cluster", "field")
 
 
 class GroupDataInlineForm(DataInlineForm):
     class Meta:
         model = GroupData
-        fields = '__all__'
+        fields = "__all__"
 
 
 class GroupDataInline(uadmin.TabularInline):
@@ -109,4 +115,4 @@ class GroupDataInline(uadmin.TabularInline):
     extra = 0
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('group', 'field')
+        return super().get_queryset(request).select_related("group", "field")
