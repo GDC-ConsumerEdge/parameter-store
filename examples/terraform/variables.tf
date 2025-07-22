@@ -25,9 +25,9 @@ variable "eps_project_id" {
 }
 
 variable "secrets_project_id" {
-  description = "Optional ID of GCP project for Secret Manager secrets, if applicable. Defaults to the value of 'eps_project_id'."
-  default     = null
+  description = "Optional ID of GCP project for Secret Manager secrets. If left empty, it defaults to the value of 'eps_project_id'."
   type        = string
+  default     = ""
 }
 
 variable "region" {
@@ -275,8 +275,6 @@ variable "trigger_service_account_email" {
 }
 
 variable "github_app_id" {
-  description = "Cloud build app id for your github organisation"
-  type        = number # Using number type as it's an ID. String would also work.
-  nullable    = false  # Make it mandatory to provide a value
-  default     = null  # {your github cloudbuild app id}"
+  description = "Cloud Build app id for your Github organisation. This is the numeric ID of the GitHub App installation."
+  type        = number
 }
