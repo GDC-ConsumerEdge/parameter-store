@@ -3,46 +3,33 @@
 * sqladmin.googleapis.com
 * compute.googleapis.com
 
-### Terraform GSA IAM Perms
-* Cloud Run Admin
-  * EPS app
-* Cloud SQL Admin
-  * EPS requires a DB and presumes Cloud SQL
-* Compute Load Balancer Admin
-  * App related load balancer components
-* Compute Network Admin
-  * Create VPC, subnets,
-* Secret Manager Admin
-  * To create EPS-related app secrets  
-* Serverless VPC Access Admin
-  * To create serverless VPC connector
-* Service Usage Admin
-  * Enable EPS-required services
-* Service Account Admin
-  * for Cloud Run GSA
-* Project IAM Admin
-  * to grant Cloud Run GSA IAM access to Cloud SQL
-* Artifact Registry Reader (
-  * on repo for EPS Cloud Run image
-* Certificate Manager Owner
-  * Generates a Google-managed cert for LB that fronts the EPS app
-* DNS Admin
-  * Managing zones in GCP to be used by Cert Manager and as app FQDN
-* IAP Policy Admin
-  * Grant user access to EPS app through IAP
-* Cloud Storage Admin
-  * To create Cloud Build storage bucket to hold submitted jobs
-  * Optional if using Cloud Build data loader features
-* Cloud Build WorkerPool Owner
-  * To create Cloud Build private worker pools for data loading
-  * Optional if using Cloud build data loader features
+### Terraform Google Service Account (GSA) Required IAM Permissions
+
+| Permission Name               | IAM Role                            | Description                                                                 |
+| ----------------------------- | ----------------------------------- | --------------------------------------------------------------------------- |
+| Cloud Run Admin               | `roles/run.admin`                   | Required for the EPS (Edge Parameter Store) application.                |
+| Cloud SQL Admin               | `roles/cloudsql.admin`              | EPS requires a database, and this setup presumes the use of Cloud SQL.      |
+| Compute Load Balancer Admin   | `roles/compute.loadBalancerAdmin`   | Manages the load balancer components associated with the application.       |
+| Compute Network Admin         | `roles/compute.networkAdmin`        | Creates the necessary VPC, subnets, and other networking resources.         |
+| Secret Manager Admin          | `roles/secretmanager.admin`         | Manages the application secrets related to EPS.                             |
+| Serverless VPC Access Admin   | `roles/vpcaccess.admin`             | Creates a connector to allow serverless services to access resources in the VPC. |
+| Service Usage Admin           | `roles/serviceusage.serviceUsageAdmin` | Enables the services required by EPS.                                       |
+| Service Account Admin         | `roles/iam.serviceAccountAdmin`     | Manages the Google Service Account (GSA) for Cloud Run.                     |
+| Project IAM Admin             | `roles/resourcemanager.projectIamAdmin` | Grants the Cloud Run GSA the necessary IAM access to Cloud SQL.             |
+| Artifact Registry Reader      | `roles/artifactregistry.reader`     | Allows read access to the repository containing the EPS Cloud Run image.    |
+| Certificate Manager Owner     | `roles/certificatemanager.owner`    | Generates a Google-managed certificate for the load balancer.               |
+| DNS Admin                     | `roles/dns.admin`                   | Manages DNS zones in GCP.                                                   |
+| IAP Policy Admin              | `roles/iap.admin`                   | Grants user access to the EPS application through Identity-Aware Proxy (IAP). |
+| Cloud Storage Admin           | `roles/storage.admin`               | Creates a Cloud Storage bucket to hold submitted jobs for Cloud Build.      |
+| Cloud Build WorkerPool Owner  | `roles/cloudbuild.workerPoolOwner`  | Creates private worker pools for Cloud Build for data loading.              |
+
 
 ### Cloud Build Data Loader
 
 File: `terraform/opt-gcb-data-loader.tf` ([here](./opt-gcb-data-loader.tf))
 
 This Cloud Build setup is used to run data loader scripts into the Cloud SQL database.  It used Cloud Build to provide
-a preconfigured environment from which to load data through EPS into the Cloud SQL database.  
+a preconfigured environment from which to load data through EPS into the Cloud SQL database.
 
 The Google Cloud Build Service Account email (which looks like `gcb-eps-data-loader@my-project.iam.gserviceaccount.com`) requires
 read access to the Artifact Registry location of the EPS image.  Consider using [Artifact Registry Reader](https://cloud.google.com/artifact-registry/docs/access-control#roles).
