@@ -37,7 +37,7 @@ resource "google_project_iam_member" "gcb-log-writer" {
 
 resource "google_storage_bucket" "gcb" {
   location                    = "us"
-  name                        = "${data.google_project.eps.name}_cloudbuild"
+  name                        = "${var.eps_project_id}_cloudbuild"
   uniform_bucket_level_access = true
   force_destroy               = true
 }
