@@ -35,7 +35,7 @@ resource "random_password" "database" {
 
 resource "google_secret_manager_secret" "eps-db-pass" {
   secret_id = "${var.app_name_short}-db-pass"
-  project   = var.secrets_project_id
+  project   = local.secrets_project_id
 
   labels = {
     app  = var.app_name_short
@@ -70,7 +70,7 @@ resource "random_password" "eps-secret" {
 
 resource "google_secret_manager_secret" "eps-secret" {
   secret_id = "${var.app_name_short}-app-secret"
-  project   = var.secrets_project_id
+  project   = local.secrets_project_id
 
   labels = {
     app  = var.app_name_short
