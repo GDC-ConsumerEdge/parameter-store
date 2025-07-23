@@ -17,35 +17,27 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = ">=6.17.0"
+      version = ">=6.45.0"
     }
     google-beta = {
       source  = "hashicorp/google-beta"
-      version = ">=6.17.0"
+      version = ">=6.45.0"
     }
   }
 
-  # FIXME: configure backend when using in prod
+  # Configure backend when using in prod
   # backend "gcs" {}
 }
-
-
-
 locals {
   terraform_service_account_email = length(split(":", var.terraform_principal)) > 1 ? split(":", var.terraform_principal)[1] : var.terraform_principal
 }
 
 provider "google" {
-  project = var.eps_project_id
-  # impersonate_service_account = "parameter-store-tf@living-on-the-edge-tools.iam.gserviceaccount.com"
+  project                     = var.eps_project_id
+  impersonate_service_account = local.terraform_service_account_email
 }
-# provider "google" {
-#   project                     = var.eps_project_id
-#   region                      = var.region
-#   impersonate_service_account = local.terraform_service_account_email
-# }
 
 provider "google-beta" {
-  project = var.eps_project_id
-  # impersonate_service_account = "parameter-store-tf@living-on-the-edge-tools.iam.gserviceaccount.com"
+  project                     = var.eps_project_id
+  impersonate_service_account = local.terraform_service_account_email
 }
