@@ -8,23 +8,24 @@ SERVICE_ACCOUNT_EMAIL="${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount
 
 # IAM roles to be assigned to the service account
 ROLES_TO_ADD=(
-  "roles/run.admin"
-  "roles/cloudsql.admin"
-  "roles/compute.networkAdmin"
-  "roles/secretmanager.admin"
-  "roles/vpcaccess.admin"
-  "roles/serviceusage.serviceUsageAdmin"
-  "roles/iam.serviceAccountAdmin"
-  "roles/resourcemanager.projectIamAdmin"
   "roles/artifactregistry.reader"
   "roles/certificatemanager.owner"
-  "roles/dns.admin"
-  "roles/iap.admin"
-  "roles/storage.admin"
+  "roles/cloudbuild.connectionAdmin"
   "roles/cloudbuild.workerPoolOwner"
+  "roles/cloudsql.admin"
+  "roles/compute.networkAdmin"
+  "roles/dns.admin"
+  "roles/iam.serviceAccountAdmin"
+  "roles/iap.admin"
+  "roles/resourcemanager.projectIamAdmin"
+  "roles/run.admin"
+  "roles/secretmanager.admin"
+  "roles/serviceusage.serviceUsageAdmin"
+  "roles/storage.admin"
+  "roles/vpcaccess.admin"
 )
 
-echo "Creating service account '${SERVICE_ACCOUNT_NAME}' in project '${PROJECT_ID}'..."
+echo -e "\nℹ️ Creating service account '${SERVICE_ACCOUNT_NAME}' in project '${PROJECT_ID}'..."
 
 gcloud iam service-accounts create "${SERVICE_ACCOUNT_NAME}" \
   --display-name="Parameter Store Terraform GSA" \
@@ -41,3 +42,12 @@ for role in "${ROLES_TO_ADD[@]}"; do
 done
 
 echo -e "\n✅ Successfully created the "${SERVICE_ACCOUNT_NAME}" service account and assigned all roles."
+
+# Grant the current user account the Service Account Token Creator role on the Terraform service account
+# This enables service account impersonation for the Terraform SA
+echo -e "\nℹ️ Adding IAM Policy Binding for ${SERVICE_ACCOUNT_EMAIL}"
+
+CURRENT_USER=$(gcloud config get-value account)
+gcloud iam service-accounts add-iam-policy-binding "${SERVICE_ACCOUNT_EMAIL}" \
+  --member="user:${CURRENT_USER}" \
+  --role="roles/iam.serviceAccountTokenCreator"
