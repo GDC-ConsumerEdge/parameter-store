@@ -36,6 +36,13 @@ resource "google_service_account" "eps" {
   description  = "EPS app Cloud Run service"
 }
 
+# GSA for the Cloud Build trigger
+resource "google_service_account" "cloudbuild_gsa" {
+  account_id   = "${var.app_name_short}-cb-trigger"
+  display_name = "${var.app_name_short}-cb-trigger"
+  description  = "EPS app Cloud Build Trigger"
+}
+
 # Terraform needs to act as the app GSA in order to deploy it
 data "google_iam_policy" "terraform-access-to-run-gsa" {
   binding {
