@@ -34,6 +34,7 @@ resource "google_service_account" "eps" {
   account_id   = "${var.app_name_short}-app"
   display_name = "${var.app_name_short}-app"
   description  = "EPS app Cloud Run service"
+  depends_on = [google_project_service.default]
 }
 
 # GSA for the Cloud Build trigger
@@ -41,6 +42,7 @@ resource "google_service_account" "cloudbuild_gsa" {
   account_id   = "${var.app_name_short}-cb-trigger"
   display_name = "${var.app_name_short}-cb-trigger"
   description  = "EPS app Cloud Build Trigger"
+  depends_on = [google_project_service.default]
 }
 
 # Terraform needs to act as the app GSA in order to deploy it
@@ -87,4 +89,36 @@ data "google_iam_policy" "admin" {
 resource "google_iap_web_iam_policy" "policy" {
   project     = var.eps_project_id
   policy_data = data.google_iam_policy.admin.policy_data
+}
+
+# Grant Cloud Build GSA necessary permissions
+resource "google_project_iam_member" "cloudbuild_gsa_build_agent" {
+  project = var.eps_project_id
+  role    = "roles/cloudbuild.builds.builder"
+  member  = "serviceAccount:${google_service_account.cloudbuild_gsa.email}"
+}
+
+resource "google_project_iam_member" "cloudbuild_gsa_secret_accessor" {
+  project = var.eps_project_id
+  role    = "roles/secretmanager.secretAccessor"
+  member  = "serviceAccount:${google_service_account.cloudbuild_gsa.email}"
+}
+
+resource "google_project_iam_member" "cloudbuild_gsa_artifact_writer" {
+  project = var.eps_project_id
+  role    = "roles/artifactregistry.writer"
+  member  = "serviceAccount:${google_service_account.cloudbuild_gsa.email}"
+}
+
+# Grant the Terraform SA permission to impersonate the Cloud Build SA
+resource "google_service_account_iam_member" "tf_sa_can_impersonate_cb_sa" {
+  service_account_id = google_service_account.cloudbuild_gsa.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = var.terraform_principal
+}
+
+# Wait for IAM propagation
+resource "time_sleep" "wait_for_iam_propagation" {
+  depends_on = [google_service_account_iam_member.tf_sa_can_impersonate_cb_sa]
+  create_duration = "30s"
 }
