@@ -1,4 +1,7 @@
 data "google_project" "project" {
+  depends_on = [
+    google_project_service.default
+  ]
 }
 
 resource "google_project_iam_member" "cloudbuild_secret_manager_admin" {
@@ -8,25 +11,17 @@ resource "google_project_iam_member" "cloudbuild_secret_manager_admin" {
 }
 
 
-
-resource "google_secret_manager_secret" "github_pat" {
+resource "google_secret_manager_secret" "github_pat_token" {
   secret_id = "github-pat-secret"
   replication {
-    user_managed {
-      replicas {
-        location = "us-central1"
-      }
-      replicas {
-        location = "us-east1"
-      }
-    }
+    auto {}
   }
   deletion_protection = false
 }
 
-resource "google_secret_manager_secret_version" "github_pat" {
-  secret      = google_secret_manager_secret.github_pat.id
-  secret_data = var.github_pat
+resource "google_secret_manager_secret_version" "github_pat_token" {
+  secret      = google_secret_manager_secret.github_pat_token.id
+  secret_data = var.github_pat_token
 }
 
 resource "google_cloudbuildv2_connection" "my-connection" {
@@ -37,7 +32,7 @@ resource "google_cloudbuildv2_connection" "my-connection" {
   github_config {
     app_installation_id = var.github_app_id
     authorizer_credential {
-      oauth_token_secret_version = google_secret_manager_secret_version.github_pat.id
+      oauth_token_secret_version = google_secret_manager_secret_version.github_pat_token.id
     }
   }
 }
@@ -50,9 +45,10 @@ resource "google_cloudbuildv2_repository" "my-repository" {
 }
 
 resource "google_cloudbuild_trigger" "cloudbuild_trigger_private_pool" {
-  project  = var.eps_project_id # Replace with your project ID
-  name     = "eps-trigger"      # Replace with your trigger name
-  location = "us-central1"      # Explicitly set the region
+  depends_on = [time_sleep.wait_for_iam_propagation]
+  project    = var.eps_project_id # Replace with your project ID
+  name       = "eps-trigger"      # Replace with your trigger name
+  location   = var.region
 
   # ... your other trigger configurations (repository, branch, etc.) ...
 
@@ -88,6 +84,6 @@ resource "google_cloudbuild_trigger" "cloudbuild_trigger_private_pool" {
   filename = "cloudbuild.yaml"
 
 
-  service_account = "projects/${var.eps_project_id}/serviceAccounts/${google_service_account.cloudbuild_gsa.id}"
+  service_account = google_service_account.cloudbuild_gsa.id
 
 }
