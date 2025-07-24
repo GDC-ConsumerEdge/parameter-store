@@ -34,9 +34,6 @@ artifact_registry_repo = "parameter-store"
 # The principal associated with the EPS Terraform deployment and is very likely a Google service account
 terraform_principal = "serviceAccount:parameter-store-tf@example-eps.iam.gserviceaccount.com"
 
-# The principal used to run a Cloud Build workflow instantiated from Github
-trigger_service_account_email = "terraform@example-eps.iam.gserviceaccount.com"
-
 # The full name and tag of the image to be deployed by Terraform to Cloud Run
 eps_image = "us-central-docker.pkg.dev/example-eps/parameter-store/parameter-store:latest"
 
@@ -81,3 +78,6 @@ git_user_name = "example-eps-gituser"
 # Cloud Build App id for your Github organization. This can be found within Github Organization settings or
 # within your repository settings
 github_app_id = "3325032727"
+
+# A Github Personal Access Token used to integrate Github with Cloud Build
+github_pat_token = ""

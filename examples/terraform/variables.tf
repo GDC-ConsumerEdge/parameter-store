@@ -269,12 +269,13 @@ variable "source_branch_name" {
   default     = "main"
 }
 
-variable "trigger_service_account_email" {
-  description = "Email of the service account for the trigger."
-  type        = string
-}
-
 variable "github_app_id" {
   description = "Cloud Build app id for your Github organisation. This is the numeric ID of the GitHub App installation."
   type        = number
+}
+
+variable "github_pat_token" {
+  description = "A Github Personal Access Token with permissions to create repositories"
+  type        = string
+  sensitive   = true
 }
