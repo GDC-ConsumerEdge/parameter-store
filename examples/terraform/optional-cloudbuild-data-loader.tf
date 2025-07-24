@@ -11,6 +11,9 @@ resource "google_service_account" "gcb" {
   account_id   = "gcb-${var.app_name_short}-data-loader"
   display_name = "gcb-${var.app_name_short}-data-loader"
   description  = "GCB Data Loader Service Account"
+  depends_on = [
+    google_project_service.default
+  ]
 }
 
 # GCB needs to be a Cloud SQL client

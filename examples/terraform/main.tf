@@ -21,4 +21,7 @@ locals {
 
 data "google_project" "eps" {
   project_id = var.eps_project_id
+  depends_on = [
+    google_project_service.default
+  ]
 }

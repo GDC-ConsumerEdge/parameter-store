@@ -61,6 +61,12 @@ resource "google_secret_manager_secret_iam_policy" "eps-db-pass" {
   policy_data = data.google_iam_policy.eps-secret-access.policy_data
 }
 
+# Wait for IAM propagation on the DB secret
+resource "time_sleep" "wait_for_db_secret_iam" {
+  depends_on = [google_secret_manager_secret_iam_policy.eps-db-pass]
+  create_duration = "30s"
+}
+
 #
 # Django Secret Key
 #
