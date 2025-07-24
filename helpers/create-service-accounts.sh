@@ -3,16 +3,38 @@
 set -e
 
 SERVICE_ACCOUNT_NAME="parameter-store-tf"
-PROJECT_ID=$(gcloud config get-value project)
+DEFAULT_PROJECT_ID=$(gcloud config get-value project 2>/dev/null)
+
+read -p "Enter the GCP project ID [default: ${DEFAULT_PROJECT_ID}]: " INPUT_PROJECT_ID
+
+# Use the user's input or the default if input is empty
+PROJECT_ID=${INPUT_PROJECT_ID:-$DEFAULT_PROJECT_ID}
+
+if [ -z "$PROJECT_ID" ]; then
+  echo "\n❌ Error: No project ID provided or found in gcloud config. No action was taken."
+  exit 1
+fi
+
+echo -e "\nℹ️ This script will modify IAM policies for the project: '${PROJECT_ID}'"
+read -p "Do you want to proceed? (y/N): " CONFIRMATION
+
+if [[ ! "$CONFIRMATION" =~ ^[Yy]$ ]]; then
+  echo -e "\n❌ Operation cancelled. No action was taken."
+  exit 1
+fi
+
 SERVICE_ACCOUNT_EMAIL="${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+
 
 # IAM roles to be assigned to the service account
 ROLES_TO_ADD=(
   "roles/artifactregistry.reader"
   "roles/certificatemanager.owner"
   "roles/cloudbuild.connectionAdmin"
+  "roles/cloudbuild.builds.editor"
   "roles/cloudbuild.workerPoolOwner"
   "roles/cloudsql.admin"
+  "roles/compute.loadBalancerAdmin"
   "roles/compute.networkAdmin"
   "roles/dns.admin"
   "roles/iam.serviceAccountAdmin"
