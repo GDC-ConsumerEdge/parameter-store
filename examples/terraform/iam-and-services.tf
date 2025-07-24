@@ -34,7 +34,7 @@ resource "google_service_account" "eps" {
   account_id   = "${var.app_name_short}-app"
   display_name = "${var.app_name_short}-app"
   description  = "EPS app Cloud Run service"
-  depends_on = [google_project_service.default]
+  depends_on   = [google_project_service.default]
 }
 
 # GSA for the Cloud Build trigger
@@ -42,7 +42,7 @@ resource "google_service_account" "cloudbuild_gsa" {
   account_id   = "${var.app_name_short}-cb-trigger"
   display_name = "${var.app_name_short}-cb-trigger"
   description  = "EPS app Cloud Build Trigger"
-  depends_on = [google_project_service.default]
+  depends_on   = [google_project_service.default]
 }
 
 # Terraform needs to act as the app GSA in order to deploy it
@@ -119,6 +119,6 @@ resource "google_service_account_iam_member" "tf_sa_can_impersonate_cb_sa" {
 
 # Wait for IAM propagation
 resource "time_sleep" "wait_for_iam_propagation" {
-  depends_on = [google_service_account_iam_member.tf_sa_can_impersonate_cb_sa]
+  depends_on      = [google_service_account_iam_member.tf_sa_can_impersonate_cb_sa]
   create_duration = "30s"
 }
