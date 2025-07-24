@@ -294,6 +294,7 @@ git_user_name                = "example-eps-gituser"
 
 #### Deploy Parameter Store App
 
+Before using Terraform to deploy the Parameter Store application, you need to
 Use `terraform plan` to check the deployment.
 
 ```bash
