@@ -56,7 +56,7 @@ iap_audience = ""
 superusers = ["example"]
 
 # An array of IAM principals that will be granted Cloud Run invoker and IAP accessor permissions
-eps_allowed_accessors = ["group:eps@example.corp.net"]
+eps_allowed_accessors = ["user:users@example.corp.net", "group:eps@example.corp.net"]
 
 # The name of the private worker pool that Cloud Build will use to execute the build
 worker_pool_name = "eps-private-pool"
