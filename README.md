@@ -74,23 +74,21 @@ This section outlines steps that the user must perform
 * [psql client](https://docs.timescale.com/use-timescale/latest/integrations/query-admin/psql/)
   or [pgadmin](https://www.pgadmin.org/download/)
 
-#### Enable required GCP APIs
 
-The following GCP APIs are required to be enabled for this project:
-* `serviceconsumermanagement.googleapis.com`
-* `sqladmin.googleapis.com`
-* `compute.googleapis.com`
+### Bootstrap the EPS GCP Project
 
-  ```bash
-  gcloud services enable \
-      serviceconsumermanagement.googleapis.com \
-      sqladmin.googleapis.com \
-      compute.googleapis.com \
-      --project=your-project-id
-  ```
+The Terraform [README](examples/terraform/README.md) document details the GCP Service Accounts (GSA) that are required for this project. Please ensure you have created a service account for Terraform with the required roles. A [Terraform project](./examples/terraform/bootstrap/) has been provided which will create the service account and add the required roles for you.
 
-### Create a Terraform-specific GCP Service Account
-The Terraform [README](examples/terraform/README.md) document details the GCP Service Accounts (GSA) that are required for this project. Please ensure you have created a service account for Terraform with the required roles. A [helper script](./helpers/create-service-accounts.sh) has been provided which will create the service account and add the required roles.
+If you wish to use the [Terraform bootstrap](./examples/terraform/bootstrap/) project, ensure you apply the bootstrap
+configurations before deploying the EPS application.
+
+```bash
+cd examples/terraform/bootstrap
+vi terraform.tfvars. # Edit variables for your environment
+terraform init
+terraform apply
+```
+
 
 #### Configure GCP OAuth Consent Screen
 
