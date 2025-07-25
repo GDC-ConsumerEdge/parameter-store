@@ -20,6 +20,7 @@ resource "google_project_service" "default" {
   project            = var.eps_project_id
   service            = each.value
   disable_on_destroy = false
+
 }
 
 resource "google_project_service" "secrets" {
@@ -49,7 +50,7 @@ resource "google_service_account" "cloudbuild_gsa" {
 data "google_iam_policy" "terraform-access-to-run-gsa" {
   binding {
     role    = "roles/iam.serviceAccountUser"
-    members = [var.terraform_principal]
+    members = ["serviceAccount:${var.terraform_sa_name}@${var.eps_project_id}.iam.gserviceaccount.com"]
   }
 }
 
@@ -89,6 +90,9 @@ data "google_iam_policy" "admin" {
 resource "google_iap_web_iam_policy" "policy" {
   project     = var.eps_project_id
   policy_data = data.google_iam_policy.admin.policy_data
+  depends_on = [
+    google_project_service.default
+  ]
 }
 
 # Grant Cloud Build GSA necessary permissions
@@ -114,7 +118,7 @@ resource "google_project_iam_member" "cloudbuild_gsa_artifact_writer" {
 resource "google_service_account_iam_member" "tf_sa_can_impersonate_cb_sa" {
   service_account_id = google_service_account.cloudbuild_gsa.name
   role               = "roles/iam.serviceAccountUser"
-  member             = var.terraform_principal
+  member             = "serviceAccount:${var.terraform_sa_name}@${var.eps_project_id}.iam.gserviceaccount.com"
 }
 
 # Wait for IAM propagation

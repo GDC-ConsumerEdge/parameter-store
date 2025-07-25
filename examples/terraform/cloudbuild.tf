@@ -17,6 +17,9 @@ resource "google_secret_manager_secret" "github_pat_token" {
     auto {}
   }
   deletion_protection = false
+  depends_on = [
+    google_project_service.default
+  ]
 }
 
 resource "google_secret_manager_secret_version" "github_pat_token" {
@@ -63,7 +66,7 @@ resource "google_cloudbuild_trigger" "cloudbuild_trigger_private_pool" {
     _DATABASE_PASSWORD_KEY = var.db_password_key
     # --- Cloud SQL Proxy ---
     _PROXY_VERSION            = var.proxy_version
-    _INSTANCE_CONNECTION_NAME = var.instance_connection_name
+    _INSTANCE_CONNECTION_NAME = google_sql_database_instance.default.connection_name
     _PRIVATE_POOL             = "projects/${var.eps_project_id}/locations/${var.region}/workerPools/${var.worker_pool_name}" # Composed from vars
     # --- Artifact Registry / Image ---
     _ARTIFACT_REGISTRY_HOST       = var.artifact_registry_host
