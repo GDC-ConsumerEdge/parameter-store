@@ -23,21 +23,22 @@ terraform {
       source  = "hashicorp/google-beta"
       version = ">=6.45.0"
     }
+    time = {
+      source  = "hashicorp/time"
+      version = ">= 0.9.1"
+    }
   }
 
   # Configure backend when using in prod
   # backend "gcs" {}
 }
-locals {
-  terraform_service_account_email = length(split(":", var.terraform_principal)) > 1 ? split(":", var.terraform_principal)[1] : var.terraform_principal
-}
 
 provider "google" {
   project                     = var.eps_project_id
-  impersonate_service_account = local.terraform_service_account_email
+  impersonate_service_account = "${var.terraform_sa_name}@${var.eps_project_id}.iam.gserviceaccount.com"
 }
 
 provider "google-beta" {
   project                     = var.eps_project_id
-  impersonate_service_account = local.terraform_service_account_email
+  impersonate_service_account = "${var.terraform_sa_name}@${var.eps_project_id}.iam.gserviceaccount.com"
 }
