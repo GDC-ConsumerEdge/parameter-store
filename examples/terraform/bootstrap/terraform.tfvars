@@ -1,4 +1,3 @@
-###############################################################################
 # Copyright 2024 Google, LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,16 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
-###############################################################################
-locals {
-  # collapse secrets into the EPS (primary) project if not set
-  secrets_project_id = coalesce(var.secrets_project_id, var.eps_project_id)
-}
 
-data "google_project" "eps" {
-  project_id = var.eps_project_id
-  depends_on = [
-    google_project_service.default
-  ]
-}
+
+# The GCP Project ID where the EPS bootstrap configs will be applied. This will be the same GCP project that will run EPS.
+gcp_project_id = "example-eps"
+
+# The GCP user account which will run the bootstrap process. This user requires the following GCP IAM Roles:
+# Project IAM Admin
+# Service Account Admin
+terraform_user_principal = "user:user@corp.net"
+
+# The name of the service account to be created for Terraform.
+# This should match the 'terraform_sa_name' used in the main configuration.
+terraform_sa_name = "parameter-store-tf"

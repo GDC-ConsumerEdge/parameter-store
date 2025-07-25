@@ -74,6 +74,22 @@ This section outlines steps that the user must perform
 * [psql client](https://docs.timescale.com/use-timescale/latest/integrations/query-admin/psql/)
   or [pgadmin](https://www.pgadmin.org/download/)
 
+
+### Bootstrap the EPS GCP Project
+
+The Terraform [README](examples/terraform/README.md) document details the GCP Service Accounts (GSA) that are required for this project. Please ensure you have created a service account for Terraform with the required roles. A [Terraform project](./examples/terraform/bootstrap/) has been provided which will create the service account and add the required roles for you.
+
+If you wish to use the [Terraform bootstrap](./examples/terraform/bootstrap/) project, ensure you apply the bootstrap
+configurations before deploying the EPS application.
+
+```bash
+cd examples/terraform/bootstrap
+vi terraform.tfvars. # Edit variables for your environment
+terraform init
+terraform apply
+```
+
+
 #### Configure GCP OAuth Consent Screen
 
 1. Login [GCP Console](https://console.cloud.google.com) and select your target project
@@ -81,9 +97,8 @@ This section outlines steps that the user must perform
    Configure the OAuth consent screen as External and set the publishing status to In Production.
    ![oauth_consent.gif](./docs/doc_assets/oauth_consent.gif)
 
-#### Parameter Store Domain Name
 
-#### Prepare fully-qualified domain name of Parameter Store app
+#### Identify a domain name for the Parameter Store application
 
 Choose a fully qualified domain name for your application. The Terraform provides an opinionated configuration for
 the utilization of your FQDN, creating a managed zone in the deployment project. This assumes you will create a
@@ -115,34 +130,40 @@ example Terraform does not support this configuration and would require modifica
 
 ### Build Image
 
-We will build a Docker image and push to an Artifact Registry in the target deployment GCP project. Please make sure the
+We will build a Docker image and push to an Artifact Registry in the target deployment GCP project. Please make sure
 Artifact Registry is available and the GCP account running the build script has sufficient permissions to push images to
 it.
 
-1. Clone this project and go to the project workspace
+1. Fork this project, clone your fork and go to the project workspace
 
     ```bash
-    git clone https://github.com/GDC-ConsumerEdge/parameter-store.git
+    git clone https://github.com/Your-Org/parameter-store.git
     cd parameter-store
     ```
 
 2. Update `terraform.tfvars` with your correct values.
 
-3. build the docker image and push to Artifact Registry
+3. Create an env definition file from `env.template` and update the values in `.env`
+   ```bash
+    cp env.template .env
+   ```
+3. Build the Docker image and push to Artifact Registry
 
     ```bash
     ./build.sh [VERSION] [APP]
     ```
 
-* Both **VERSION** and **APP** are optional.
-  **VERSION** default to *0.1*, while **APP** default to *parameter-store*.
+* Both `VERSION` and `APP` are optional.
+  * `VERSION` defaults to `0.1`
+  * `APP` defaults to `parameter-store`.
+
 * The generated image is tagged as `${REPO_HOST}/${PROJECT_ID}/${REPO_FOLDER}/${APP}:v${VERSION}`
-  e.g. `gcr.io/test-proj-1234/parameter-store/parameter-store:v0.1`
-* The `latest` tag is always attached to the most recently built image
+  e.g. `us-central-docker.pkg.dev/test-proj-1234/parameter-store/parameter-store:v0.1`
+  * The `latest` tag is always attached to the most recently built image
 
 ### Deploy GCP Infrastructure
 
-Use Terraform to deploy parameter store infrastructure.
+Use Terraform to deploy Parameter Store infrastructure.
 
 #### System Diagram
 
@@ -150,9 +171,9 @@ Use Terraform to deploy parameter store infrastructure.
 
 #### Initialize Terraform
 
-To deploy the parameter store for the first time, initialize the Terraform state.
+To deploy the Parameter Store for the first time, initialize the Terraform state.
 
-1. go to `examples/terraform` folder
+1. Go to the `examples/terraform` folder
 
 ```bash
 cd examples/terraform
@@ -165,7 +186,7 @@ terraform init
 ```
 
 * For better collaboration, we typically need to save the Terraform state file to a shared location, e.g. a GCP
-  bucket. To achieve this, we need to configure a GCP bucket as terraform backend.
+  bucket. To achieve this, we need to configure a GCP bucket as Terraform backend.
     1. Create or use an existing GCS bucket. Make sure your current account has write permission to it.
     2. Create a backend configuration file (e.g., env/testing.gcs.tfbackend) with content like this:
         ```terraform
@@ -221,31 +242,31 @@ permissions. This does not grant in-app permissions but merely allows these iden
 Cloud Run. This is probably a group of users the membership of which is managed externally to Terraform.
 
 `worker_pool_name` is a string used as a name of the private worker pool that Cloud Build will use to execute the build.
-This is part of the `_PRIVATE_POOL` substitution in the [cb.tf](examples/terraform/cb.tf).
+This is part of the `_PRIVATE_POOL` substitution in the [cloudbuild.tf](examples/terraform/cloudbuild.tf).
 
 `db_password_key` is a string used as a name or identifier of the secret in Secret Manager that stores the database
-password. This is passed as a substitution `_DATABASE_PASSWORD_KEY` to the [cb.tf](examples/terraform/cb.tf).
+password. This is passed as a substitution `_DATABASE_PASSWORD_KEY` to the [cloudbuild.tf](examples/terraform/cloudbuild.tf).
 
 `instance_connection_name` is a string used as a connection name for the Cloud SQL instance. This is used by the Cloud
-SQL Proxy to connect to the database. Passed as `_INSTANCE_CONNECTION_NAME` in the [cb.tf](examples/terraform/cb.tf).
+SQL Proxy to connect to the database. Passed as `_INSTANCE_CONNECTION_NAME` in the [cloudbuild.tf](examples/terraform/cloudbuild.tf).
 
 `artifact_registry_project_id` is a string value for Google Cloud Project ID where the Artifact Registry is located.
-Passed as `_ARTIFACT_REGISTRY_PROJECT_ID` in the [cb.tf](examples/terraform/cb.tf).
+Passed as `_ARTIFACT_REGISTRY_PROJECT_ID` in the [cloudbuild.tf](examples/terraform/cloudbuild.tf).
 
 `artifact_registry_repo` is a string used as a name of the repository within Artifact Registry where images will be
-stored/pulled. Passed as `_ARTIFACT_REGISTRY_REPO` in the [cb.tf](examples/terraform/cb.tf).
+stored/pulled. Passed as `_ARTIFACT_REGISTRY_REPO` in the [cloudbuild.tf](examples/terraform/cloudbuild.tf).
 
 `app_image_name` is a string used as a name of the application image to be built or used. Passed as `_APP_IMAGE_NAME` in
-the [cb.tf](examples/terraform/cb.tf).
+the [cloudbuild.tf](examples/terraform/cloudbuild.tf).
 
 `git_repo_url` is string value for URL of the Git repository that Cloud Build will clone. Passed as `_GIT_REPO_URL` in
-the [cb.tf](examples/terraform/cb.tf).
+the [cloudbuild.tf](examples/terraform/cloudbuild.tf).
 
 `git_user_email` is a string value for email address to be configured for Git operations within the build environment.
-Passed as `_GIT_USER_EMAIL` in the [cb.tf](examples/terraform/cb.tf).
+Passed as `_GIT_USER_EMAIL` in the [cloudbuild.tf](examples/terraform/cloudbuild.tf).
 
 `git_user_name` is a string value for username to be configured for Git operations within the build environment. Passed
-as `_GIT_USER_NAME` in the [cb.tf](examples/terraform/cb.tf).
+as `_GIT_USER_NAME` in the [cloudbuild.tf](examples/terraform/cloudbuild.tf).
 
 ```terraform
 environment_name             = "dev"
@@ -271,6 +292,7 @@ git_user_name                = "example-eps-gituser"
 
 #### Deploy Parameter Store App
 
+Before using Terraform to deploy the Parameter Store application, you need to
 Use `terraform plan` to check the deployment.
 
 ```bash
@@ -312,9 +334,9 @@ This Cloud Build pipeline is designed to automate the process of building the EP
 schema
 changes (migrations), and ensuring that these schema changes are version-controlled alongside your application code.
 
-Files used are  [cb.tf](examples/terraform/cb.tf) and [cloudbuild.yaml](./cloudbuild.yaml)
+Files used are  [cloudbuild.tf](examples/terraform/cloudbuild.tf) and [cloudbuild.yaml](./cloudbuild.yaml)
 
-[cb.tf](examples/terraform/cb.tf) automates the deployment of a Cloud Build CI/CD pipeline by:
+[cloudbuild.tf](examples/terraform/cloudbuild.tf) automates the deployment of a Cloud Build CI/CD pipeline by:
 
 **Establishing Secure GitHub Integration**: It creates a connection to your GitHub repository using the Cloud Build
 GitHub App and a stored OAuth token for authenticated access.

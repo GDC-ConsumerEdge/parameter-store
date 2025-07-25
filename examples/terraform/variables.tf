@@ -25,9 +25,9 @@ variable "eps_project_id" {
 }
 
 variable "secrets_project_id" {
-  description = "Optional ID of GCP project for Secret Manager secrets, if applicable. Defaults to the value of 'eps_project_id'."
-  default     = null
+  description = "Optional ID of GCP project for Secret Manager secrets. If left empty, it defaults to the value of 'eps_project_id'."
   type        = string
+  default     = ""
 }
 
 variable "region" {
@@ -162,9 +162,10 @@ variable "csrf_trusted_origins" {
   default     = []
 }
 
-variable "terraform_principal" {
-  description = "The principal used by Terraform at deployment time in the form of memberType:email; ex: serviceAccount:terraform@myproject.iam.gserviceaccount.com"
+variable "terraform_sa_name" {
+  description = "The name (not email) of the service account used by Terraform for impersonation."
   type        = string
+  default     = "parameter-store-tf"
 }
 
 variable "eps_allowed_accessors" {
@@ -195,12 +196,6 @@ variable "proxy_version" {
   description = "Version of the Cloud SQL Proxy to use."
   type        = string
   default     = "v2.15.1"
-}
-
-variable "instance_connection_name" {
-  description = "Cloud SQL instance connection name (project:region:instance)."
-  type        = string
-  # No default, should be provided per environment
 }
 
 variable "artifact_registry_host" {
@@ -269,14 +264,13 @@ variable "source_branch_name" {
   default     = "main"
 }
 
-variable "trigger_service_account_email" {
-  description = "Email of the service account for the trigger."
-  type        = string
+variable "github_app_id" {
+  description = "Cloud Build app id for your Github organisation. This is the numeric ID of the GitHub App installation."
+  type        = number
 }
 
-variable "github_app_id" {
-  description = "Cloud build app id for your github organisation"
-  type        = number # Using number type as it's an ID. String would also work.
-  nullable    = false  # Make it mandatory to provide a value
-  default     = null  # {your github cloudbuild app id}"
+variable "github_pat_token" {
+  description = "A Github Personal Access Token with permissions to create repositories"
+  type        = string
+  sensitive   = true
 }

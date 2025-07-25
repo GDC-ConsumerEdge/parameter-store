@@ -35,7 +35,7 @@ resource "random_password" "database" {
 
 resource "google_secret_manager_secret" "eps-db-pass" {
   secret_id = "${var.app_name_short}-db-pass"
-  project   = var.secrets_project_id
+  project   = local.secrets_project_id
 
   labels = {
     app  = var.app_name_short
@@ -61,6 +61,12 @@ resource "google_secret_manager_secret_iam_policy" "eps-db-pass" {
   policy_data = data.google_iam_policy.eps-secret-access.policy_data
 }
 
+# Wait for IAM propagation on the DB secret
+resource "time_sleep" "wait_for_db_secret_iam" {
+  depends_on      = [google_secret_manager_secret_iam_policy.eps-db-pass]
+  create_duration = "30s"
+}
+
 #
 # Django Secret Key
 #
@@ -70,7 +76,7 @@ resource "random_password" "eps-secret" {
 
 resource "google_secret_manager_secret" "eps-secret" {
   secret_id = "${var.app_name_short}-app-secret"
-  project   = var.secrets_project_id
+  project   = local.secrets_project_id
 
   labels = {
     app  = var.app_name_short

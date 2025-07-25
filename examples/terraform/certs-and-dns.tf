@@ -33,6 +33,9 @@ resource "google_certificate_manager_dns_authorization" "default" {
   labels = {
     app = var.app_name_short
   }
+  depends_on = [
+    google_project_service.default
+  ]
 }
 
 resource "google_dns_managed_zone" "eps" {
@@ -42,6 +45,9 @@ resource "google_dns_managed_zone" "eps" {
   labels = {
     app = var.app_name_short
   }
+  depends_on = [
+    google_project_service.default
+  ]
 }
 
 resource "google_dns_record_set" "cname" {
