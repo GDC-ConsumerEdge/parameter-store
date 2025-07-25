@@ -162,9 +162,10 @@ variable "csrf_trusted_origins" {
   default     = []
 }
 
-variable "terraform_principal" {
-  description = "The principal used by Terraform at deployment time in the form of memberType:email; ex: serviceAccount:terraform@myproject.iam.gserviceaccount.com"
+variable "terraform_sa_name" {
+  description = "The name (not email) of the service account used by Terraform for impersonation."
   type        = string
+  default     = "parameter-store-tf"
 }
 
 variable "eps_allowed_accessors" {
@@ -195,12 +196,6 @@ variable "proxy_version" {
   description = "Version of the Cloud SQL Proxy to use."
   type        = string
   default     = "v2.15.1"
-}
-
-variable "instance_connection_name" {
-  description = "Cloud SQL instance connection name (project:region:instance)."
-  type        = string
-  # No default, should be provided per environment
 }
 
 variable "artifact_registry_host" {

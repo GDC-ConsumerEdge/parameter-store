@@ -28,11 +28,12 @@ secrets_project_id = "example-eps"
 # The GCP project id where Google Artifact Registry is configured
 artifact_registry_project_id = "example-eps"
 
+# The name (not email) of the service account used by Terraform for impersonation.
+# This should match the 'terraform_sa_name' used in the bootstrap phase.
+terraform_sa_name = "parameter-store-tf"
+
 # The name of the repository within Artifact Registry where images will be stored and pulled
 artifact_registry_repo = "parameter-store"
-
-# The principal associated with the EPS Terraform deployment and is very likely a Google service account
-terraform_principal = "serviceAccount:parameter-store-tf@example-eps.iam.gserviceaccount.com"
 
 # The full name and tag of the image to be deployed by Terraform to Cloud Run
 eps_image = "us-central-docker.pkg.dev/example-eps/parameter-store/parameter-store:latest"
@@ -62,9 +63,6 @@ worker_pool_name = "eps-private-pool"
 
 # The name or identifier of the secret in Google Secret Manager that stores the database password
 db_password_key = "eps-db-pass"
-
-# A connection name for the Cloud SQL instance
-instance_connection_name = "example-eps:us-central1:eps-015b"
 
 # The URL of the Git repository that Cloud Build will clone
 git_repo_url = "https://github.com/example-eps/parameter-store.git"
