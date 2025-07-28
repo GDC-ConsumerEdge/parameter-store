@@ -171,6 +171,6 @@ resource "google_cloud_run_v2_service" "eps" {
 
   depends_on = [
     google_service_account_iam_policy.terraform,
-    google_secret_manager_secret_iam_policy.eps-db-pass
+    time_sleep.wait_for_db_secret_iam
   ]
 }
