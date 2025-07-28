@@ -77,7 +77,7 @@ This section outlines steps that the user must perform
 
 ### Bootstrap the EPS GCP Project
 
-The Terraform [README](examples/terraform/README.md) document details the GCP Service Accounts (GSA) that are required for this project. Please ensure you have created a service account for Terraform with the required roles. A [Terraform project](./examples/terraform/bootstrap/) has been provided which will create the service account and add the required roles for you.
+The Terraform [README](examples/terraform/README.md) document details the GCP Service Accounts (GSA) that are required for this project. Please ensure you have created a service account for Terraform with the required roles. A [Terraform bootstrap project](./examples/terraform/bootstrap/) has been provided which will create the service account and add the required roles for you.
 
 If you wish to use the [Terraform bootstrap](./examples/terraform/bootstrap/) project, ensure you apply the bootstrap
 configurations before deploying the EPS application.
@@ -416,7 +416,7 @@ The build file is expected to be submitted by a user withCloud Build Submitter I
 to the Cloud Build API. To get started, copy the `load_db.py` file into an empty directory and colocate SoT files
 adjacent to it.
 
-```shell
+```bash
 mkdir db_loader
 cp examples/data_loader/* db_loader
 cp *.csv db_loader  # these are the source of truth files, make sure they end up adjacent to the load_db.py
@@ -504,50 +504,50 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO eps;
 
 These setup instructions assume the use of [uv](https://docs.astral.sh/uv/)
 
-1. Install Python 3.12
-
-```shell
-uv python install cpython-3.12
-```
-
-2. Create virtualenv
-
-```bash
-uv venv --python cpython-3.12 && source .venv/bin/activate
-```
-
-3. Install requirements
+1. Install required Python packages
 
 ```bash
 uv sync
+```
+2. Define local environment database configuration (optional)
+
+The default database configuration for the Edge Parameter Store application can be found in [settings.py](./parameter_store/settings.py).
+To override these settings for your local environment, define relevant environment variables as needed.
+
+```bash
+export DB_NAME="my-eps-db"
+export DB_USER="eps-dev-user"
+export DB_PASSWORD="eps-dev-password"
+export DB_HOST="localhost"
+export DB_PORT="5555"
 ```
 
 ### Django Setup
 
 1. Run Django Migrations
 
-```shell
-python manage.py makemigrations
-python manage.py migrate
+```sh
+uv run manage.py makemigrations
+uv run manage.py migrate
 ```
 
 2. Collect static files
 
-```shell
-python manage.py collectstatic
+```bash
+uv run manage.py collectstatic
 ```
 
 2. Create a Superuser: Create a superuser for accessing the Django admin interface:
 
-```shell
-python manage.py createsuperuser
+```bash
+uv run manage.py createsuperuser
 ```
 
 3. Start the Development Server: Run the Django development server to check if everything is working fine:
 
-```shell
+```bash
 export DJANGO_DEBUG=True
-python manage.py runserver
+uv run manage.py runserver
 ```
 
 ## Additional Documentation
@@ -564,15 +564,15 @@ Please see [docs](./docs) for more documentation:
 Sometimes Django doesn't seem to pick up the models for `parameter_store`, so I have to `makemigrations` explicitly for
 it:
 
-```shell
-python3 manage.py makemigrations parameter_store
-python3 manage.py migrate
+```bash
+uv run manage.py makemigrations parameter_store
+uv run manage.py migrate
 ```
 
 If successful, it looks something like:
 
-```shell
-$ python3 manage.py makemigrations parameter_store
+```bash
+$ uv run manage.py makemigrations parameter_store
 Migrations for 'parameter_store':
   parameter_store/migrations/0001_initial.py
     + Create model Cluster
@@ -586,7 +586,7 @@ Migrations for 'parameter_store':
     + Create model GroupRole
     + Create model ClusterTag
 
-$ python3 manage.py migrate
+$ uv run manage.py migrate
 Operations to perform:
   Apply all migrations: admin, auth, contenttypes, parameter_store, sessions
 Running migrations:
@@ -599,7 +599,7 @@ Running migrations:
 I have Postgres running on a remote Linux device (called `cloudtop`) while I develop locally, so I port-forward to psql
 on that device:
 
-```shell
+```bash
 ssh -TL 5432:localhost:5432 cloudtop
 ```
 
