@@ -526,7 +526,7 @@ export DB_PORT="5555"
 
 1. Run Django Migrations
 
-```sh
+```bash
 uv run manage.py makemigrations
 uv run manage.py migrate
 ```
