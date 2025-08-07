@@ -503,86 +503,11 @@ class ChangeSet(models.Model):
     class Status(models.TextChoices):
         DRAFT = 'draft', 'Draft'
         COMMITTED = 'committed', 'Committed'
-        # DISCARDED could be another status, or simply deleting the ChangeSet row.
-        # The document mentions "Discard: The action of deleting a draft ChangeSet."
-        # So, for now, we'll stick to DRAFT and COMMITTED.
 
     name = models.CharField(
         max_length=255,
-        blank=True,  # Document says "optional, user-defined"
-        null=True,  # Allowing null if blank is true and it's truly optional
-        help_text="An optional, user-defined name for easy identification of the ChangeSet."
-    )
-    description = models.TextField(
         blank=True,
-        null=True,
-        help_text="An optional text field for more detailed notes about the ChangeSet."
-    )
-    status = models.CharField(
-        max_length=20,
-        choices=Status.choices,
-        default=Status.DRAFT,
-        db_index=True,  # Likely to be queried/filtered on
-        help_text="The current state of the ChangeSet."
-    )
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,  # Assumes standard Django User model
-        on_delete=models.PROTECT,
-        # Don't delete ChangeSet if user is deleted; or models.SET_NULL if appropriate
-        related_name='change_sets_created',
-        help_text="The user who created this ChangeSet."
-    )
-    # committed_by = models.ForeignKey( # Consider adding this if you need to track who committed it
-    #     settings.AUTH_USER_MODEL,
-    #     on_delete=models.PROTECT,
-    #     related_name='change_sets_committed',
-    #     null=True,
-    #     blank=True,
-    #     help_text="The user who committed this ChangeSet."
-    # )
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        help_text="Timestamp when the ChangeSet was created."
-    )
-    updated_at = models.DateTimeField(
-        auto_now=True,
-        help_text="Timestamp when the ChangeSet was last updated."
-    )
-    committed_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="Timestamp when the ChangeSet was committed."
-    )
-
-    def __str__(self):
-        return f"{self.name or f'ChangeSet {self.id}'} ({self.get_status_display()})"
-
-    class Meta:
-        verbose_name = "ChangeSet"
-        verbose_name_plural = "ChangeSets"
-        ordering = [
-            '-created_at']  # Default ordering, newest firstfrom django.conf import settings # Required for ForeignKey to User
-
-
-from django.db import models
-
-
-# ... (other imports and existing models) ...
-
-class ChangeSet(models.Model):
-    """
-    A collection of data modifications (creations, updates, or deletions)
-    staged together.
-    """
-
-    class Status(models.TextChoices):
-        DRAFT = 'draft', 'Draft'
-        COMMITTED = 'committed', 'Committed'
-
-    name = models.CharField(
-        max_length=255,
-        blank=True,  # Document says "optional, user-defined"
-        null=True,  # Allowing null if blank is true and it's truly optional
+        null=False,
         help_text="An optional, user-defined name for easy identification of the ChangeSet."
     )
     description = models.TextField(
@@ -632,4 +557,5 @@ class ChangeSet(models.Model):
     class Meta:
         verbose_name = "ChangeSet"
         verbose_name_plural = "ChangeSets"
-        ordering = ['-created_at']  # Default ordering, newest first
+        # Default ordering, newest firstfrom django.conf import settings # Required for ForeignKey to User
+        ordering = ['-created_at']
