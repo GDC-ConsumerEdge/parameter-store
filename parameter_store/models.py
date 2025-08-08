@@ -152,6 +152,7 @@ class Cluster(DynamicValidatingModel):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+
     objects = ClusterManager()
 
     def __str__(self):
@@ -259,7 +260,8 @@ class ClusterIntent(DynamicValidatingModel):
     maintenance_exclusion_name_1 = models.CharField(null=True, blank=True, max_length=64, help_text=None)
     maintenance_exclusion_start_1 = models.DateTimeField(null=True, blank=True, help_text=None)
     maintenance_exclusion_end_1 = models.DateTimeField(null=True, blank=True, help_text=None)
-    subnet_vlans = models.CharField(max_length=128, null=True, help_text="Comma-separated list of VLAN IDs for subnets")
+    subnet_vlans = models.CharField(max_length=128, null=True,
+                                    help_text="Comma-separated list of VLAN IDs for subnets")
     recreate_on_delete = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -416,9 +418,9 @@ class Validator(models.Model):
         default=dict,
         blank=True,
         null=False,
-        help_text="Enter parameters for the validator in JSON format. Due to limitations in the "
-        "UI, arguments for validators cannot be displayed dynamically. Contents of "
-        "this field will be validated and feedback will be provided.",
+        help_text="Enter parameters for the validator in JSON format. Due to limitations in the UI, arguments for "
+                  "validators cannot be displayed dynamically. Contents of this field will be validated and feedback "
+                  "will be provided.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -503,6 +505,7 @@ class ChangeSet(models.Model):
     class Status(models.TextChoices):
         DRAFT = 'draft', 'Draft'
         COMMITTED = 'committed', 'Committed'
+        ABANDONED = 'abandoned', 'Abandoned'
 
     name = models.CharField(
         max_length=255,
@@ -557,5 +560,4 @@ class ChangeSet(models.Model):
     class Meta:
         verbose_name = "ChangeSet"
         verbose_name_plural = "ChangeSets"
-        # Default ordering, newest firstfrom django.conf import settings # Required for ForeignKey to User
         ordering = ['-created_at']
