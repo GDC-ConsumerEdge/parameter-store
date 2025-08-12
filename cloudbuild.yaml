@@ -38,12 +38,11 @@ steps:
       - 'DB_NAME=${_DATABASE_NAME}'
       - 'DB_USER=${_DATABASE_USER}'
       - 'DB_PORT=${_DATABASE_PORT}'
-      - 'INSTANCE_CONNECTION_NAME=${_INSTANCE_CONNECTION_NAME}'
     args:
       - '-c'
       - >-
         env; mkdir -p /cloudsql; chmod 777 /cloudsql;  ./cloud-sql-proxy
-        --unix-socket /cloudsql --debug-logs example-eps:us-central1:eps-015b & sleep 200; cd /app; python3 manage.py makemigrations parameter_store; ls /app/parameter_store/migrations; cp -rf /app/parameter_store/migrations /workspace/parameter_store; python3 manage.py makemigrations api; ls /app/api/migrations; cp -rf /app/api/migrations /workspace/api;
+        --unix-socket /cloudsql --debug-logs ${_INSTANCE_CONNECTION_NAME} & sleep 200; cd /app; python3 manage.py makemigrations parameter_store; ls /app/parameter_store/migrations; cp -rf /app/parameter_store/migrations /workspace/parameter_store; python3 manage.py makemigrations api; ls /app/api/migrations; cp -rf /app/api/migrations /workspace/api;
     entrypoint: sh
     secretEnv:
       - DB_PASSWORD
