@@ -3,10 +3,11 @@ name = "parameter-store"
 version = "0.1.0"
 description = "Edge Parameter Store is a Django application that holds parameter data for deployments of Google Distributed Cloud Connected clusters"
 authors = [
-  {name = "Paul Durivage", email = "durivage@google.com"},
-  {name = "Daniel Xia", email = "danielxia@google.com"},
-  {name = "Kodanda Rama", email = "kodrama@google.com"},
-  {name = "Abhishek Patil", email = "psabhishek@google.com"},
+    { name = "Paul Durivage", email = "durivage@google.com" },
+    { name = "Daniel Xia", email = "danielxia@google.com" },
+    { name = "Kodanda Rama", email = "kodrama@google.com" },
+    { name = "Abhishek Patil", email = "psabhishek@google.com" },
+    { name = "Ben Chapman", email="benchapman@google.com" }
 ]
 license = "LicenseRef-My-Custom-License"
 readme = "README.md"
