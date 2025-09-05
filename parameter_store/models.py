@@ -14,9 +14,12 @@
 # limitations under the License.
 #
 ###############################################################################
+import functools
 import logging
+import uuid
 from collections import defaultdict
 
+from django.conf import settings  # Required for ForeignKey to User
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.query import Prefetch
@@ -100,7 +103,97 @@ class DynamicValidatingModel(models.Model):
             raise ValidationError(errors)
 
 
-class Group(DynamicValidatingModel):
+class ChangeSet(models.Model):
+    """A collection of data modifications (creations, updates, or deletions)
+    staged together.
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        COMMITTED = "committed", "Committed"
+        ABANDONED = "abandoned", "Abandoned"
+
+    name = models.CharField(
+        max_length=255,
+        blank=True,
+        null=False,
+        help_text="An optional, user-defined name for easy identification of the ChangeSet.",
+    )
+    description = models.TextField(
+        blank=True, null=True, help_text="An optional text field for more detailed notes about the ChangeSet."
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,  # TODO: Evaluate. Seems likely to be queried/filtered on, but remove if not.
+        help_text="The current state of the ChangeSet.",
+    )
+    created_by = models.ForeignKey(
+        # Assumes standard Django User model
+        settings.AUTH_USER_MODEL,
+        # Don't delete ChangeSet if user is deleted; or models.SET_NULL if appropriate
+        on_delete=models.PROTECT,
+        related_name="change_sets_created",
+        help_text="The user who created this ChangeSet.",
+    )
+    committed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="change_sets_committed",
+        null=True,
+        blank=True,
+        help_text="The user who committed this ChangeSet.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, help_text="Timestamp when the ChangeSet was created.")
+    updated_at = models.DateTimeField(auto_now=True, help_text="Timestamp when the ChangeSet was last updated.")
+    committed_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when the ChangeSet was committed.")
+
+    def __str__(self):
+        return f"{self.name or f'ChangeSet {self.id}'} ({self.get_status_display()})"
+
+    class Meta:
+        verbose_name = "ChangeSet"
+        verbose_name_plural = "ChangeSets"
+        ordering = ["-created_at"]
+
+
+# Note that this is a "check constraint" and not a "unique constraint" because a locked entity may
+# have a changeset associated with it, but it may also be "unlocked" and have no changeset associated
+# with it.  This is a valid scenario.  The check constraint ensures that if the entity is locked,
+# it must have a changeset associated with it.
+_locked_must_have_changeset = functools.partial(
+    models.CheckConstraint, condition=models.Q(is_locked=False) | models.Q(changeset_id__isnull=False)
+)
+
+
+class ChangeSetAwareTopLevelEntity(models.Model):
+    """
+    A top level entity that is aware of its ChangeSet.  This is a mixin class.  Current top level entities are
+    Clusters and Groups.
+    """
+
+    class Meta:
+        abstract = True
+
+    shared_entity_id = models.UUIDField(editable=False, db_index=True, null=False, default=uuid.uuid4)
+    is_live = models.BooleanField(editable=False, db_index=True, null=False, default=True)
+    is_locked = models.BooleanField(editable=False, db_index=True, null=False, default=False)
+    changeset_id = models.ForeignKey(ChangeSet, on_delete=models.SET_NULL, null=True)
+
+
+class ChangeSetAwareChildEntity(models.Model):
+    class Meta:
+        abstract = True
+
+    is_live = models.BooleanField(editable=False, db_index=True, default=True)
+    changeset_id = models.ForeignKey(ChangeSet, on_delete=models.SET_NULL, null=True, blank=True)
+
+
+class Group(ChangeSetAwareTopLevelEntity, DynamicValidatingModel):
+    class Meta:
+        constraints = [_locked_must_have_changeset(name="group_locked_must_have_changeset")]
+
     name = models.CharField(db_index=True, max_length=30, blank=False, unique=True, null=False)
     description = models.CharField(max_length=255, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -121,14 +214,32 @@ class Tag(DynamicValidatingModel):
 
 
 class ClusterManager(models.Manager):
+    """
+    Custom manager class for handling cluster-related queries.  Used by the Cluster model.   This is necessary because
+    unoptimized queries for clusters have abysmal performance.
+
+    This manager subclass provides an additional method for query optimizations specific to clusters. It extends the
+    default manager to include complex QuerySets with related objects, enhancing performance and reducing database
+    queries by using `select_related` and `prefetch_related`.
+    """
+
     # def get_queryset(self):
     #     return super().get_queryset()
 
     def with_related(self):
         """
+        Fetches the queryset with related objects using select_related and prefetch_related.
+
+        This method optimizes database queries by selecting and prefetching related objects
+        to reduce the number of queries needed for retrieving associated data.
+
+        This method is NOT an override.
 
         Returns:
+            QuerySet: An optimized queryset with related objects included.
 
+        Raises:
+            None
         """
         return (
             self.get_queryset()
@@ -142,8 +253,11 @@ class ClusterManager(models.Manager):
         )
 
 
-class Cluster(DynamicValidatingModel):
-    name = models.CharField(db_index=True, max_length=30, blank=False, unique=True, null=False)
+class Cluster(ChangeSetAwareTopLevelEntity, DynamicValidatingModel):
+    class Meta:
+        constraints = [_locked_must_have_changeset(name="cluster_locked_must_have_changeset")]
+
+    name = models.CharField(db_index=True, max_length=30, blank=False, unique=False, null=False)
     description = models.CharField(max_length=255, null=True, blank=True)
     group = models.ForeignKey(Group, on_delete=models.DO_NOTHING)
     secondary_groups = models.ManyToManyField(Group, blank=True, related_name="secondary_clusters")
@@ -166,10 +280,11 @@ class Cluster(DynamicValidatingModel):
 
     @property
     def data_list(self):
+        # TODO: check if this is needed; initial look seems like instance attribute `data` does not exist
         return self.data.all()
 
 
-class ClusterTag(DynamicValidatingModel):
+class ClusterTag(ChangeSetAwareChildEntity, DynamicValidatingModel):
     class Meta:
         verbose_name = "Cluster Tag"
         verbose_name_plural = "Cluster Tags"
@@ -183,7 +298,7 @@ class ClusterTag(DynamicValidatingModel):
         return f"{self.cluster.name} - {self.tag.name}"
 
 
-class ClusterIntent(DynamicValidatingModel):
+class ClusterIntent(ChangeSetAwareChildEntity, DynamicValidatingModel):
     class Meta:
         verbose_name = "Cluster Intent"
         verbose_name_plural = "Cluster Intent"
@@ -267,7 +382,7 @@ class ClusterIntent(DynamicValidatingModel):
         return self.cluster.name
 
 
-class ClusterFleetLabel(DynamicValidatingModel):
+class ClusterFleetLabel(ChangeSetAwareChildEntity, DynamicValidatingModel):
     class Meta:
         verbose_name = "Cluster Fleet Label"
         verbose_name_plural = "Cluster Fleet Labels"
@@ -341,7 +456,7 @@ class CustomDataValidatingModel(models.Model):
             raise ValidationError(errors)
 
 
-class ClusterData(CustomDataValidatingModel):
+class ClusterData(ChangeSetAwareChildEntity, CustomDataValidatingModel):
     class Meta:
         verbose_name = "Cluster Custom Data"
         verbose_name_plural = "Cluster Custom Data"
@@ -357,7 +472,7 @@ class ClusterData(CustomDataValidatingModel):
         return f'{self.cluster.name} - "{self.field.name}" = "{self.value}"'
 
 
-class GroupData(CustomDataValidatingModel):
+class GroupData(ChangeSetAwareChildEntity, CustomDataValidatingModel):
     class Meta:
         verbose_name = "Group Custom Data"
         verbose_name_plural = "Group Custom Data"
@@ -415,9 +530,9 @@ class Validator(models.Model):
         default=dict,
         blank=True,
         null=False,
-        help_text="Enter parameters for the validator in JSON format. Due to limitations in the "
-        "UI, arguments for validators cannot be displayed dynamically. Contents of "
-        "this field will be validated and feedback will be provided.",
+        help_text="Enter parameters for the validator in JSON format. Due to limitations in the UI, arguments for "
+        "validators cannot be displayed dynamically. Contents of this field will be validated and feedback "
+        "will be provided.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
