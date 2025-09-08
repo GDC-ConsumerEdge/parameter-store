@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.2.1](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v1.2.0...v1.2.1) (2025-09-03)
+
+
+### Bug Fixes
+
+* **build:** update cloudbuild.yaml ([#82](https://github.com/GDC-ConsumerEdge/parameter-store/issues/82)) ([5c89419](https://github.com/GDC-ConsumerEdge/parameter-store/commit/5c89419c0d2776bb7a8a58dde67b98ac0f5e387a))
+* **django:** fix missing models in django makemigrations ([0c74a90](https://github.com/GDC-ConsumerEdge/parameter-store/commit/0c74a9079294b409cae192322a4be8e84ca0e14a))
+* fix missing models in django makemigrations and update README for new environment setup ([#81](https://github.com/GDC-ConsumerEdge/parameter-store/issues/81)) ([0c74a90](https://github.com/GDC-ConsumerEdge/parameter-store/commit/0c74a9079294b409cae192322a4be8e84ca0e14a))
+* **readme:** fix documentation related to local environment setup ([0c74a90](https://github.com/GDC-ConsumerEdge/parameter-store/commit/0c74a9079294b409cae192322a4be8e84ca0e14a))
+* **readme:** fix documentation related to local environment setup ([0c74a90](https://github.com/GDC-ConsumerEdge/parameter-store/commit/0c74a9079294b409cae192322a4be8e84ca0e14a))
+* **tests, deps:** add Ruff + upgrade deps ([#77](https://github.com/GDC-ConsumerEdge/parameter-store/issues/77)) ([ae00284](https://github.com/GDC-ConsumerEdge/parameter-store/commit/ae002849947694cadf5f7e77b55643df138f1d1b))
+
+
+### Documentation
+
+* add infrastructure overview ([#73](https://github.com/GDC-ConsumerEdge/parameter-store/issues/73)) ([5cb661b](https://github.com/GDC-ConsumerEdge/parameter-store/commit/5cb661b6693df4b10cb1083dbd519ed093e49b72))
+* add user journey documentation ([#71](https://github.com/GDC-ConsumerEdge/parameter-store/issues/71)) ([3741670](https://github.com/GDC-ConsumerEdge/parameter-store/commit/3741670014c2e6c4907ee23b0caf5cb6d6ddd31f))
+
 ## [1.2.0](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v1.1.0...v1.2.0) (2025-05-22)
 
 
