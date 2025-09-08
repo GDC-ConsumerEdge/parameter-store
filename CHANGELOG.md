@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.0](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v1.2.1...v2.0.0) (2025-09-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* add changeset models ([#83](https://github.com/GDC-ConsumerEdge/parameter-store/issues/83))
+
+### Features
+
+* add changeset models ([#83](https://github.com/GDC-ConsumerEdge/parameter-store/issues/83)) ([4734e6c](https://github.com/GDC-ConsumerEdge/parameter-store/commit/4734e6ccc23a46f4a925a81cdbeeb3601f38dda4))
+
 ## [1.2.1](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v1.2.0...v1.2.1) (2025-09-03)
 
 
