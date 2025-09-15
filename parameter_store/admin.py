@@ -27,6 +27,7 @@ from .admin_inlines import (
     GroupDataInline,
 )
 from .models import (
+    ChangeSet,
     Cluster,
     ClusterData,
     ClusterFleetLabel,
@@ -52,10 +53,11 @@ class ParamStoreAdmin(usites.UnfoldAdminSite):
         site.
         """
         ordering = {
-            "Clusters": 1,
-            "Groups": 2,
-            "Tags": 3,
-            "Cluster Intent": 4,
+            "Change Sets": 1,
+            "Clusters": 2,
+            "Groups": 3,
+            "Tags": 4,
+            "Cluster Intent": 5,
             "Cluster Fleet Labels": 6,
             "Cluster Custom Data Fields": 7,
             "Cluster Custom Data": 8,
@@ -203,3 +205,16 @@ class ValidatorAssignmentAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
 class ClusterDataFieldValidatorAssignmentAdmin(uadmin.ModelAdmin):
     list_display = ["field", "validator"]
     readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(ChangeSet, site=param_admin_site)
+class ChangeSetAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
+    list_display = ["name", "status", "created_by", "created_at"]
+    list_filter = ["status", "created_by"]
+    search_fields = ["name", "created_by__username"]
+    readonly_fields = ("created_at", "updated_at", "committed_at", "committed_by")
+
+    def save_model(self, request, obj, form, change):
+        if not obj.pk:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
