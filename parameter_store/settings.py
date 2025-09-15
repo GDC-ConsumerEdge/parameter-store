@@ -105,6 +105,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "parameter_store.context_processors.custom_header_links",
             ],
         },
     },
@@ -236,6 +237,9 @@ UNFOLD = {
     "STYLES": [
         lambda request: static("parameter_store/css/custom_admin.css"),
     ],
+    "USER_LINKS": [
+        {"template": "unfold/helpers/userlinks.html"},
+    ],
     "SITE_HEADER": "Edge Parameter Store",
     "COLORS": {
         "base": {
@@ -278,3 +282,8 @@ SUPERUSERS = {i for i in os.environ.get("PARAM_STORE_SUPERUSERS", "").split(",")
 API_INTERNAL_STATICFILES = str_to_bool(os.environ.get("PARAM_STORE_API_INTERNAL_STATICFILES", True))
 if API_INTERNAL_STATICFILES:
     INSTALLED_APPS.insert(0, "ninja")
+
+try:
+    from .local_settings import *  # noqa: F403
+except ImportError:
+    pass
