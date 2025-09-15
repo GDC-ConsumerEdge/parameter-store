@@ -183,3 +183,4 @@ staticfiles
 
 *.DS_Store
 **/migrations/
+parameter_store/local_settings.py
