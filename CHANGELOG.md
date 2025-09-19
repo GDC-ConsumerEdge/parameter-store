@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.0.0](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v1.2.1...v2.0.0) (2025-09-19)
+
+
+### ⚠ BREAKING CHANGES
+
+* add changeset models ([#83](https://github.com/GDC-ConsumerEdge/parameter-store/issues/83))
+
+### Features
+
+* Add ability to create/modify ChangeSets from object creation pages ([4b1ff83](https://github.com/GDC-ConsumerEdge/parameter-store/commit/4b1ff838cd6dda5b9a86961f9179eeb202dc5e1a))
+* add changeset models ([#83](https://github.com/GDC-ConsumerEdge/parameter-store/issues/83)) ([4734e6c](https://github.com/GDC-ConsumerEdge/parameter-store/commit/4734e6ccc23a46f4a925a81cdbeeb3601f38dda4))
+* **changesets:** Add initial support for management of ChangeSets through the Admin UI ([4b1ff83](https://github.com/GDC-ConsumerEdge/parameter-store/commit/4b1ff838cd6dda5b9a86961f9179eeb202dc5e1a))
+* initial support for the addition and display of ChangeSets in the Admin UI ([#88](https://github.com/GDC-ConsumerEdge/parameter-store/issues/88)) ([4b1ff83](https://github.com/GDC-ConsumerEdge/parameter-store/commit/4b1ff838cd6dda5b9a86961f9179eeb202dc5e1a))
+
+
+### Bug Fixes
+
+* **changesets:** changeset name now a required field ([4b1ff83](https://github.com/GDC-ConsumerEdge/parameter-store/commit/4b1ff838cd6dda5b9a86961f9179eeb202dc5e1a))
+* **changesets:** correct changeset button link ([4b1ff83](https://github.com/GDC-ConsumerEdge/parameter-store/commit/4b1ff838cd6dda5b9a86961f9179eeb202dc5e1a))
+
 ## [1.2.1](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v1.2.0...v1.2.1) (2025-09-03)
 
 
