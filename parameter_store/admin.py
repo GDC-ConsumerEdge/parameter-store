@@ -212,20 +212,13 @@ class ChangeSetAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     list_display = ["name", "status", "created_by", "created_at"]
     list_filter = ["status", "created_by"]
     search_fields = ["name", "created_by__username"]
-    readonly_fields = ("created_at", "updated_at", "committed_at", "committed_by")
-
-    def get_readonly_fields(self, request, obj=None):
-        if obj:
-            return self.readonly_fields + ("created_by",)
-        return self.readonly_fields
-
-    def get_form(self, request, obj=None, **kwargs):
-        form = super().get_form(request, obj, **kwargs)
-        if not obj:
-            form.base_fields["created_by"].initial = request.user
-            form.base_fields["created_by"].disabled = True
-            form.base_fields["created_by"].required = False
-        return form
+    readonly_fields = (
+        "created_by",
+        "created_at",
+        "updated_at",
+        "committed_at",
+        "committed_by",
+    )
 
     def save_model(self, request, obj, form, change):
         if not obj.pk:

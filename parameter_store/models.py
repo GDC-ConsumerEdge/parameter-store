@@ -115,7 +115,7 @@ class ChangeSet(models.Model):
 
     name = models.CharField(
         max_length=255,
-        blank=True,
+        blank=False,
         null=False,
         help_text="An optional, user-defined name for easy identification of the ChangeSet.",
     )
