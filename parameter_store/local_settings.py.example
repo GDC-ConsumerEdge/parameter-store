@@ -1,0 +1,19 @@
+# This is an example local_settings.py file.
+#
+# To use it, copy it to a new file named `local_settings.py` in the same
+# directory as your main settings.py file.
+#
+# The `local_settings.py` file is NOT under version control, so you can use it
+# to store sensitive information like database passwords or API keys, or to
+# override settings for local development without affecting other developers.
+
+# Example: Override the DEBUG setting for local development.
+# DEBUG = True
+
+# Example: Use a different database for local development.
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
