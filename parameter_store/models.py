@@ -177,7 +177,7 @@ class ChangeSetAwareTopLevelEntity(models.Model):
         abstract = True
 
     shared_entity_id = models.UUIDField(editable=False, db_index=True, null=False, default=uuid.uuid4)
-    is_live = models.BooleanField(editable=False, db_index=True, null=False, default=True)
+    is_live = models.BooleanField(editable=False, db_index=True, null=False, default=False)
     is_locked = models.BooleanField(editable=False, db_index=True, null=False, default=False)
     changeset_id = models.ForeignKey(ChangeSet, on_delete=models.SET_NULL, null=True, verbose_name="ChangeSet ID")
 
@@ -186,7 +186,7 @@ class ChangeSetAwareChildEntity(models.Model):
     class Meta:
         abstract = True
 
-    is_live = models.BooleanField(editable=False, db_index=True, default=True)
+    is_live = models.BooleanField(editable=False, db_index=True, default=False)
     changeset_id = models.ForeignKey(
         ChangeSet, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="ChangeSet ID"
     )
