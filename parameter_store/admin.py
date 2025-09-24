@@ -255,8 +255,7 @@ class ChangeSetAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
                         draft_entity.is_live = True
                         draft_entity.changeset_id = None
                         draft_entity.is_locked = False
-                        # Assuming locked_by_changeset is the name of the field. The document uses locked_by_changeset, but the model has changeset_id.
-                        # I will assume that when is_locked is false, the changeset_id should be null.
+                        # When is_locked is false, the changeset_id should be null.
                         draft_entity.save()
 
                 # Process child entities
