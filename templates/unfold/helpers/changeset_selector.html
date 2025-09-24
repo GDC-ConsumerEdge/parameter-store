@@ -11,22 +11,25 @@
              x-transition:leave="transition ease-in duration-75"
              x-transition:leave-start="transform opacity-100 scale-100"
              x-transition:leave-end="transform opacity-0 scale-95"
-             class="absolute right-0 w-56 mt-2 origin-top-right bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none"
+             class="absolute right-0 mt-2 origin-top-right bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none"
              style="display: none;"
              aria-orientation="vertical"
              role="menu">
-            <div class="py-1" role="none">
+            <div class="py-1 w-40" role="none">
                 <div class="px-4 py-2 text-sm text-gray-700 border-b" role="none">
                     <p class="font-semibold">{% trans "Active ChangeSet" %}</p>
                     <p>{{ active_changeset.name|default:"None" }}</p>
                 </div>
-                {% for changeset in draft_changesets %}
-                    <a href="?active_changeset={{ changeset.id }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 {% if changeset.id == active_changeset.id %} bg-gray-100 {% endif %}" role="menuitem">
-                        {{ changeset.name }}
-                    </a>
-                {% empty %}
-                    <p class="px-4 py-2 text-sm text-gray-500">{% trans "No draft ChangeSets" %}</p>
-                {% endfor %}
+                <div class="px-4 py-4 text-sm text-gray-700 border-b" role="none">
+                    <p class="font-semibold">{% trans "Draft ChangeSets" %}</p>
+                    {% for changeset in draft_changesets %}
+                        <a href="?active_changeset={{ changeset.id }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 {% if changeset.id == active_changeset.id %} bg-gray-100 {% endif %}" role="menuitem">
+                            {{ changeset.name }}
+                        </a>
+                    {% empty %}
+                        <p class="px-4 py-2 text-sm text-gray-500">{% trans "No draft ChangeSets" %}</p>
+                    {% endfor %}
+                </div>
                 <div class="border-t">
                     <a href="{% url 'param_admin:parameter_store_changeset_add' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">
                         {% trans "Create new ChangeSet" %}
