@@ -1,7 +1,38 @@
+from django.template.loader import render_to_string
+
+from .models import ChangeSet
+
+
 def custom_header_links(request):
+    """Renders a changeset selector in the header.
+
+    This context processor renders a template to display a changeset selector in the header. It also handles the logic
+    for setting the active changeset in the session.
+
+    Args:
+        request: The HttpRequest object.
+
+    Returns:
+        A dictionary containing the rendered changeset selector.
     """
-    Adds custom links to the userlinks header area.
-    """
+    active_changeset_id = request.session.get("active_changeset_id")
+    active_changeset = None
+    if active_changeset_id:
+        try:
+            active_changeset = ChangeSet.objects.get(id=active_changeset_id)
+        except ChangeSet.DoesNotExist:
+            pass
+
+    draft_changesets = ChangeSet.objects.filter(status=ChangeSet.Status.DRAFT)
+
+    if request.GET.get("active_changeset"):
+        request.session["active_changeset_id"] = request.GET.get("active_changeset")
+
+    context = {
+        "active_changeset": active_changeset,
+        "draft_changesets": draft_changesets,
+    }
+
     return {
-        "changeset_icon": '<a href="/params/parameter_store/changeset/" title="ChangeSets" class="flex items-center justify-center w-10 h-10"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-replace-all-icon lucide-replace-all"><path d="M14 14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2"/><path d="M14 4a2 2 0 0 1 2-2"/><path d="M16 10a2 2 0 0 1-2-2"/><path d="M20 14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2"/><path d="M20 2a2 2 0 0 1 2 2"/><path d="M22 8a2 2 0 0 1-2 2"/><path d="m3 7 3 3 3-3"/><path d="M6 10V5a 3 3 0 0 1 3-3h1"/><rect x="2" y="14" width="8" height="8" rx="2"/></svg></a>',
+        "changeset_icon": render_to_string("unfold/helpers/changeset_selector.html", context),
     }
