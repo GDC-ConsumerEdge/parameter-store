@@ -227,6 +227,15 @@ class ChangeSetAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
     def commit_changeset(self, request, queryset):
+        """Commits the selected changesets.
+
+        This action commits the selected changesets, making the changes live. Only changesets in the DRAFT state can be
+        committed.
+
+        Args:
+            request: The HttpRequest object.
+            queryset: The queryset of selected ChangeSet objects.
+        """
         from django.db import transaction
         from django.utils import timezone
 
@@ -278,6 +287,15 @@ class ChangeSetAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     commit_changeset.short_description = "Commit selected changesets"
 
     def discard_changeset(self, request, queryset):
+        """Discards the selected changesets.
+
+        This action discards the selected changesets, deleting all associated draft data. Only changesets in the DRAFT
+        state can be discarded.
+
+        Args:
+            request: The HttpRequest object.
+            queryset: The queryset of selected ChangeSet objects.
+        """
         from django.db import transaction
 
         from .models import Cluster, ClusterData, ClusterFleetLabel, ClusterIntent, ClusterTag, Group, GroupData
@@ -312,6 +330,15 @@ class ChangeSetAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     discard_changeset.short_description = "Discard selected changesets"
 
     def coalesce_changesets(self, request, queryset):
+        """Coalesces multiple changesets into a single one.
+
+        This action merges multiple changesets into a single target changeset. The target changeset is the first one
+        selected. All other selected changesets will be merged into the target changeset and then deleted.
+
+        Args:
+            request: The HttpRequest object.
+            queryset: The queryset of selected ChangeSet objects.
+        """
         from django.db import transaction
 
         from .models import Cluster, ClusterData, ClusterFleetLabel, ClusterIntent, ClusterTag, Group, GroupData

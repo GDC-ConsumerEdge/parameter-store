@@ -4,8 +4,16 @@ from .models import ChangeSet
 
 
 def custom_header_links(request):
-    """
-    Adds custom links to the userlinks header area.
+    """Renders a changeset selector in the header.
+
+    This context processor renders a template to display a changeset selector in the header. It also handles the logic
+    for setting the active changeset in the session.
+
+    Args:
+        request: The HttpRequest object.
+
+    Returns:
+        A dictionary containing the rendered changeset selector.
     """
     active_changeset_id = request.session.get("active_changeset_id")
     active_changeset = None
