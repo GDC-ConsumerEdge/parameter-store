@@ -56,8 +56,12 @@ class ParamStoreAdmin(usites.UnfoldAdminSite):
 
     def get_app_list(self, request, app_label=None):
         """Return a sorted list of all the installed apps that have been registered to this
-        site.
+        site. Caches the result on the request object to avoid multiple database hits.
         """
+        # Caching the result on the request object to avoid multiple database hits.
+        if hasattr(request, "_app_list"):
+            return request._app_list
+
         ordering = {
             "ChangeSets": 1,
             "Clusters": 2,
@@ -80,6 +84,7 @@ class ParamStoreAdmin(usites.UnfoldAdminSite):
         for app in app_list:
             app["models"].sort(key=lambda x: ordering.get(x["name"], 1000))
 
+        request._app_list = app_list
         return app_list
 
 
@@ -94,7 +99,8 @@ class ClusterAdmin(ChangeSetAwareAdminMixin, GuardedModelAdmin, uadmin.ModelAdmi
     search_fields = ["name", "group__name", "tags__name"]
     sortable_by = ["name", "group"]
     ordering = ["group", "name"]
-    readonly_fields = ("created_at", "updated_at")
+    readonly_fields = ("created_at", "updated_at", "changeset_id", "locked_by_changeset", "draft_of")
+    autocomplete_fields = ("group",)
 
     @admin.display(description="Cluster Tags")
     def comma_separated_tags(self, obj: "Cluster") -> str:
@@ -108,7 +114,12 @@ class ClusterAdmin(ChangeSetAwareAdminMixin, GuardedModelAdmin, uadmin.ModelAdmi
         return ""
 
     def get_queryset(self, request: "HttpRequest"):
-        return super().get_queryset(request).select_related("group", "intent").prefetch_related("tags")
+        return (
+            super()
+            .get_queryset(request)
+            .select_related("group", "intent", "changeset_id", "locked_by_changeset")
+            .prefetch_related("tags")
+        )
 
     def formfield_for_manytomany(self, db_field, request, **kwargs):
         if db_field.name == "tags":
@@ -178,7 +189,8 @@ class GroupAdmin(ChangeSetAwareAdminMixin, GuardedModelAdmin, uadmin.ModelAdmin)
     list_display = ["name", "changeset_status"]
     sortable_by = ["name"]
     ordering = ["name"]
-    readonly_fields = ("created_at", "updated_at")
+    readonly_fields = ("created_at", "updated_at", "changeset_id", "locked_by_changeset", "draft_of")
+    search_fields = ("name",)
 
     def _copy_child_relations(
         self, original_instance: "Group", draft_instance: "Group", changeset: "ChangeSet"
@@ -310,6 +322,10 @@ class ChangeSetAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
         "committed_at",
         "committed_by",
     )
+
+    def get_queryset(self, request):
+        """Optimizes the queryset by pre-fetching related user objects."""
+        return super().get_queryset(request).select_related("created_by", "committed_by")
 
     def save_model(self, request, obj, form, change):
         if not obj.pk:

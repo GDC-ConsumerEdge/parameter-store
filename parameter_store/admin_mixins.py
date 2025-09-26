@@ -43,7 +43,8 @@ class ChangeSetAwareAdminMixin:
         """Filters the queryset to show all live and draft entities for the current user.
 
         This method returns a queryset containing all live entities, plus all draft entities
-        that were created by the currently logged-in user.
+        that were created by the currently logged-in user. It also optimizes the query by
+        pre-fetching the related changeset object.
 
         Args:
             request: The HttpRequest object.
@@ -52,7 +53,9 @@ class ChangeSetAwareAdminMixin:
             A Django QuerySet containing all live and user-owned draft entities.
         """
         qs = super().get_queryset(request)
-        return qs.filter(models.Q(is_live=True) | models.Q(changeset_id__created_by=request.user, is_live=False))
+        return qs.filter(
+            models.Q(is_live=True) | models.Q(changeset_id__created_by=request.user, is_live=False)
+        ).select_related("changeset_id", "locked_by_changeset")
 
     @admin.display(description="Changeset Status")
     def changeset_status(self, obj):
