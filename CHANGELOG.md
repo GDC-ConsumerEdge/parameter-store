@@ -1,5 +1,38 @@
 # Changelog
 
+## [2.0.0](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v1.2.1...v2.0.0) (2025-09-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* add changeset models ([#83](https://github.com/GDC-ConsumerEdge/parameter-store/issues/83))
+
+### Features
+
+* Add ability to create/modify ChangeSets from object creation pages ([4b1ff83](https://github.com/GDC-ConsumerEdge/parameter-store/commit/4b1ff838cd6dda5b9a86961f9179eeb202dc5e1a))
+* add changeset models ([#83](https://github.com/GDC-ConsumerEdge/parameter-store/issues/83)) ([4734e6c](https://github.com/GDC-ConsumerEdge/parameter-store/commit/4734e6ccc23a46f4a925a81cdbeeb3601f38dda4))
+* **changesets:** add initial support for changeset management through the UI ([9f5d484](https://github.com/GDC-ConsumerEdge/parameter-store/commit/9f5d48476a8cde063511951572b64f4070c8bf48))
+* **changesets:** Add initial support for management of ChangeSets through the Admin UI ([4b1ff83](https://github.com/GDC-ConsumerEdge/parameter-store/commit/4b1ff838cd6dda5b9a86961f9179eeb202dc5e1a))
+* Implement ChangeSet Management in Django Admin ([#90](https://github.com/GDC-ConsumerEdge/parameter-store/issues/90)) ([9f5d484](https://github.com/GDC-ConsumerEdge/parameter-store/commit/9f5d48476a8cde063511951572b64f4070c8bf48))
+* initial support for the addition and display of ChangeSets in the Admin UI ([#88](https://github.com/GDC-ConsumerEdge/parameter-store/issues/88)) ([4b1ff83](https://github.com/GDC-ConsumerEdge/parameter-store/commit/4b1ff838cd6dda5b9a86961f9179eeb202dc5e1a))
+
+
+### Bug Fixes
+
+* **changesets:** changeset name now a required field ([4b1ff83](https://github.com/GDC-ConsumerEdge/parameter-store/commit/4b1ff838cd6dda5b9a86961f9179eeb202dc5e1a))
+* **changesets:** correct changeset button link ([4b1ff83](https://github.com/GDC-ConsumerEdge/parameter-store/commit/4b1ff838cd6dda5b9a86961f9179eeb202dc5e1a))
+* **changesets:** correct comment ([9f5d484](https://github.com/GDC-ConsumerEdge/parameter-store/commit/9f5d48476a8cde063511951572b64f4070c8bf48))
+* **changesets:** fix menu dropdown behavior, now selecting draft changesets ([9f5d484](https://github.com/GDC-ConsumerEdge/parameter-store/commit/9f5d48476a8cde063511951572b64f4070c8bf48))
+* ensure changeset dropdown supports dark theme ([9f5d484](https://github.com/GDC-ConsumerEdge/parameter-store/commit/9f5d48476a8cde063511951572b64f4070c8bf48))
+* swap the order of template engines to preference the Django engine ([9f5d484](https://github.com/GDC-ConsumerEdge/parameter-store/commit/9f5d48476a8cde063511951572b64f4070c8bf48))
+* update changeset-aware entities to default to is_live=False ([#89](https://github.com/GDC-ConsumerEdge/parameter-store/issues/89)) ([ea87538](https://github.com/GDC-ConsumerEdge/parameter-store/commit/ea8753889d7a02406f760d84a836867091b8bf5b))
+* update deps ([#91](https://github.com/GDC-ConsumerEdge/parameter-store/issues/91)) ([ade1712](https://github.com/GDC-ConsumerEdge/parameter-store/commit/ade1712edc6b5d7ba317d05db9945ced391f0640))
+
+
+### Documentation
+
+* add docstrings to new functions ([9f5d484](https://github.com/GDC-ConsumerEdge/parameter-store/commit/9f5d48476a8cde063511951572b64f4070c8bf48))
+
 ## [1.2.1](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v1.2.0...v1.2.1) (2025-09-03)
 
 
