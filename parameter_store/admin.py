@@ -14,6 +14,8 @@
 # limitations under the License.
 #
 ###############################################################################
+from typing import TYPE_CHECKING
+
 import unfold.admin as uadmin
 import unfold.sites as usites
 from django.contrib import admin
@@ -26,6 +28,7 @@ from .admin_inlines import (
     ClusterTagInline,
     GroupDataInline,
 )
+from .admin_mixins import ChangeSetAwareAdminMixin
 from .models import (
     ChangeSet,
     Cluster,
@@ -41,6 +44,9 @@ from .models import (
     Validator,
     ValidatorAssignment,
 )
+
+if TYPE_CHECKING:
+    from django.http import HttpRequest
 
 
 class ParamStoreAdmin(usites.UnfoldAdminSite):
@@ -81,9 +87,9 @@ param_admin_site = ParamStoreAdmin("param_admin")
 
 
 @admin.register(Cluster, site=param_admin_site)
-class ClusterAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
+class ClusterAdmin(ChangeSetAwareAdminMixin, GuardedModelAdmin, uadmin.ModelAdmin):
     inlines = [ClusterDataInline, ClusterTagInline, ClusterFleetLabelsInline, ClusterIntentInline]
-    list_display = ["name", "group", "comma_separated_tags"]
+    list_display = ["name", "group", "comma_separated_tags", "changeset_status"]
     list_filter = ["group", "tags__name"]
     search_fields = ["name", "group__name", "tags__name"]
     sortable_by = ["name", "group"]
@@ -91,7 +97,7 @@ class ClusterAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     readonly_fields = ("created_at", "updated_at")
 
     @admin.display(description="Cluster Tags")
-    def comma_separated_tags(self, obj):
+    def comma_separated_tags(self, obj: "Cluster") -> str:
         # Now tags are prefetched, so this is efficient
         if hasattr(obj, "prefetched_tags"):  # Check if prefetch is available, for testing
             tags = obj.prefetched_tags
@@ -101,7 +107,7 @@ class ClusterAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
             return ", ".join(tag.name for tag in tags)
         return ""
 
-    def get_queryset(self, request):
+    def get_queryset(self, request: "HttpRequest"):
         return super().get_queryset(request).select_related("group", "intent").prefetch_related("tags")
 
     def formfield_for_manytomany(self, db_field, request, **kwargs):
@@ -109,14 +115,98 @@ class ClusterAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
             kwargs["queryset"] = Tag.objects.all()
         return super().formfield_for_manytomany(db_field, request, **kwargs)
 
+    def _copy_child_relations(
+        self, original_instance: "Cluster", draft_instance: "Cluster", changeset: "ChangeSet"
+    ) -> None:
+        """Handles the deep copying of child relationships for a new draft instance.
+        This is a required override when using the `ChangeSetAwareAdminMixin`.
+
+        This method is responsible for creating draft copies of all child objects
+        (e.g., custom data, fleet labels, intent) that are related to the original
+        live cluster. Each new child object is associated with the new draft cluster
+        and the active changeset.
+
+        Args:
+            original_instance: The live cluster instance from which to copy children.
+            draft_instance: The new draft cluster to which the copied children will be linked.
+            changeset: The active changeset for the new draft records.
+        """
+        # Iterate over all custom data related to the original cluster.
+        for cluster_data in original_instance.cluster_data.all():
+            # Setting pk and id to None ensures that a new object will be created.
+            cluster_data.pk = None
+            cluster_data.id = None
+            # Link the new child object to the draft cluster.
+            cluster_data.cluster = draft_instance
+            # Mark the new child object as a draft.
+            cluster_data.is_live = False
+            # Associate the new child object with the active changeset.
+            cluster_data.changeset_id = changeset
+            cluster_data.save()
+
+        # Iterate over all fleet labels related to the original cluster.
+        for fleet_label in original_instance.fleet_labels.all():
+            # Setting pk and id to None ensures that a new object will be created.
+            fleet_label.pk = None
+            fleet_label.id = None
+            # Link the new child object to the draft cluster.
+            fleet_label.cluster = draft_instance
+            # Mark the new child object as a draft.
+            fleet_label.is_live = False
+            # Associate the new child object with the active changeset.
+            fleet_label.changeset_id = changeset
+            fleet_label.save()
+
+        # Check if the original cluster has an intent and copy it.
+        if hasattr(original_instance, "intent"):
+            intent = original_instance.intent
+            # Setting pk and id to None ensures that a new object will be created.
+            intent.pk = None
+            intent.id = None
+            # Link the new child object to the draft cluster.
+            intent.cluster = draft_instance
+            # Mark the new child object as a draft.
+            intent.is_live = False
+            # Associate the new child object with the active changeset.
+            intent.changeset_id = changeset
+            intent.save()
+
 
 @admin.register(Group, site=param_admin_site)
-class GroupAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
+class GroupAdmin(ChangeSetAwareAdminMixin, GuardedModelAdmin, uadmin.ModelAdmin):
     inlines = [GroupDataInline]
-    list_display = ["name"]
+    list_display = ["name", "changeset_status"]
     sortable_by = ["name"]
     ordering = ["name"]
     readonly_fields = ("created_at", "updated_at")
+
+    def _copy_child_relations(
+        self, original_instance: "Group", draft_instance: "Group", changeset: "ChangeSet"
+    ) -> None:
+        """Handles the deep copying of child relationships for a new draft instance.
+        This is a required override when using the `ChangeSetAwareAdminMixin`.
+
+        This method is responsible for creating draft copies of all child objects
+        (e.g., custom data) that are related to the original live group. Each new
+        child object is associated with the new draft group and the active changeset.
+
+        Args:
+            original_instance: The live group instance from which to copy children.
+            draft_instance: The new draft group to which the copied children will be linked.
+            changeset: The active changeset for the new draft records.
+        """
+        # Iterate over all custom data related to the original group.
+        for group_data in original_instance.group_data.all():
+            # Setting pk and id to None ensures that a new object will be created.
+            group_data.pk = None
+            group_data.id = None
+            # Link the new child object to the draft group.
+            group_data.group = draft_instance
+            # Mark the new child object as a draft.
+            group_data.is_live = False
+            # Associate the new child object with the active changeset.
+            group_data.changeset_id = changeset.id
+            group_data.save()
 
 
 @admin.register(Tag, site=param_admin_site)

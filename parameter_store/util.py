@@ -16,7 +16,13 @@
 ###############################################################################
 import importlib
 import inspect
+import typing
 from typing import Callable
+
+if typing.TYPE_CHECKING:
+    from django.http import HttpRequest
+
+    from .models import ChangeSet
 
 
 def get_class_from_full_path(full_path):
@@ -74,3 +80,38 @@ def str_to_bool(value: str | bool) -> bool:
             return False
         case _:
             raise ValueError(f"{value} isn't an expected boolean value")
+
+
+def get_or_create_changeset(request: "HttpRequest") -> "ChangeSet":
+    """Retrieves the active changeset from the session or creates a new one.
+
+    This function checks the user's session for an 'active_changeset_id'. If found, it
+    retrieves the corresponding ChangeSet object. If not found, it creates a new
+    ChangeSet, names it with the user's username and the current timestamp, stores its
+    ID in the session, and informs the user via a message.
+
+    Args:
+        request: The HttpRequest object, used to access the session and user information.
+
+    Returns:
+        The active ChangeSet model instance.
+    """
+    from django.contrib import messages
+    from django.utils import timezone
+
+    from parameter_store.models import ChangeSet
+
+    active_changeset_id = request.session.get("active_changeset_id")
+    if active_changeset_id:
+        try:
+            return ChangeSet.objects.get(pk=active_changeset_id)
+        except ChangeSet.DoesNotExist:
+            # The changeset ID in the session is invalid, so we'll create a new one.
+            del request.session["active_changeset_id"]
+
+    now_str = timezone.now().strftime("%Y%m%d-%H:%M:%S")
+    changeset_name = f"ChangeSet {request.user.username} {now_str}"
+    changeset = ChangeSet.objects.create(name=changeset_name, created_by=request.user)
+    request.session["active_changeset_id"] = changeset.id
+    messages.info(request, f"No active changeset. Created and activated a new one: {changeset.name}")
+    return changeset
