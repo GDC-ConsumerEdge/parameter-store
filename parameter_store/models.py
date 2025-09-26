@@ -191,9 +191,15 @@ class ChangeSetAwareChildEntity(models.Model):
 
 class Group(ChangeSetAwareTopLevelEntity, DynamicValidatingModel):
     class Meta:
-        constraints = top_level_constraints
+        constraints = top_level_constraints + [
+            models.UniqueConstraint(
+                fields=["name"],
+                condition=models.Q(is_live=True),
+                name="unique_live_group_name",
+            ),
+        ]
 
-    name = models.CharField(db_index=True, max_length=30, blank=False, unique=True, null=False)
+    name = models.CharField(db_index=True, max_length=30, blank=False, unique=False, null=False)
     description = models.CharField(max_length=255, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
