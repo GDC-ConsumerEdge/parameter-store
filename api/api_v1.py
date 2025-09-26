@@ -41,7 +41,7 @@ from .schema.out import (
 )
 from .utils import paginate, require_permissions
 
-api_v1 = NinjaAPI(title="Parameter Store API", version="1.0.0", csrf=True, docs_decorator=staff_member_required)
+api_v1 = NinjaAPI(title="Parameter Store API", version="1.0.0", docs_decorator=staff_member_required)
 
 
 @api_v1.get("/ping", response=PingResponse, summary="Basic health check")
