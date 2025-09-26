@@ -23,11 +23,14 @@ def custom_header_links(request):
         except ChangeSet.DoesNotExist:
             pass
 
-    draft_changesets = ChangeSet.objects.filter(status=ChangeSet.Status.DRAFT)
+    # To prevent multiple database hits per request, we cache the draft changesets
+    # on the request object itself.
+    if not hasattr(request, "_draft_changesets"):
+        request._draft_changesets = ChangeSet.objects.filter(status=ChangeSet.Status.DRAFT).select_related("created_by")
 
     context = {
         "active_changeset": active_changeset,
-        "draft_changesets": draft_changesets,
+        "draft_changesets": request._draft_changesets,
     }
 
     return {

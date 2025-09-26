@@ -19,6 +19,10 @@ class ClusterIntentInline(uadmin.StackedInline):
     model = ClusterIntent
     extra = 0
     parent_link = True
+    exclude = ("changeset_id",)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("cluster")
 
 
 def get_tag_choices():
@@ -36,7 +40,7 @@ class ClusterTagInlineForm(forms.ModelForm):
 
     class Meta:
         model = ClusterTag
-        fields = "__all__"
+        exclude = ("changeset_id",)
 
     def clean_tag(self):
         field_id = self.cleaned_data.get("tag")
@@ -60,6 +64,7 @@ class ClusterTagInline(uadmin.TabularInline):
 class ClusterFleetLabelsInline(uadmin.TabularInline):
     model = ClusterFleetLabel
     extra = 0
+    exclude = ("changeset_id",)
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("cluster")
@@ -91,7 +96,7 @@ class DataInlineForm(ModelForm):
 class ClusterDataInlineForm(DataInlineForm):
     class Meta:
         model = ClusterData
-        fields = "__all__"
+        exclude = ("changeset_id",)
 
 
 class ClusterDataInline(uadmin.TabularInline):
@@ -106,7 +111,7 @@ class ClusterDataInline(uadmin.TabularInline):
 class GroupDataInlineForm(DataInlineForm):
     class Meta:
         model = GroupData
-        fields = "__all__"
+        exclude = ("changeset_id",)
 
 
 class GroupDataInline(uadmin.TabularInline):
@@ -115,4 +120,4 @@ class GroupDataInline(uadmin.TabularInline):
     extra = 0
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related("group", "field")
+        return super().get_queryset(request).select_related("group", "field", "changeset_id")
