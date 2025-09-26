@@ -90,3 +90,43 @@ def test_create_draft_action(cluster_admin: ClusterAdmin, cluster: Cluster, user
     assert draft_cluster.changeset_id is not None
     assert draft_cluster.changeset_id.created_by == user
     assert draft_cluster.name == cluster.name
+
+
+def test_response_change_on_live_entity_creates_draft(
+    cluster_admin: ClusterAdmin, cluster: Cluster, user: User, rf: RequestFactory
+):
+    """Tests that using the change form on a live entity creates a draft.
+
+    Args:
+        cluster_admin: The ClusterAdmin instance.
+        cluster: The live Cluster instance to be "edited".
+        user: The User instance performing the action.
+        rf: The RequestFactory instance.
+    """
+    request = rf.post(f"/admin/parameter_store/cluster/{cluster.pk}/change", data={"name": "Updated Name"})
+    request.user = user
+    request.session = {}
+    messages = FallbackStorage(request)
+    setattr(request, "_messages", messages)
+
+    # The response should be a redirect to the new draft's change page
+    response = cluster_admin.response_change(request, cluster)
+
+    # 1. Check that a new draft cluster was created
+    assert Cluster.objects.count() == 2
+    draft_cluster = Cluster.objects.get(is_live=False)
+    assert draft_cluster is not None
+
+    # 2. Check that the original cluster is now locked
+    cluster.refresh_from_db()
+    assert cluster.is_locked is True
+    assert cluster.locked_by_changeset is not None
+
+    # 3. Check that the new draft has the correct properties
+    assert draft_cluster.draft_of == cluster
+    assert draft_cluster.changeset_id == cluster.locked_by_changeset
+    assert draft_cluster.changeset_id.created_by == user
+
+    # 4. Check that the response is a redirect to the new draft's admin page
+    assert response.status_code == 302
+    assert response.url == f"/params/parameter_store/cluster/{draft_cluster.pk}/change/"

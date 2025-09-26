@@ -126,6 +126,81 @@ class ChangeSetAwareAdminMixin:
             logger.exception("Failed to create draft for instance %s", instance.pk)
             self.message_user(request, f"An unexpected error occurred: {e}", level=messages.ERROR)
 
+    def response_change(self, request, obj):
+        """Overrides the default change response to intercept updates to live entities.
+
+        If a user attempts to save a live entity, this method prevents the direct
+        update, creates a draft copy instead, and redirects the user to the new
+        draft's change page. For entities that are already drafts, it calls the
+        default `response_change` method to proceed with the standard save behavior.
+
+        Args:
+            request: The HttpRequest object.
+            obj: The model instance being changed.
+
+        Returns:
+            An HttpResponseRedirect to the new draft's change page if the entity
+            was live, otherwise the default change response.
+        """
+        if obj.is_live:
+            return self._create_draft_from_live_and_redirect(request, obj)
+        else:
+            return super().response_change(request, obj)
+
+    def _create_draft_from_live_and_redirect(self, request, instance):
+        """Handles the creation of a draft from a live entity and redirects the user.
+
+        This helper method is called when a user attempts to save a live entity. It
+        manages the atomic creation of a draft, locks the original entity, and
+        redirects the user to the new draft's change page with appropriate messaging.
+
+        Args:
+            request: The HttpRequest object.
+            instance: The live model instance from which to create a draft.
+
+        Returns:
+            An HttpResponseRedirect to the new draft's change page on success,
+            or a redirect back to the original object on failure.
+        """
+        if instance.is_locked:
+            self.message_user(
+                request, "This entity is locked by another changeset. Cannot create a new draft.", level=messages.ERROR
+            )
+            return redirect(
+                reverse(
+                    f"param_admin:{self.model._meta.app_label}_{self.model._meta.model_name}_change", args=[instance.pk]
+                )
+            )
+
+        changeset = get_or_create_changeset(request)
+
+        try:
+            with transaction.atomic():
+                draft_instance = self.deep_copy_instance(instance, changeset)
+                instance.is_locked = True
+                instance.locked_by_changeset = changeset
+                instance.save()
+
+                self.message_user(
+                    request,
+                    f"A draft was created for {instance.name} and your changes were saved to it.",
+                    level=messages.SUCCESS,
+                )
+                return redirect(
+                    reverse(
+                        f"param_admin:{self.model._meta.app_label}_{self.model._meta.model_name}_change",
+                        args=[draft_instance.pk],
+                    )
+                )
+        except Exception as e:
+            logger.exception("Failed to create draft for instance %s", instance.pk)
+            self.message_user(request, f"An unexpected error occurred: {e}", level=messages.ERROR)
+            return redirect(
+                reverse(
+                    f"param_admin:{self.model._meta.app_label}_{self.model._meta.model_name}_change", args=[instance.pk]
+                )
+            )
+
     def deep_copy_instance(self, original_instance, changeset):
         """Performs a deep copy of a model instance and its related children.
 
