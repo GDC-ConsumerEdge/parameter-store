@@ -1,0 +1,182 @@
+###############################################################################
+# Copyright 2024 Google, LLC
+#
+# Licensed under the Apache License, Version 2.0 (a "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+###############################################################################
+import logging
+from typing import Optional
+
+from django.contrib import admin, messages
+from django.db import models, transaction
+from django.http import HttpResponseRedirect
+from django.shortcuts import redirect
+from django.urls import reverse
+
+from parameter_store.util import get_or_create_changeset
+
+logger = logging.getLogger(__name__)
+
+
+class ChangeSetAwareAdminMixin:
+    """A mixin for ModelAdmin classes of top-level entities that are ChangeSet-aware.
+
+    This mixin provides functionality to create a draft of a live entity, filter the queryset to
+    show only live entities or drafts in the active changeset, and restrict direct editing of live
+    entities.
+    """
+
+    actions = ["create_draft_action"]
+    list_display = ["name", "group", "comma_separated_tags", "changeset_status"]
+
+    def get_queryset(self, request):
+        """Filters the queryset to show all live and draft entities for the current user.
+
+        This method returns a queryset containing all live entities, plus all draft entities
+        that were created by the currently logged-in user.
+
+        Args:
+            request: The HttpRequest object.
+
+        Returns:
+            A Django QuerySet containing all live and user-owned draft entities.
+        """
+        qs = super().get_queryset(request)
+        return qs.filter(models.Q(is_live=True) | models.Q(changeset_id__created_by=request.user, is_live=False))
+
+    @admin.display(description="Changeset Status")
+    def changeset_status(self, obj):
+        """Displays the status of the changeset associated with a draft entity.
+
+        Args:
+            obj: The model instance.
+
+        Returns:
+            A string indicating the changeset status, or "Live" if the entity is live.
+        """
+        if obj.is_live:
+            return "Live"
+        if obj.changeset_id:
+            active_changeset_id = self.request.session.get("active_changeset_id")
+            if obj.changeset_id.id == active_changeset_id:
+                return f"Draft in active changeset: {obj.changeset_id.name}"
+            return f"Draft in changeset: {obj.changeset_id.name}"
+        return "Draft (no changeset)"
+
+    @admin.action(description="Create Draft & Edit")
+    def create_draft_action(self, request, queryset) -> Optional[HttpResponseRedirect]:
+        """Creates a draft copy of a live entity within a changeset context.
+
+        This Django admin action is intended for a single, live, unlocked entity. It will
+        automatically create and activate a new changeset if one is not already active. Upon
+        successful creation of the draft, it redirects the user to the draft's change page.
+
+        Args:
+            request: The HttpRequest object.
+            queryset: The queryset of selected entities.
+
+        Returns:
+            An HttpResponseRedirect to the new draft's change page on success, otherwise None.
+        """
+        if queryset.count() != 1:
+            self.message_user(request, "Please select exactly one entity to create a draft.", level=messages.WARNING)
+            return
+
+        instance = queryset.first()
+
+        if not instance.is_live:
+            self.message_user(request, "You can only create a draft from a live entity.", level=messages.WARNING)
+            return
+
+        if instance.is_locked:
+            self.message_user(
+                request, "This entity is locked by another changeset. Cannot create a new draft.", level=messages.ERROR
+            )
+            return
+
+        changeset = get_or_create_changeset(request)
+
+        try:
+            with transaction.atomic():
+                draft_instance = self.deep_copy_instance(instance, changeset)
+                instance.is_locked = True
+                instance.locked_by_changeset = changeset
+                instance.save()
+
+                return redirect(
+                    reverse(
+                        f"param_admin:{self.model._meta.app_label}_{self.model._meta.model_name}_change",
+                        args=[draft_instance.pk],
+                    )
+                )
+        except Exception as e:
+            logger.exception("Failed to create draft for instance %s", instance.pk)
+            self.message_user(request, f"An unexpected error occurred: {e}", level=messages.ERROR)
+
+    def deep_copy_instance(self, original_instance, changeset):
+        """Performs a deep copy of a model instance and its related children.
+
+        This method creates a new draft instance from a live one, preserving its data and
+        many-to-many relationships. It then invokes `_copy_child_relations` to handle the
+        duplication of related child objects.
+
+        Args:
+            original_instance: The model instance to copy.
+            changeset: The changeset to associate with the new draft.
+
+        Returns:
+            The newly created draft instance.
+        """
+        # Create a new instance in memory
+        draft_instance = self.model()
+
+        # Copy attributes from the original instance
+        for field in original_instance._meta.fields:
+            # Don't copy the primary key
+            if field.primary_key:
+                continue
+            setattr(draft_instance, field.name, getattr(original_instance, field.name))
+
+        # Set the new state for the draft and save to get a PK
+        draft_instance.shared_entity_id = original_instance.shared_entity_id
+        draft_instance.is_live = False
+        draft_instance.is_locked = False
+        draft_instance.changeset_id = changeset
+        draft_instance.draft_of = original_instance
+        draft_instance.save()
+
+        # Now that the draft has a PK, we can set M2M relationships
+        for field in original_instance._meta.many_to_many:
+            getattr(draft_instance, field.name).set(getattr(original_instance, field.name).all())
+
+        # Copy the child relations from the original to the new draft
+        self._copy_child_relations(original_instance, draft_instance, changeset)
+
+        return draft_instance
+
+    def _copy_child_relations(self, original_instance, draft_instance, changeset):
+        """Handles the deep copying of child relationships for a new draft instance.
+
+        This method must be implemented by the ModelAdmin class that uses this mixin. It is
+        responsible for iterating through the child objects of the original instance and
+        creating corresponding copies linked to the new draft instance.
+
+        Args:
+            original_instance: The original live instance from which children are copied.
+            draft_instance: The new draft instance to which copied children will be linked.
+            changeset: The active changeset to be associated with the new child drafts.
+
+        Raises:
+            NotImplementedError: If the method is not overridden in the consuming ModelAdmin.
+        """
+        raise NotImplementedError("You must implement _copy_child_relations in your ModelAdmin.")
