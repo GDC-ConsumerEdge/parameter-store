@@ -1,0 +1,51 @@
+on:
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - terraform/**
+
+name: run tests
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:latest
+        env:
+          POSTGRES_DB: eps
+          POSTGRES_USER: eps
+          POSTGRES_PASSWORD: 's2K_Nz_gwRtjf.BCCPTmctkZ'
+        ports:
+          - 5432:5432
+        # Set health checks to wait until postgres has started
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          activate-environment: 'true'
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+
+      - name: install app dependencies
+        run: uv sync --frozen --no-install-project --verbose
+
+      - name: django makemigrations
+        run: uv run python3 manage.py makemigrations parameter_store api
+
+      - name: django migrate
+        run: uv run python3 manage.py migrate
+
+      - name: run tests
+        run: uv run pytest
