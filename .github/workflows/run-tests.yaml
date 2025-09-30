@@ -48,4 +48,4 @@ jobs:
         run: uv run python3 manage.py migrate
 
       - name: run tests
-        run: uv run pytest
+        run: uv run pytest -vv
