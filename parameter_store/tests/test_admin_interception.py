@@ -68,7 +68,11 @@ def group_admin() -> GroupAdmin:
 def test_response_change_on_live_cluster_creates_draft(
     cluster_admin: ClusterAdmin, cluster: Cluster, user: User, rf: RequestFactory
 ):
-    """Tests that using the change form on a live cluster creates a draft."""
+    """
+    Verify that attempting to save a live Cluster via the admin change form
+    intercepts the request, creates a new draft of the cluster, and redirects
+    the user to the new draft's admin page.
+    """
     request = rf.post(f"/admin/parameter_store/cluster/{cluster.pk}/change/", data={"name": "Updated Name"})
     request.user = user
     request.session = {}
@@ -77,6 +81,7 @@ def test_response_change_on_live_cluster_creates_draft(
 
     response = cluster_admin.response_change(request, cluster)
 
+    # Check that a new draft was created and the original is now locked.
     assert Cluster.objects.count() == 2
     draft_cluster = Cluster.objects.get(is_live=False)
     assert draft_cluster is not None
@@ -85,10 +90,12 @@ def test_response_change_on_live_cluster_creates_draft(
     assert cluster.is_locked is True
     assert cluster.locked_by_changeset is not None
 
+    # Verify the new draft is correctly linked to the original and the changeset.
     assert draft_cluster.draft_of == cluster
     assert draft_cluster.changeset_id == cluster.locked_by_changeset
     assert draft_cluster.changeset_id.created_by == user
 
+    # Ensure the user is redirected to the new draft's change page.
     assert response.status_code == 302
     assert response.url == f"/params/parameter_store/cluster/{draft_cluster.pk}/change/"
 
@@ -96,7 +103,11 @@ def test_response_change_on_live_cluster_creates_draft(
 def test_response_change_on_live_group_creates_draft(
     group_admin: GroupAdmin, group: Group, user: User, rf: RequestFactory
 ):
-    """Tests that using the change form on a live group creates a draft."""
+    """
+    Verify that attempting to save a live Group via the admin change form
+    intercepts the request, creates a new draft of the group, and redirects
+    the user to the new draft's admin page.
+    """
     request = rf.post(f"/admin/parameter_store/group/{group.pk}/change/", data={"name": "Updated Name"})
     request.user = user
     request.session = {}
@@ -105,6 +116,7 @@ def test_response_change_on_live_group_creates_draft(
 
     response = group_admin.response_change(request, group)
 
+    # Check that a new draft was created and the original is now locked.
     assert Group.objects.count() == 2
     draft_group = Group.objects.get(is_live=False)
     assert draft_group is not None
@@ -113,9 +125,11 @@ def test_response_change_on_live_group_creates_draft(
     assert group.is_locked is True
     assert group.locked_by_changeset is not None
 
+    # Verify the new draft is correctly linked to the original and the changeset.
     assert draft_group.draft_of == group
     assert draft_group.changeset_id == group.locked_by_changeset
     assert draft_group.changeset_id.created_by == user
 
+    # Ensure the user is redirected to the new draft's change page.
     assert response.status_code == 302
     assert response.url == f"/params/parameter_store/group/{draft_group.pk}/change/"

@@ -60,13 +60,10 @@ def cluster_admin() -> ClusterAdmin:
 
 
 def test_create_draft_action(cluster_admin: ClusterAdmin, cluster: Cluster, user: User, rf: RequestFactory):
-    """Tests the create_draft_action in ChangeSetAwareAdminMixin using pytest.
-
-    Args:
-        cluster_admin: The ClusterAdmin instance.
-        cluster: The live Cluster instance to create a draft from.
-        user: The User instance to perform the action.
-        rf: The RequestFactory instance.
+    """
+    Verify that the 'Create Draft & Edit' admin action successfully creates a
+    new draft from a live Cluster, correctly locks the original live entity,
+    and associates the new draft with a changeset.
     """
     request = rf.get("/")
     request.user = user
@@ -76,16 +73,15 @@ def test_create_draft_action(cluster_admin: ClusterAdmin, cluster: Cluster, user
 
     queryset = Cluster.objects.filter(pk=cluster.pk)
 
-    # Call the action
     cluster_admin.create_draft_action(request, queryset)
 
-    # Assertions
     assert Cluster.objects.count() == 2
 
-    # Refresh the original cluster from the DB to check its updated state
+    # Refresh the original cluster from the DB to check that it became locked.
     cluster.refresh_from_db()
     assert cluster.is_locked is True
 
+    # Verify the new draft was created with the correct properties.
     draft_cluster = Cluster.objects.get(is_live=False)
     assert draft_cluster.changeset_id is not None
     assert draft_cluster.changeset_id.created_by == user
@@ -95,13 +91,10 @@ def test_create_draft_action(cluster_admin: ClusterAdmin, cluster: Cluster, user
 def test_response_change_on_live_entity_creates_draft(
     cluster_admin: ClusterAdmin, cluster: Cluster, user: User, rf: RequestFactory
 ):
-    """Tests that using the change form on a live entity creates a draft.
-
-    Args:
-        cluster_admin: The ClusterAdmin instance.
-        cluster: The live Cluster instance to be "edited".
-        user: The User instance performing the action.
-        rf: The RequestFactory instance.
+    """
+    Verify that saving a live entity via the admin change form does not
+    modify the entity directly, but instead creates a new draft and redirects
+    to the draft's change page.
     """
     request = rf.post(f"/admin/parameter_store/cluster/{cluster.pk}/change", data={"name": "Updated Name"})
     request.user = user
@@ -109,24 +102,23 @@ def test_response_change_on_live_entity_creates_draft(
     messages = FallbackStorage(request)
     setattr(request, "_messages", messages)
 
-    # The response should be a redirect to the new draft's change page
     response = cluster_admin.response_change(request, cluster)
 
-    # 1. Check that a new draft cluster was created
+    # Check that a new draft was created.
     assert Cluster.objects.count() == 2
     draft_cluster = Cluster.objects.get(is_live=False)
     assert draft_cluster is not None
 
-    # 2. Check that the original cluster is now locked
+    # Check that the original cluster is now locked.
     cluster.refresh_from_db()
     assert cluster.is_locked is True
     assert cluster.locked_by_changeset is not None
 
-    # 3. Check that the new draft has the correct properties
+    # Check that the new draft has the correct properties.
     assert draft_cluster.draft_of == cluster
     assert draft_cluster.changeset_id == cluster.locked_by_changeset
     assert draft_cluster.changeset_id.created_by == user
 
-    # 4. Check that the response is a redirect to the new draft's admin page
+    # Check that the response is a redirect to the new draft's admin page.
     assert response.status_code == 302
     assert response.url == f"/params/parameter_store/cluster/{draft_cluster.pk}/change/"
