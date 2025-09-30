@@ -12,7 +12,7 @@
 | Cloud Build Connection Admin  | `roles/cloudbuild.connectionAdmin`  | Allows Cloud Build to connect to external source code repositories like GitHub. |
 | Cloud Build Editor            | `roles/cloudbuild.builds.editor`    | Required to create and manage Cloud Build triggers.                         |
 | Cloud Build WorkerPool Owner  | `roles/cloudbuild.workerPoolOwner`  | Creates private worker pools for Cloud Build for data loading.              |
-| Cloud Run Admin               | `roles/run.admin`                   | Required for the EPS (Edge Parameter Store) application.                    |
+| Cloud Run Admin               | `roles/run.admin`                   | Required for the Parameter Store (EPS) application.                    |
 | Cloud SQL Admin               | `roles/cloudsql.admin`              | EPS requires a database, and this setup presumes the use of Cloud SQL.      |
 | Cloud Storage Admin           | `roles/storage.admin`               | Creates a Cloud Storage bucket to hold submitted jobs for Cloud Build.      |
 | Compute Load Balancer Admin   | `roles/compute.loadBalancerAdmin`   | Manages the load balancer components associated with the application.       |

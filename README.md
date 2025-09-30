@@ -1,8 +1,8 @@
-# Edge Parameter Store
+# Parameter Store
 
 <!-- TOC -->
 
-* [Edge Parameter Store](#edge-parameter-store)
+* [Parameter Store](#parameter-store)
     * [Description](#description)
     * [Getting Started](#getting-started)
         * [Preparation](#preparation)
@@ -38,7 +38,7 @@
 
 ## Description
 
-This repository contains the Edge Parameter Store, a Django application that is built to hold parameter data for
+This repository contains the Parameter Store, a Django application that is built to hold parameter data for
 deployments of Google Distributed Cloud Connected clusters where the number of clusters may scale to tens of
 thousands. It is meant to be deployed in support of other solutions and tools (in this Github organization) and as part
 of a broader suite of solutions. This tool conveys the following immediate benefits:
@@ -74,10 +74,12 @@ This section outlines steps that the user must perform
 * [psql client](https://docs.timescale.com/use-timescale/latest/integrations/query-admin/psql/)
   or [pgadmin](https://www.pgadmin.org/download/)
 
-
 ### Bootstrap the EPS GCP Project
 
-The Terraform [README](examples/terraform/README.md) document details the GCP Service Accounts (GSA) that are required for this project. Please ensure you have created a service account for Terraform with the required roles. A [Terraform bootstrap project](./examples/terraform/bootstrap/) has been provided which will create the service account and add the required roles for you.
+The Terraform [README](examples/terraform/README.md) document details the GCP Service Accounts (GSA) that are required
+for this project. Please ensure you have created a service account for Terraform with the required roles.
+A [Terraform bootstrap project](./examples/terraform/bootstrap/) has been provided which will create the service account
+and add the required roles for you.
 
 If you wish to use the [Terraform bootstrap](./examples/terraform/bootstrap/) project, ensure you apply the bootstrap
 configurations before deploying the EPS application.
@@ -89,7 +91,6 @@ terraform init
 terraform apply
 ```
 
-
 #### Configure GCP OAuth Consent Screen
 
 1. Login [GCP Console](https://console.cloud.google.com) and select your target project
@@ -97,13 +98,13 @@ terraform apply
    Configure the OAuth consent screen as External and set the publishing status to In Production.
    ![oauth_consent.gif](./docs/doc_assets/oauth_consent.gif)
 
-
 #### Identify a domain name for the Parameter Store application
 
 Choose a fully qualified domain name for your application. The Terraform provides an opinionated configuration for
 the utilization of your FQDN, creating a managed zone in the deployment project. This assumes you will create a
 delegated
 zone in your application project to which an A-record for the EPS app's load balancer will be created. In doing so, it
+
 wires the application up end-to-end. If this is not your desired configuration, you will need to modify the provided
 Terraform [here](examples/terraform/dns.tf)
 
@@ -154,12 +155,12 @@ it.
     ```
 
 * Both `VERSION` and `APP` are optional.
-  * `VERSION` defaults to `0.1`
-  * `APP` defaults to `parameter-store`.
+    * `VERSION` defaults to `0.1`
+    * `APP` defaults to `parameter-store`.
 
 * The generated image is tagged as `${REPO_HOST}/${PROJECT_ID}/${REPO_FOLDER}/${APP}:v${VERSION}`
   e.g. `us-central-docker.pkg.dev/test-proj-1234/parameter-store/parameter-store:v0.1`
-  * The `latest` tag is always attached to the most recently built image
+    * The `latest` tag is always attached to the most recently built image
 
 ### Deploy GCP Infrastructure
 
@@ -245,10 +246,12 @@ Cloud Run. This is probably a group of users the membership of which is managed 
 This is part of the `_PRIVATE_POOL` substitution in the [cloudbuild.tf](examples/terraform/cloudbuild.tf).
 
 `db_password_key` is a string used as a name or identifier of the secret in Secret Manager that stores the database
-password. This is passed as a substitution `_DATABASE_PASSWORD_KEY` to the [cloudbuild.tf](examples/terraform/cloudbuild.tf).
+password. This is passed as a substitution `_DATABASE_PASSWORD_KEY` to
+the [cloudbuild.tf](examples/terraform/cloudbuild.tf).
 
 `instance_connection_name` is a string used as a connection name for the Cloud SQL instance. This is used by the Cloud
-SQL Proxy to connect to the database. Passed as `_INSTANCE_CONNECTION_NAME` in the [cloudbuild.tf](examples/terraform/cloudbuild.tf).
+SQL Proxy to connect to the database. Passed as `_INSTANCE_CONNECTION_NAME` in
+the [cloudbuild.tf](examples/terraform/cloudbuild.tf).
 
 `artifact_registry_project_id` is a string value for Google Cloud Project ID where the Artifact Registry is located.
 Passed as `_ARTIFACT_REGISTRY_PROJECT_ID` in the [cloudbuild.tf](examples/terraform/cloudbuild.tf).
@@ -458,20 +461,23 @@ sudo -u postgres psql
 3. Create a New Database: Create a new database named eps.
 
 ```sql
-CREATE DATABASE eps;
+CREATE
+DATABASE eps;
 ```
 
 4. Create a New User: Create a new user named eps with a specified password. Replace `your_password` with a strong
    password of your choice.
 
 ```sql
-CREATE USER eps WITH PASSWORD 'your_password';
+CREATE
+USER eps WITH PASSWORD 'your_password';
 ```
 
 5. Change Ownership of the Database: Alter the ownership of the `eps` database to the new user `eps`.
 
 ```sql
-ALTER DATABASE eps OWNER TO eps;
+ALTER
+DATABASE eps OWNER TO eps;
 ```
 
 6. Grant Necessary Privileges to the User: Grant the necessary permissions for the eps user to manage objects within the
@@ -481,23 +487,30 @@ Please copy these one-by-one to the shell; they do not copy well en masse.
 
 ```sql
 -- Connect to the database named 'eps'
-\c eps;
+\c
+eps;
 
 -- Grant usage on the schema 'public' to 'eps'
-GRANT USAGE ON SCHEMA public TO eps;
+GRANT USAGE ON SCHEMA
+public TO eps;
 
 -- Grant create privileges on the schema 'public' to 'eps'
-GRANT CREATE ON SCHEMA public TO eps;
+GRANT CREATE
+ON SCHEMA public TO eps;
 
 -- Grant all privileges on all tables in the schema 'public' to 'eps'
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO eps;
+GRANT ALL PRIVILEGES ON ALL
+TABLES IN SCHEMA public TO eps;
 
 -- Grant all privileges on all sequences in the schema 'public' to 'eps'
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO eps;
+GRANT ALL PRIVILEGES ON ALL
+SEQUENCES IN SCHEMA public TO eps;
 
 -- Grant privileges to create and manage tables within the 'public' schema
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO eps;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO eps;
+ALTER
+DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO eps;
+ALTER
+DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO eps;
 ```
 
 ### Python Setup
@@ -509,9 +522,11 @@ These setup instructions assume the use of [uv](https://docs.astral.sh/uv/)
 ```bash
 uv sync
 ```
+
 2. Define local environment database configuration (optional)
 
-The default database configuration for the Edge Parameter Store application can be found in [settings.py](./parameter_store/settings.py).
+The default database configuration for the Parameter Store application can be found
+in [settings.py](./parameter_store/settings.py).
 To override these settings for your local environment, define relevant environment variables as needed.
 
 ```bash
