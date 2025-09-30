@@ -93,3 +93,28 @@ def invalidate_cluster_data_field_choices_on_save(sender, instance, **kwargs):
 @receiver(post_delete, sender=CustomDataField)
 def invalidate_cluster_data_field_choices_on_delete(sender, instance, **kwargs):
     cache.delete("cluster_data_field_choices")
+
+
+@receiver(post_delete, sender=Cluster)
+@receiver(post_delete, sender=Group)
+def unlock_parent_on_draft_delete(sender, instance, **kwargs):
+    """
+    Signal handler to unlock a parent entity when its draft is deleted.
+
+    This function is connected to the post_delete signal for top-level
+    versioned models (Cluster, Group). When an instance of these models is
+    deleted, it checks if the deleted instance was a draft (i.e., it has a
+    'draft_of_id'). If so, it finds the parent live record and unlocks it.
+    """
+    # The instance is already deleted from the DB, but its fields are still in memory.
+    # We check if it was a draft by looking for the draft_of_id.
+    if instance.draft_of_id:
+        try:
+            # Use the sender to get the correct model class.
+            parent = sender.objects.get(pk=instance.draft_of_id)
+            parent.is_locked = False
+            parent.locked_by_changeset = None
+            parent.save(update_fields=["is_locked", "locked_by_changeset", "updated_at"])
+        except sender.DoesNotExist:
+            # The parent was already deleted, nothing to do.
+            pass

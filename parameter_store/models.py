@@ -181,22 +181,6 @@ class ChangeSetAwareTopLevelEntity(models.Model):
     )
     draft_of = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="drafts")
 
-    def delete(self, *args, **kwargs):
-        """Overrides the default delete method to handle unlocking of parent entities.
-
-        When a draft instance is deleted, this method ensures that the original
-        live entity it was a draft of is properly unlocked by setting its `is_locked`
-        flag to False and clearing its `locked_by_changeset` reference.
-        """
-        # Check if this is a draft of an existing live entity
-        if self.draft_of:
-            parent = self.draft_of
-            parent.is_locked = False
-            parent.locked_by_changeset = None
-            parent.save()
-
-        super().delete(*args, **kwargs)
-
 
 class ChangeSetAwareChildEntity(models.Model):
     class Meta:
