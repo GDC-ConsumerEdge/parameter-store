@@ -32,35 +32,43 @@ top_level_constraints = [
         name="unique_live_%(class)s",
     ),
     # Ensures that for any given shared_entity_id, only one record can be a draft.
+    # A draft is defined as a record that is not live and is part of a changeset.
     models.UniqueConstraint(
         fields=["shared_entity_id"],
-        condition=models.Q(is_live=False),
+        condition=models.Q(is_live=False, changeset_id__isnull=False),
         name="unique_draft_%(class)s",
     ),
-    # A draft record must always point to the live record it was drafted from.
+    # Enforces the correct state of the 'draft_of' field based on the record's status (live, draft, or historical).
     models.CheckConstraint(
-        condition=~models.Q(is_live=False) | models.Q(draft_of__isnull=False),
-        name="draft_must_have_draft_of_%(class)s",
+        condition=(
+            models.Q(is_live=True, draft_of__isnull=True)
+            | models.Q(is_live=False, changeset_id__isnull=False, draft_of__isnull=False)
+            | models.Q(is_live=False, obsoleted_by_changeset__isnull=False, draft_of__isnull=True)
+        ),
+        name="valid_draft_of_state_by_status_%(class)s",
     ),
-    # A live record cannot be a draft of another record; its draft_of field must be null.
+    # Enforces the correct locking state based on the record's status.
     models.CheckConstraint(
-        condition=~models.Q(is_live=True) | models.Q(draft_of__isnull=True),
-        name="live_must_not_have_draft_of_%(class)s",
+        condition=(
+            # A live, locked record must have a locking changeset.
+            models.Q(is_live=True, is_locked=True, locked_by_changeset__isnull=False)
+            # A live, unlocked record must not have a locking changeset.
+            | models.Q(is_live=True, is_locked=False, locked_by_changeset__isnull=True)
+            # A non-live record (draft or historical) must never be locked.
+            | models.Q(is_live=False, is_locked=False, locked_by_changeset__isnull=True)
+        ),
+        name="valid_lock_state_by_status_%(class)s",
     ),
-    # If a live record is locked, it must be associated with the changeset that holds its draft.
+    # A non-live record must be exclusively either a draft or historical.
     models.CheckConstraint(
-        condition=~models.Q(is_locked=True) | models.Q(locked_by_changeset__isnull=False),
-        name="locked_must_have_locked_by_changeset_%(class)s",
-    ),
-    # An unlocked record cannot have a locking changeset.
-    models.CheckConstraint(
-        condition=~models.Q(is_locked=False) | models.Q(locked_by_changeset__isnull=True),
-        name="unlocked_must_not_have_locked_by_changeset_%(class)s",
-    ),
-    # A draft record must always belong to a changeset.
-    models.CheckConstraint(
-        condition=~models.Q(is_live=False) | models.Q(changeset_id__isnull=False),
-        name="draft_must_have_changeset_id_%(class)s",
+        condition=models.Q(is_live=True)
+        | (
+            # Is a draft: changeset_id is set AND obsoleted_by_changeset is NOT set
+            models.Q(changeset_id__isnull=False, obsoleted_by_changeset__isnull=True)
+            # OR is historical: changeset_id is NOT set AND obsoleted_by_changeset is set
+            | models.Q(changeset_id__isnull=True, obsoleted_by_changeset__isnull=False)
+        ),
+        name="non_live_must_be_draft_or_historical_%(class)s",
     ),
     # A live record, representing the stable state, is not part of any changeset.
     models.CheckConstraint(

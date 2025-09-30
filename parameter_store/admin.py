@@ -364,14 +364,38 @@ class ChangeSetAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
                             shared_entity_id=draft_entity.shared_entity_id, is_live=True
                         ).first()
                         if live_entity:
+                            # Demote the old live entity to historical.
+                            live_entity.is_locked = False
+                            live_entity.locked_by_changeset = None
                             live_entity.is_live = False
+                            live_entity.obsoleted_by_changeset = changeset
                             live_entity.save()
 
-                        draft_entity.is_live = True
-                        draft_entity.changeset_id = None
-                        draft_entity.is_locked = False
-                        # When is_locked is false, the changeset_id should be null.
-                        draft_entity.save()
+                            # Promote the draft entity to live.
+                            draft_entity.is_live = True
+                            draft_entity.changeset_id = None
+                            draft_entity.is_locked = False
+                            draft_entity.locked_by_changeset = None
+                            draft_entity.draft_of = None
+                            draft_entity.save()
+
+                            # Cascade updates for relationships pointing to the old live entity.
+                            if model == Group:
+                                # Update primary group FK on Clusters.
+                                Cluster.objects.filter(group=live_entity).update(group=draft_entity)
+                                # Update secondary group M2M on Clusters.
+                                clusters_with_secondary = Cluster.objects.filter(secondary_groups=live_entity)
+                                for cluster in clusters_with_secondary:
+                                    cluster.secondary_groups.remove(live_entity)
+                                    cluster.secondary_groups.add(draft_entity)
+                        else:
+                            # This is a new entity, just promote it to live.
+                            draft_entity.is_live = True
+                            draft_entity.changeset_id = None
+                            draft_entity.is_locked = False
+                            draft_entity.locked_by_changeset = None
+                            draft_entity.draft_of = None
+                            draft_entity.save()
 
                 # Process child entities
                 for model in child_models:
@@ -415,12 +439,13 @@ class ChangeSetAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
                     self.message_user(request, f"Changeset '{changeset}' is not in draft state.", level="warning")
                     continue
 
-                # Unlock top-level entities
+                # Unlock parent live entities
                 for model in top_level_models:
-                    locked_entities = model.objects.filter(changeset_id=changeset.id, is_locked=True)
-                    for entity in locked_entities:
+                    # Find live entities locked by this changeset
+                    locked_live_entities = model.objects.filter(locked_by_changeset=changeset, is_live=True)
+                    for entity in locked_live_entities:
                         entity.is_locked = False
-                        entity.changeset_id = None
+                        entity.locked_by_changeset = None
                         entity.save()
 
                 # Delete draft rows
@@ -465,6 +490,11 @@ class ChangeSetAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
                     self.message_user(request, f"Changeset '{changeset}' is not in draft state.", level="warning")
                     continue
 
+                # Re-point the locks on live entities from the source to the target changeset.
+                for model in top_level_models:
+                    model.objects.filter(locked_by_changeset=changeset).update(locked_by_changeset=target_changeset)
+
+                # Move draft entities from the source to the target changeset.
                 for model in top_level_models:
                     model.objects.filter(changeset_id=changeset.id).update(changeset_id=target_changeset.id)
 
