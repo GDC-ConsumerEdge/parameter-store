@@ -1,7 +1,7 @@
 [project]
 name = "parameter-store"
 version = "1.2.1"
-description = "Edge Parameter Store is a Django application that holds parameter data for deployments of Google Distributed Cloud Connected clusters"
+description = "Parameter Store is a Django application that holds parameter data for deployments of Google Distributed Cloud Connected clusters"
 authors = [
     { name = "Paul Durivage", email = "durivage@google.com" },
     { name = "Daniel Xia", email = "danielxia@google.com" },

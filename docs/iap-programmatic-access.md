@@ -1,6 +1,6 @@
-# Programmatic Access to Edge Parameter Store (EPS) with Google Service Accounts
+# Programmatic Access to Parameter Store (EPS) with Google Service Accounts
 
-This document outlines how to programmatically access an EPS (Edge Parameter Store) instance hosted on Google Cloud Platform (GCP) and protected by Identity-Aware Proxy (IAP). Access is achieved using a Google Service Account (GSA).
+This document outlines how to programmatically access an EPS (Parameter Store) instance hosted on Google Cloud Platform (GCP) and protected by Identity-Aware Proxy (IAP). Access is achieved using a Google Service Account (GSA).
 
 ## Overview
 

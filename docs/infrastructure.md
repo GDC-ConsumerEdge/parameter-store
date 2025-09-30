@@ -1,6 +1,6 @@
-# **Edge Parameter Store \- Infrastructure Overview**
+# **Parameter Store \- Infrastructure Overview**
 
-This document outlines the GCP architecture for the Edge Parameter Store (EPS) application. The design is implemented in
+This document outlines the GCP architecture for the Parameter Store (EPS) application. The design is implemented in
 Terraform and assumes a target audience familiar with GCP resources and Terraform syntax.
 
 The core of the application is a Django project deployed as a `google_cloud_run_v2_service`. Traffic is routed through
