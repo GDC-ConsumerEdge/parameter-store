@@ -565,6 +565,34 @@ export DJANGO_DEBUG=True
 uv run manage.py runserver
 ```
 
+## Testing
+
+This project uses `pytest` as its testing framework. Tests are located in the `parameter_store/tests/` directory.
+
+### Running Tests
+
+Before running tests, ensure you have installed the development dependencies:
+
+```bash
+uv sync --dev
+```
+
+To run the full test suite, execute `pytest` from the project root. Increased verbosity is recommended:
+
+```bash
+uv run pytest -vv
+```
+
+You can also run specific test files or individual tests:
+
+```bash
+# Run a specific file
+uv run pytest -vv parameter_store/tests/test_changeset_actions.py
+
+# Run a specific test function by name
+uv run pytest -vv -k "test_commit_changeset"
+```
+
 ## Additional Documentation
 
 Please see [docs](./docs) for more documentation:
