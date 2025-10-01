@@ -99,7 +99,14 @@ class ClusterAdmin(ChangeSetAwareAdminMixin, GuardedModelAdmin, uadmin.ModelAdmi
     search_fields = ["name", "group__name", "tags__name"]
     sortable_by = ["name", "group"]
     ordering = ["group", "name"]
-    readonly_fields = ("created_at", "updated_at", "changeset_id", "locked_by_changeset", "draft_of")
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+        "changeset_id",
+        "locked_by_changeset",
+        "obsoleted_by_changeset",
+        "draft_of",
+    )
     autocomplete_fields = ("group",)
 
     @admin.display(description="Cluster Tags")
@@ -117,7 +124,9 @@ class ClusterAdmin(ChangeSetAwareAdminMixin, GuardedModelAdmin, uadmin.ModelAdmi
         return (
             super()
             .get_queryset(request)
-            .select_related("group", "intent", "changeset_id", "locked_by_changeset")
+            .select_related(
+                "group", "intent", "changeset_id", "locked_by_changeset", "obsoleted_by_changeset", "draft_of"
+            )
             .prefetch_related("tags")
         )
 
@@ -189,7 +198,14 @@ class GroupAdmin(ChangeSetAwareAdminMixin, GuardedModelAdmin, uadmin.ModelAdmin)
     list_display = ["name", "changeset_status"]
     sortable_by = ["name"]
     ordering = ["name"]
-    readonly_fields = ("created_at", "updated_at", "changeset_id", "locked_by_changeset", "draft_of")
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+        "changeset_id",
+        "locked_by_changeset",
+        "obsoleted_by_changeset",
+        "draft_of",
+    )
     search_fields = ("name",)
 
     def _copy_child_relations(
