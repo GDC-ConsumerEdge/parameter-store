@@ -23,6 +23,7 @@ from django.http import HttpResponseRedirect
 from django.shortcuts import redirect
 from django.urls import reverse
 
+from parameter_store.models import Cluster, Group
 from parameter_store.util import get_or_create_changeset
 
 logger = logging.getLogger(__name__)
@@ -40,18 +41,7 @@ class ChangeSetAwareAdminMixin:
     list_display = ["name", "group", "comma_separated_tags", "changeset_status"]
 
     def get_queryset(self, request):
-        """Filters the queryset to show all live and draft entities for the current user.
-
-        This method returns a queryset containing all live entities, plus all draft entities
-        that were created by the currently logged-in user. It also optimizes the query by
-        pre-fetching the related changeset object.
-
-        Args:
-            request: The HttpRequest object.
-
-        Returns:
-            A Django QuerySet containing all live and user-owned draft entities.
-        """
+        """Filters the queryset to show all live and draft entities for the current user."""
         qs = super().get_queryset(request)
         return qs.filter(
             models.Q(is_live=True) | models.Q(changeset_id__created_by=request.user, is_live=False)
@@ -126,80 +116,78 @@ class ChangeSetAwareAdminMixin:
             logger.exception("Failed to create draft for instance %s", instance.pk)
             self.message_user(request, f"An unexpected error occurred: {e}", level=messages.ERROR)
 
-    def response_change(self, request, obj):
-        """Overrides the default change response to intercept updates to live entities.
-
-        If a user attempts to save a live entity, this method prevents the direct
-        update, creates a draft copy instead, and redirects the user to the new
-        draft's change page. For entities that are already drafts, it calls the
-        default `response_change` method to proceed with the standard save behavior.
-
-        Args:
-            request: The HttpRequest object.
-            obj: The model instance being changed.
-
-        Returns:
-            An HttpResponseRedirect to the new draft's change page if the entity
-            was live, otherwise the default change response.
+    def save_model(self, request, obj, form, change):
         """
-        if obj.is_live:
-            return self._create_draft_from_live_and_redirect(request, obj)
-        else:
-            return super().response_change(request, obj)
+        Overrides the default save_model to intercept changes to live entities.
 
-    def _create_draft_from_live_and_redirect(self, request, instance):
-        """Handles the creation of a draft from a live entity and redirects the user.
-
-        This helper method is called when a user attempts to save a live entity. It
-        manages the atomic creation of a draft, locks the original entity, and
-        redirects the user to the new draft's change page with appropriate messaging.
-
-        Args:
-            request: The HttpRequest object.
-            instance: The live model instance from which to create a draft.
-
-        Returns:
-            An HttpResponseRedirect to the new draft's change page on success,
-            or a redirect back to the original object on failure.
+        If the object is live, this method prevents the direct update, creates a
+        draft copy, applies the form changes to the draft, and locks the live
+        object. For entities that are already drafts, it calls the default
+        `save_model` method to proceed with the standard save behavior.
         """
-        if instance.is_locked:
-            self.message_user(
-                request, "This entity is locked by another changeset. Cannot create a new draft.", level=messages.ERROR
-            )
-            return redirect(
-                reverse(
-                    f"param_admin:{self.model._meta.app_label}_{self.model._meta.model_name}_change", args=[instance.pk]
-                )
-            )
+        if obj.pk and obj.is_live:
+            # This is an existing, live object. Intercept the save.
+            changeset = get_or_create_changeset(request)
+            original_instance = self.model.objects.get(pk=obj.pk)
 
-        changeset = get_or_create_changeset(request)
-
-        try:
-            with transaction.atomic():
-                draft_instance = self.deep_copy_instance(instance, changeset)
-                instance.is_locked = True
-                instance.locked_by_changeset = changeset
-                instance.save()
-
+            if original_instance.is_locked:
                 self.message_user(
                     request,
-                    f"A draft was created for {instance.name} and your changes were saved to it.",
-                    level=messages.SUCCESS,
+                    "This entity is locked by another changeset. Cannot create a new draft.",
+                    level=messages.ERROR,
                 )
-                return redirect(
-                    reverse(
-                        f"param_admin:{self.model._meta.app_label}_{self.model._meta.model_name}_change",
-                        args=[draft_instance.pk],
+                return
+
+            try:
+                with transaction.atomic():
+                    # 1. Create a draft from the original, unmodified instance.
+                    draft_instance = self.deep_copy_instance(original_instance, changeset)
+
+                    # 2. Apply the changes from the form to the new draft instance.
+                    m2m_fields = [f.name for f in self.model._meta.many_to_many]
+                    for field, value in form.cleaned_data.items():
+                        if field in m2m_fields:
+                            continue
+                        setattr(draft_instance, field, value)
+                    draft_instance.save()
+
+                    # Handle Many-to-Many relationships separately.
+                    for field in self.model._meta.many_to_many:
+                        if field.name in form.cleaned_data:
+                            getattr(draft_instance, field.name).set(form.cleaned_data[field.name])
+
+                    # 3. Lock the original live instance.
+                    original_instance.is_locked = True
+                    original_instance.locked_by_changeset = changeset
+                    original_instance.save()
+
+                    # 4. Store the new draft's pk in the request to redirect to it later.
+                    request._draft_created_pk = draft_instance.pk
+                    self.message_user(
+                        request,
+                        f"A draft was created for {original_instance.name} and your changes were saved to it.",
+                        level=messages.SUCCESS,
                     )
-                )
-        except Exception as e:
-            logger.exception("Failed to create draft for instance %s", instance.pk)
-            self.message_user(request, f"An unexpected error occurred: {e}", level=messages.ERROR)
+            except Exception as e:
+                logger.exception("Failed to create draft for instance %s", original_instance.pk)
+                self.message_user(request, f"An unexpected error occurred: {e}", level=messages.ERROR)
+        else:
+            # This is a new object or an existing draft, save it normally.
+            super().save_model(request, obj, form, change)
+
+    def response_change(self, request, obj):
+        """
+        Overrides the default change response to handle redirection to the new draft.
+        """
+        # If a draft was created in save_model, redirect to its change page.
+        if hasattr(request, "_draft_created_pk"):
             return redirect(
                 reverse(
-                    f"param_admin:{self.model._meta.app_label}_{self.model._meta.model_name}_change", args=[instance.pk]
+                    f"param_admin:{self.model._meta.app_label}_{self.model._meta.model_name}_change",
+                    args=[request._draft_created_pk],
                 )
             )
+        return super().response_change(request, obj)
 
     def deep_copy_instance(self, original_instance, changeset):
         """Performs a deep copy of a model instance and its related children.
@@ -239,6 +227,15 @@ class ChangeSetAwareAdminMixin:
 
         # Copy the child relations from the original to the new draft
         self._copy_child_relations(original_instance, draft_instance, changeset)
+
+        # If the model being copied is a Group, we need to check if there are any
+        # draft Clusters in the same changeset that need their group FK updated.
+        if isinstance(draft_instance, Group):
+            clusters_in_changeset = Cluster.objects.filter(changeset_id=changeset.id, is_live=False)
+            for cluster in clusters_in_changeset:
+                if cluster.group == original_instance:
+                    cluster.group = draft_instance
+                    cluster.save()
 
         return draft_instance
 

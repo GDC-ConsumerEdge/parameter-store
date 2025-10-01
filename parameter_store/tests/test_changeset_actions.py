@@ -29,26 +29,32 @@ pytestmark = pytest.mark.django_db
 
 @pytest.fixture
 def user() -> User:
-    """Creates and returns a superuser."""
+    """Provides a superuser for authentication in tests."""
     return User.objects.create_superuser("admin", "admin@example.com", "password")
 
 
 @pytest.fixture
 def rf() -> RequestFactory:
-    """Returns a RequestFactory instance."""
+    """Provides a RequestFactory instance for creating request objects."""
     return RequestFactory()
 
 
 @pytest.fixture
 def changeset_admin() -> ChangeSetAdmin:
-    """Returns an instance of ChangeSetAdmin."""
+    """Provides an instance of ChangeSetAdmin for testing admin actions."""
     site = admin.AdminSite()
     return ChangeSetAdmin(ChangeSet, site)
 
 
 @pytest.fixture
 def setup_commit_data(user):
-    """Sets up a complete scenario for testing a changeset commit."""
+    """
+    Sets up a complete scenario for testing a changeset commit.
+
+    This creates a live group, a draft of that group within a changeset,
+    and a live cluster that depends on the live group. This allows for
+    testing the full lifecycle of a commit.
+    """
     changeset = ChangeSet.objects.create(name="Commit Test", created_by=user)
     live_group = Group.objects.create(name="Live Group", is_live=True)
     draft_group = Group.objects.create(
@@ -69,9 +75,11 @@ def setup_commit_data(user):
 
 def test_commit_changeset(changeset_admin, user, rf, setup_commit_data):
     """
-    Verify that the 'commit_changeset' admin action correctly promotes a draft
-    Group to live, demotes the old live Group to historical, and cascades the
-    necessary foreign key updates to related models like Cluster.
+    Tests that the 'commit_changeset' action correctly promotes drafts.
+
+    This test verifies that committing a changeset transitions a draft group to
+    the live state, demotes the old live group, and correctly updates the
+    foreign key on a dependent cluster.
     """
     changeset, live_group, draft_group, live_cluster = setup_commit_data
     request = rf.get("/")
@@ -85,7 +93,6 @@ def test_commit_changeset(changeset_admin, user, rf, setup_commit_data):
     assert changeset.status == ChangeSet.Status.COMMITTED
     assert changeset.committed_by == user
 
-    # Check that the old live group is now historical and the draft is now live.
     live_group.refresh_from_db()
     draft_group.refresh_from_db()
     assert live_group.is_live is False
@@ -93,16 +100,17 @@ def test_commit_changeset(changeset_admin, user, rf, setup_commit_data):
     assert draft_group.is_live is True
     assert draft_group.changeset_id is None
 
-    # Verify that the cluster's foreign key was re-pointed to the new live group.
     live_cluster.refresh_from_db()
     assert live_cluster.group == draft_group
 
 
 def test_discard_changeset(changeset_admin, user, rf):
     """
-    Verify that the 'discard_changeset' admin action successfully deletes the
-    changeset, deletes the associated draft Group, and unlocks the original
-    live Group.
+    Tests that the 'discard_changeset' action correctly removes drafts.
+
+    This test ensures that discarding a changeset deletes the associated draft
+    group, removes the changeset itself, and unlocks the original live group
+    that the draft was created from.
     """
     changeset = ChangeSet.objects.create(name="Discard Test", created_by=user)
     live_group = Group.objects.create(name="Live Group", is_live=True)
@@ -128,7 +136,7 @@ def test_discard_changeset(changeset_admin, user, rf):
     changeset_admin.discard_changeset(request, ChangeSet.objects.filter(pk=changeset.pk))
 
     assert ChangeSet.objects.count() == 0
-    assert Group.objects.count() == 1  # Only the live group should remain.
+    assert Group.objects.count() == 1
     live_group.refresh_from_db()
     assert live_group.is_locked is False
     assert live_group.locked_by_changeset is None
@@ -136,9 +144,11 @@ def test_discard_changeset(changeset_admin, user, rf):
 
 def test_coalesce_changesets(changeset_admin, user, rf):
     """
-    Verify that the 'coalesce_changesets' admin action correctly merges draft
-    records from a source changeset into a target changeset, deletes the source,
-    and re-points the lock on the live entity to the target changeset.
+    Tests that the 'coalesce_changesets' action correctly merges changesets.
+
+    This test verifies that merging a source changeset into a target changeset
+    moves the draft records to the target, deletes the source, and correctly
+    re-points the lock on the live entity to the target changeset.
     """
     target_cs = ChangeSet.objects.create(name="Target", created_by=user)
     source_cs = ChangeSet.objects.create(name="Source", created_by=user)
@@ -160,19 +170,15 @@ def test_coalesce_changesets(changeset_admin, user, rf):
     request.session = {}
     setattr(request, "_messages", FallbackStorage(request))
 
-    # Coalesce source_cs into target_cs. The target is determined by creation order.
     queryset = ChangeSet.objects.filter(pk__in=[target_cs.pk, source_cs.pk]).order_by("pk")
     changeset_admin.coalesce_changesets(request, queryset)
 
-    # The source changeset should be deleted.
     assert ChangeSet.objects.count() == 1
     assert ChangeSet.objects.first() == target_cs
 
-    # The draft group should now belong to the target changeset.
     draft_group.refresh_from_db()
     assert draft_group.changeset_id == target_cs
 
-    # The live group's lock should be re-pointed to the target changeset.
     live_group.refresh_from_db()
     assert live_group.is_locked is True
     assert live_group.locked_by_changeset == target_cs
