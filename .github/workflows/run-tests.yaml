@@ -47,5 +47,8 @@ jobs:
       - name: django migrate
         run: uv run python3 manage.py migrate
 
+      - name: django collectstatic
+        run: uv run python3 manage.py collectstatic
+
       - name: run tests
         run: uv run pytest -vv
