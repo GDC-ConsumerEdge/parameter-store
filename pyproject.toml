@@ -7,7 +7,10 @@ authors = [
     { name = "Daniel Xia", email = "danielxia@google.com" },
     { name = "Kodanda Rama", email = "kodrama@google.com" },
     { name = "Abhishek Patil", email = "psabhishek@google.com" },
-    { name = "Ben Chapman", email="benchapman@google.com" }
+    { name = "Ben Chapman", email="benchapman@google.com" },
+    { name = "Janani Pandurangan", email = "jananip@google.com" },
+    { name = "Jimit Rangras", email = "jimitrangras@google.com" },
+    { name = "Kevin Liang", email = "kevinlia@google.com" }
 ]
 license = "LicenseRef-My-Custom-License"
 readme = "README.md"
