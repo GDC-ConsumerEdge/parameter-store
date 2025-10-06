@@ -44,9 +44,9 @@ from .models import (
 
 
 class ParamStoreAdmin(usites.UnfoldAdminSite):
-    site_header = "Edge Parameter Store"
-    site_title = "Edge Parameter Store"
-    index_title = "Edge Parameter Store"
+    site_header = "Parameter Store"
+    site_title = "Parameter Store"
+    index_title = "Parameter Store"
 
     def get_app_list(self, request, app_label=None):
         """Return a sorted list of all the installed apps that have been registered to this

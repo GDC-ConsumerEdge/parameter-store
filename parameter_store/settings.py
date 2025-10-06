@@ -240,7 +240,8 @@ UNFOLD = {
     "USER_LINKS": [
         {"template": "unfold/helpers/userlinks.html"},
     ],
-    "SITE_HEADER": "Edge Parameter Store",
+    "SITE_HEADER": "Parameter Store",
+    "SITE_TITLE": "Parameter Store",
     "COLORS": {
         "base": {
             "50": "249 250 251",
