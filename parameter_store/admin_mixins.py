@@ -118,16 +118,22 @@ class ChangeSetAwareAdminMixin:
 
     def save_model(self, request, obj, form, change):
         """
-        Overrides the default save_model to intercept changes to live entities.
+        Overrides the default save_model to handle changeset-aware entities.
 
-        If the object is live, this method prevents the direct update, creates a
-        draft copy, applies the form changes to the draft, and locks the live
-        object. For entities that are already drafts, it calls the default
-        `save_model` method to proceed with the standard save behavior.
+        - For new objects, it creates them as drafts within a changeset.
+        - For existing live objects, it intercepts the change, creates a draft,
+          applies the changes to the draft, and locks the live object.
+        - For existing draft objects, it saves the changes normally.
         """
-        if obj.pk and obj.is_live:
-            # This is an existing, live object. Intercept the save.
-            changeset = get_or_create_changeset(request)
+        changeset = get_or_create_changeset(request)
+
+        if not change:
+            # This is a new object; create it as a draft
+            obj.changeset_id = changeset
+            obj.is_live = False
+            super().save_model(request, obj, form, change)
+        elif obj.is_live:
+            # This is an existing, live object. Intercept the save to create a draft.
             original_instance = self.model.objects.get(pk=obj.pk)
 
             if original_instance.is_locked:
@@ -140,10 +146,10 @@ class ChangeSetAwareAdminMixin:
 
             try:
                 with transaction.atomic():
-                    # 1. Create a draft from the original, unmodified instance.
+                    # Create a draft from the original, unmodified instance.
                     draft_instance = self.deep_copy_instance(original_instance, changeset)
 
-                    # 2. Apply the changes from the form to the new draft instance.
+                    # Apply the changes from the form to the new draft instance.
                     m2m_fields = [f.name for f in self.model._meta.many_to_many]
                     for field, value in form.cleaned_data.items():
                         if field in m2m_fields:
@@ -156,12 +162,12 @@ class ChangeSetAwareAdminMixin:
                         if field.name in form.cleaned_data:
                             getattr(draft_instance, field.name).set(form.cleaned_data[field.name])
 
-                    # 3. Lock the original live instance.
+                    # Lock the original live instance.
                     original_instance.is_locked = True
                     original_instance.locked_by_changeset = changeset
                     original_instance.save()
 
-                    # 4. Store the new draft's pk in the request to redirect to it later.
+                    # Store the new draft's pk in the request to redirect to it later.
                     request._draft_created_pk = draft_instance.pk
                     self.message_user(
                         request,
@@ -172,7 +178,7 @@ class ChangeSetAwareAdminMixin:
                 logger.exception("Failed to create draft for instance %s", original_instance.pk)
                 self.message_user(request, f"An unexpected error occurred: {e}", level=messages.ERROR)
         else:
-            # This is a new object or an existing draft, save it normally.
+            # This is an existing draft, save it normally.
             super().save_model(request, obj, form, change)
 
     def response_change(self, request, obj):
