@@ -51,11 +51,10 @@ max_cluster_count = 65534
     help="Write resulting CSV files with this suffix",
 )
 @click.option(
-    "-w",
     "--overwrite",
     is_flag=True,
     default=False,
-    help="If existing CSV files are already present, overwrite them",
+    help="If previously generated CSV files are already present, overwrite them",
 )
 def generate_eps_data(cluster_count: int, organization_name: str, output_file_suffix: str, overwrite: bool):
     """Generates sample data for the Parameter Store Application.
@@ -81,6 +80,10 @@ def generate_eps_data(cluster_count: int, organization_name: str, output_file_su
         "platform": [],
         "workload": [],
     }
+
+    # Validate if the resulting output file exists before generating new data
+    for i in generated_csv_data.keys():
+        validate_user_options(output_file=f"{i}_{output_file_suffix}", overwrite=overwrite)
 
     # Sample country codes, their relative weighting and other country-specific sample data
     country_codes = {
@@ -188,11 +191,10 @@ def generate_eps_data(cluster_count: int, organization_name: str, output_file_su
         generated_csv_data["workload"].append(workload_data)
 
     for data_type, generated_data in generated_csv_data.items():
-        write_csv_file(csv_data=generated_data, output_file=f"{data_type}_{output_file_suffix}", overwrite=overwrite)
+        write_csv_file(csv_data=generated_data, output_file=f"{data_type}_{output_file_suffix}")
 
 
-def write_csv_file(csv_data, output_file: str, overwrite: bool):
-    validate_user_options(output_file=output_file, overwrite=overwrite)
+def write_csv_file(csv_data, output_file: str):
     with open(output_file, "w", newline="") as csv_file:
         writer = csv.DictWriter(csv_file, fieldnames=csv_data[0].keys())
         writer.writeheader()
