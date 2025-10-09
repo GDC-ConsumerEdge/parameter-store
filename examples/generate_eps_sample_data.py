@@ -68,7 +68,7 @@ max_cluster_count = 65534
 )
 def generate_eps_data(cluster_count: int, organization_name: str, output_file_suffix: str, overwrite: bool):
     """Generates sample data for the Parameter Store Application.
-    \f. # Click truncation marker
+    \f  # Click truncation marker
 
     Args:
         cluster_count (int): The number of example clusters to be created.
@@ -78,6 +78,10 @@ def generate_eps_data(cluster_count: int, organization_name: str, output_file_su
     """
 
     validate_user_options(cluster_count=cluster_count)
+
+    # Make sure any user-defined output suffixes have a .csv file extension
+    if ".csv" not in output_file_suffix:
+        output_file_suffix = f"{output_file_suffix}.csv"
 
     click.confirm(
         f"Generating {cluster_count} random cluster intent entries for {organization_name} into {output_file_suffix}\nDo you want to continue?",
