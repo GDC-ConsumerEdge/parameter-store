@@ -2,6 +2,7 @@ from django import forms
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.forms import ModelForm
+from django.urls import resolve
 from unfold import admin as uadmin
 
 from parameter_store.models import (
@@ -15,7 +16,33 @@ from parameter_store.models import (
 )
 
 
-class ClusterIntentInline(uadmin.StackedInline):
+class ChangeSetAwareInlineMixin(uadmin.InlineModelAdmin):
+    """A mixin for admin inlines to make them aware of the parent's changeset status.
+
+    This mixin ensures that when viewing a parent object's change page in the
+    admin, the items displayed in the inline formsets are correctly filtered
+    based on the parent's `is_live` status. A live parent will only show live
+    inline items, and a draft parent will only show draft inline items.
+    """
+
+    def get_queryset(self, request):
+        """
+        Filters the queryset for the inline based on the parent object's status (live or draft).
+        """
+        qs = super().get_queryset(request)
+        resolver_match = resolve(request.path_info)
+        parent_id = resolver_match.kwargs.get("object_id")
+
+        if parent_id:
+            try:
+                parent_obj = self.parent_model.objects.get(pk=parent_id)
+                return qs.filter(is_live=parent_obj.is_live)
+            except self.parent_model.DoesNotExist:
+                return qs.none()
+        return qs
+
+
+class ClusterIntentInline(ChangeSetAwareInlineMixin, uadmin.StackedInline):
     model = ClusterIntent
     extra = 0
     parent_link = True
@@ -52,7 +79,7 @@ class ClusterTagInlineForm(forms.ModelForm):
         return None
 
 
-class ClusterTagInline(uadmin.TabularInline):
+class ClusterTagInline(ChangeSetAwareInlineMixin, uadmin.TabularInline):
     model = ClusterTag
     form = ClusterTagInlineForm
     extra = 0
@@ -61,7 +88,7 @@ class ClusterTagInline(uadmin.TabularInline):
         return super().get_queryset(request).select_related("cluster", "tag")
 
 
-class ClusterFleetLabelsInline(uadmin.TabularInline):
+class ClusterFleetLabelsInline(ChangeSetAwareInlineMixin, uadmin.TabularInline):
     model = ClusterFleetLabel
     extra = 0
     exclude = ("changeset_id",)
@@ -99,7 +126,7 @@ class ClusterDataInlineForm(DataInlineForm):
         exclude = ("changeset_id",)
 
 
-class ClusterDataInline(uadmin.TabularInline):
+class ClusterDataInline(ChangeSetAwareInlineMixin, uadmin.TabularInline):
     model = ClusterData
     form = ClusterDataInlineForm
     extra = 0
@@ -114,7 +141,7 @@ class GroupDataInlineForm(DataInlineForm):
         exclude = ("changeset_id",)
 
 
-class GroupDataInline(uadmin.TabularInline):
+class GroupDataInline(ChangeSetAwareInlineMixin, uadmin.TabularInline):
     model = GroupData
     form = GroupDataInlineForm
     extra = 0
