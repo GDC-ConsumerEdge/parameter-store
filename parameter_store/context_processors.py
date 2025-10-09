@@ -25,9 +25,6 @@ def custom_header_links(request):
 
     draft_changesets = ChangeSet.objects.filter(status=ChangeSet.Status.DRAFT)
 
-    if request.GET.get("active_changeset"):
-        request.session["active_changeset_id"] = request.GET.get("active_changeset")
-
     context = {
         "active_changeset": active_changeset,
         "draft_changesets": draft_changesets,

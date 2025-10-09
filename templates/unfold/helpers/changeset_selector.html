@@ -7,27 +7,29 @@
         <div x-show="open"
              x-transition
              x-on:click.outside="open = false"
-             class="absolute bg-white border border-base-200 flex flex-col leading-none py-1 -right-2 rounded-default shadow-lg top-7 w-52 z-50 dark:bg-base-800 dark:border-base-700"
+             class="absolute bg-white border border-base-200 flex flex-col leading-none py-1 -right-2 rounded-default shadow-lg top-7 w-72 z-50 dark:bg-base-800 dark:border-base-700"
              style="display: none;"
              aria-orientation="vertical"
              role="menu">
             <div class="border-b border-base-200 flex flex-row shrink-0 items-start justify-start mb-1 pb-1 dark:border-base-700" role="none">
-                <span class="block mx-1 px-3 py-2 truncate">
+                <span class="block mx-1 px-3 py-2">
                     <p class="font-semibold">{% trans "Active ChangeSet" %}</p>
-                    <p>{{ active_changeset.name|default:"None" }}</p>
+                    <p class="truncate">{{ active_changeset.name|default:"None" }}</p>
                 </span>
             </div>
-            <div class="flex flex-row shrink-0 items-start justify-start mb-1 pb-1" role="none">
-                <span class="block mx-1 px-3 py-2 truncate">
+            <div class="flex flex-col" role="none">
+                <div class="block mx-1 px-3 py-2">
                     <p class="font-semibold">{% trans "Draft ChangeSets" %}</p>
+                </div>
+                <div class="flex flex-col">
                     {% for changeset in draft_changesets %}
-                        <a href="?active_changeset={{ changeset.id }}" class="mx-1 px-3 py-2 rounded-default hover:bg-base-100 hover:text-base-700 dark:hover:bg-base-700 dark:hover:text-base-200 {% if changeset.id == active_changeset.id %} bg-base-100 {% endif %}" role="menuitem">
+                        <a href="?active_changeset={{ changeset.id }}" class="block truncate mx-1 px-3 py-2 rounded-default hover:bg-base-100 hover:text-base-700 dark:hover:bg-base-700 dark:hover:text-base-200 {% if changeset.id == active_changeset.id %} bg-base-100 {% endif %}" role="menuitem">
                             {{ changeset.name }}
                         </a>
                     {% empty %}
                         <p class="mx-1 px-3 py-2 text-sm text-gray-500">{% trans "No draft ChangeSets" %}</p>
                     {% endfor %}
-                </span>
+                </div>
             </div>
             <div class="border-t border-base-200 mt-1 pt-1 dark:border-base-700">
                 <a href="{% url 'param_admin:parameter_store_changeset_add' %}" class="mx-1 px-3 py-2 rounded-default hover:bg-base-100 hover:text-base-700 dark:hover:bg-base-700 dark:hover:text-base-200" role="menuitem">
