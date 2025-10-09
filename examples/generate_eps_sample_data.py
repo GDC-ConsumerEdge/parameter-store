@@ -1,3 +1,13 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "click",
+#     "faker",
+#     "faker-airtravel",
+# ]
+# ///
+
 # Copyright 2025 Google, LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
