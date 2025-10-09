@@ -17,6 +17,7 @@
 import logging
 from typing import Optional
 
+import unfold.admin as uadmin
 from django.contrib import admin, messages
 from django.db import models, transaction
 from django.http import HttpResponseRedirect
@@ -29,7 +30,7 @@ from parameter_store.util import get_or_create_changeset
 logger = logging.getLogger(__name__)
 
 
-class ChangeSetAwareAdminMixin:
+class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
     """A mixin for ModelAdmin classes of top-level entities that are ChangeSet-aware.
 
     This mixin provides functionality to create a draft of a live entity, filter the queryset to
@@ -129,8 +130,10 @@ class ChangeSetAwareAdminMixin:
 
         if not change:
             # This is a new object; create it as a draft
-            obj.changeset_id = changeset
             obj.is_live = False
+            obj.changeset_id = changeset
+            obj.draft_of = None
+            obj.is_locked = False
             super().save_model(request, obj, form, change)
         elif obj.is_live:
             # This is an existing, live object. Intercept the save to create a draft.

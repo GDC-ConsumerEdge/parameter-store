@@ -41,8 +41,11 @@ top_level_constraints = [
     # Enforces the correct state of the 'draft_of' field based on the record's status (live, draft, or historical).
     models.CheckConstraint(
         condition=(
+            # Draft
             models.Q(is_live=True, draft_of__isnull=True)
-            | models.Q(is_live=False, changeset_id__isnull=False, draft_of__isnull=False)
+            # New draft object or draft of existing
+            | models.Q(is_live=False, changeset_id__isnull=False)
+            # Historical
             | models.Q(is_live=False, obsoleted_by_changeset__isnull=False, draft_of__isnull=True)
         ),
         name="valid_draft_of_state_by_status_%(class)s",
