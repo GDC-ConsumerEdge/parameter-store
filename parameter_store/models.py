@@ -14,7 +14,6 @@
 # limitations under the License.
 #
 ###############################################################################
-import functools
 import logging
 import uuid
 from collections import defaultdict
@@ -24,6 +23,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.query import Prefetch
 
+from parameter_store.constraints import top_level_constraints
 from parameter_store.util import get_class_from_full_path, inspect_callable_signature
 from parameter_store.validation import BaseValidator
 
@@ -158,15 +158,6 @@ class ChangeSet(models.Model):
         ordering = ["-created_at"]
 
 
-# Note that this is a "check constraint" and not a "unique constraint" because a locked entity may
-# have a changeset associated with it, but it may also be "unlocked" and have no changeset associated
-# with it.  This is a valid scenario.  The check constraint ensures that if the entity is locked,
-# it must have a changeset associated with it.
-_locked_must_have_changeset = functools.partial(
-    models.CheckConstraint, condition=models.Q(is_locked=False) | models.Q(changeset_id__isnull=False)
-)
-
-
 class ChangeSetAwareTopLevelEntity(models.Model):
     """
     A top level entity that is aware of its ChangeSet.  This is a mixin class.  Current top level entities are
@@ -179,7 +170,16 @@ class ChangeSetAwareTopLevelEntity(models.Model):
     shared_entity_id = models.UUIDField(editable=False, db_index=True, null=False, default=uuid.uuid4)
     is_live = models.BooleanField(editable=False, db_index=True, null=False, default=False)
     is_locked = models.BooleanField(editable=False, db_index=True, null=False, default=False)
-    changeset_id = models.ForeignKey(ChangeSet, on_delete=models.SET_NULL, null=True, verbose_name="ChangeSet ID")
+    changeset_id = models.ForeignKey(
+        ChangeSet, on_delete=models.SET_NULL, null=True, verbose_name="ChangeSet ID", related_name="+"
+    )
+    locked_by_changeset = models.ForeignKey(
+        ChangeSet, on_delete=models.SET_NULL, null=True, verbose_name="Locked by ChangeSet", related_name="+"
+    )
+    obsoleted_by_changeset = models.ForeignKey(
+        ChangeSet, on_delete=models.SET_NULL, null=True, verbose_name="Obsoleted by ChangeSet", related_name="+"
+    )
+    draft_of = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="drafts")
 
 
 class ChangeSetAwareChildEntity(models.Model):
@@ -194,9 +194,15 @@ class ChangeSetAwareChildEntity(models.Model):
 
 class Group(ChangeSetAwareTopLevelEntity, DynamicValidatingModel):
     class Meta:
-        constraints = [_locked_must_have_changeset(name="group_locked_must_have_changeset")]
+        constraints = top_level_constraints + [
+            models.UniqueConstraint(
+                fields=["name"],
+                condition=models.Q(is_live=True),
+                name="unique_live_group_name",
+            ),
+        ]
 
-    name = models.CharField(db_index=True, max_length=30, blank=False, unique=True, null=False)
+    name = models.CharField(db_index=True, max_length=30, blank=False, unique=False, null=False)
     description = models.CharField(max_length=255, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -257,7 +263,7 @@ class ClusterManager(models.Manager):
 
 class Cluster(ChangeSetAwareTopLevelEntity, DynamicValidatingModel):
     class Meta:
-        constraints = [_locked_must_have_changeset(name="cluster_locked_must_have_changeset")]
+        constraints = top_level_constraints
 
     name = models.CharField(db_index=True, max_length=30, blank=False, unique=False, null=False)
     description = models.CharField(max_length=255, null=True, blank=True)
@@ -304,11 +310,17 @@ class ClusterIntent(ChangeSetAwareChildEntity, DynamicValidatingModel):
     class Meta:
         verbose_name = "Cluster Intent"
         verbose_name_plural = "Cluster Intent"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["unique_zone_id"],
+                condition=models.Q(is_live=True),
+                name="unique_live_clusterintent_zone_id",
+            )
+        ]
 
     cluster = models.OneToOneField(Cluster, on_delete=models.CASCADE, related_name="intent")
     unique_zone_id = models.CharField(
         max_length=64,
-        unique=True,
         verbose_name="Unique Zone ID",
         help_text='This is a user-defined name of the zone and is sometimes referred to as "store_id"',
     )
@@ -415,6 +427,8 @@ class CustomDataField(models.Model):
 
 
 class CustomDataValidatingModel(models.Model):
+    field: "models.ForeignKey"
+
     class Meta:
         abstract = True
 
