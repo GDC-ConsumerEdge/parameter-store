@@ -117,17 +117,17 @@ class ChangeSet(models.Model):
         max_length=255,
         blank=False,
         null=False,
-        help_text="An optional, user-defined name for easy identification of the ChangeSet.",
+        help_text="A user-defined name for easy identification of the ChangeSet",
     )
     description = models.TextField(
-        blank=True, null=True, help_text="An optional text field for more detailed notes about the ChangeSet."
+        blank=True, null=True, help_text="An optional text field for more detailed notes about the ChangeSet"
     )
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
         default=Status.DRAFT,
         db_index=True,  # TODO: Evaluate. Seems likely to be queried/filtered on, but remove if not.
-        help_text="The current state of the ChangeSet.",
+        help_text="The current state of the ChangeSet",
     )
     created_by = models.ForeignKey(
         # Assumes standard Django User model
@@ -135,7 +135,7 @@ class ChangeSet(models.Model):
         # Don't delete ChangeSet if user is deleted; or models.SET_NULL if appropriate
         on_delete=models.PROTECT,
         related_name="change_sets_created",
-        help_text="The user who created this ChangeSet.",
+        help_text="The user who created this ChangeSet",
     )
     committed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -143,11 +143,11 @@ class ChangeSet(models.Model):
         related_name="change_sets_committed",
         null=True,
         blank=True,
-        help_text="The user who committed this ChangeSet.",
+        help_text="The user who committed this ChangeSet",
     )
-    created_at = models.DateTimeField(auto_now_add=True, help_text="Timestamp when the ChangeSet was created.")
-    updated_at = models.DateTimeField(auto_now=True, help_text="Timestamp when the ChangeSet was last updated.")
-    committed_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when the ChangeSet was committed.")
+    created_at = models.DateTimeField(auto_now_add=True, help_text="Timestamp when the ChangeSet was created")
+    updated_at = models.DateTimeField(auto_now=True, help_text="Timestamp when the ChangeSet was last updated")
+    committed_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when the ChangeSet was committed")
 
     def __str__(self):
         return f"{self.name or f'ChangeSet {self.id}'} ({self.get_status_display()})"
@@ -206,7 +206,7 @@ class Group(ChangeSetAwareTopLevelEntity, DynamicValidatingModel):
 
 
 class Tag(DynamicValidatingModel):
-    name = models.CharField(max_length=30, blank=False, unique=True, null=False, verbose_name="tag name")
+    name = models.CharField(max_length=30, blank=False, unique=True, null=False, verbose_name="Tag Name")
     description = models.CharField(max_length=255, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -259,7 +259,9 @@ class Cluster(ChangeSetAwareTopLevelEntity, DynamicValidatingModel):
     class Meta:
         constraints = [_locked_must_have_changeset(name="cluster_locked_must_have_changeset")]
 
-    name = models.CharField(db_index=True, max_length=30, blank=False, unique=False, null=False)
+    name = models.CharField(
+        db_index=True, max_length=30, blank=False, unique=False, null=False, verbose_name="Cluster Name"
+    )
     description = models.CharField(max_length=255, null=True, blank=True)
     group = models.ForeignKey(Group, on_delete=models.DO_NOTHING)
     secondary_groups = models.ManyToManyField(Group, blank=True, related_name="secondary_clusters")
@@ -310,15 +312,18 @@ class ClusterIntent(ChangeSetAwareChildEntity, DynamicValidatingModel):
         max_length=64,
         unique=True,
         verbose_name="Unique Zone ID",
-        help_text='This is a user-defined name of the zone and is sometimes referred to as "store_id"',
+        help_text='A user-defined name of the zone, sometimes referred to as "store_id"',
     )
     zone_name = models.CharField(
         max_length=100,
         null=True,
         blank=True,
-        help_text="Name of the zone as an object in the GDCC API; ex: us-west1-edge-mtv55",
+        verbose_name="Zone Name",
+        help_text="Name of the GDCc zone name (e.g., us-west1-edge-mtv55)",
     )
-    location = models.CharField(max_length=30, null=False, help_text="This is a GCP region")
+    location = models.CharField(
+        max_length=30, null=False, help_text="A GCP region where machines are associated (e.g., us-west1)"
+    )
     machine_project_id = models.CharField(
         max_length=30,
         null=False,
@@ -328,54 +333,92 @@ class ClusterIntent(ChangeSetAwareChildEntity, DynamicValidatingModel):
     fleet_project_id = models.CharField(
         max_length=30, null=False, verbose_name="Fleet Project ID", help_text="Project ID of the fleet"
     )
-    secrets_project_id = models.CharField(max_length=30, null=False, help_text="Project ID for secrets")
-    node_count = models.IntegerField(null=False, default=3, help_text="Number of nodes in the cluster; defaults to 3")
+    secrets_project_id = models.CharField(
+        max_length=30, null=False, verbose_name="Secrets Project ID", help_text="Project ID for secrets"
+    )
+    node_count = models.IntegerField(null=False, default=3, help_text="Number of nodes in the cluster. Defaults to 3")
     cluster_ipv4_cidr = models.CharField(
         max_length=18,
         null=False,
         verbose_name="Cluster IPv4 CIDR",
-        help_text="IPv4 CIDR with which to provision the control plane of the cluster",
+        help_text="IPv4 CIDR range with which to provision the control plane of the cluster (e.g., 192.168.0.0/24)",
     )
     services_ipv4_cidr = models.CharField(
         max_length=18,
         null=False,
         verbose_name="Services IPv4 CIDR",
-        help_text="IPv4 to use as the Kubernetes services range",
+        help_text="IPv4 CIDR range to use for Kubernetes Services (e.g., 192.168.1.0/24)",
     )
     external_load_balancer_ipv4_address_pools = models.CharField(
         max_length=180,
         null=False,
         verbose_name="External Load Balancer IPv4 Address Pools",
-        help_text="IPv4 CIDR used by Kubernetes for services of type LoadBalancer",
+        help_text="IPv4 CIDR used by Kubernetes for Services of type LoadBalancer (e.g., 192.168.2.0/24)",
     )
-    sync_repo = models.CharField(max_length=128, null=False, help_text="This is the full URL to a Git repository")
+    sync_repo = models.CharField(
+        max_length=128,
+        null=False,
+        verbose_name="Sync Repo",
+        help_text="A complete URL to a Git repository containing configuration data for this cluster",
+    )
     sync_branch = models.CharField(
-        max_length=50, null=False, default="main", help_text='For; example: "main" or "master"'
+        max_length=50,
+        null=False,
+        default="main",
+        verbose_name="Sync Branch",
+        help_text="The Git branch within the Git repository containing configuration data for this cluster (e.g., main)",
     )
     sync_dir = models.CharField(
         max_length=50,
         null=False,
         default="hydrated/clusters/",
-        help_text="Directory with a repo to sync for this cluster",
+        verbose_name="Sync Directory",
+        help_text="A directory within the Git branch containing configuration data for this cluster (e.g., /hydrated/clusters)",
     )
     git_token_secrets_manager_name = models.CharField(
-        max_length=255, null=False, help_text="Name of a Secret Manager secret that contains Git token"
+        max_length=255,
+        null=False,
+        verbose_name="Git Token GCP Secrets Manager Name",
+        help_text="The name of a GCP Secrets Manager secret that contains a Git authorization token",
     )
     cluster_version = models.CharField(
-        max_length=30, null=False, help_text='This is the GDCC control plane version, i.e. "1.7.1"'
+        max_length=30,
+        null=False,
+        verbose_name="Cluster Version",
+        help_text="The GDCc version to be installed (e.g., 1.11.0)",
     )
-    maintenance_window_start = models.DateTimeField(null=True, blank=True, help_text=None)
-    maintenance_window_end = models.DateTimeField(null=True, blank=True, help_text=None)
+    maintenance_window_start = models.DateTimeField(
+        null=True, blank=True, verbose_name="Maintenance Window Start", help_text=None
+    )
+    maintenance_window_end = models.DateTimeField(
+        null=True, blank=True, verbose_name="Maintenance Window End", help_text=None
+    )
     maintenance_window_recurrence = models.CharField(
         max_length=128,
         null=True,
         blank=True,
-        help_text="This is an RFC 5545 recurrence rule, ex: FREQ=WEEKLY;BYDAY=WE,TH,FR",
+        verbose_name="Maintenance Window Recurrence Rule",
+        help_text="A RFC 5545 recurrence rule (e.g., FREQ=WEEKLY;BYDAY=WE,TH,FR)",
     )
-    maintenance_exclusion_name_1 = models.CharField(null=True, blank=True, max_length=64, help_text=None)
-    maintenance_exclusion_start_1 = models.DateTimeField(null=True, blank=True, help_text=None)
-    maintenance_exclusion_end_1 = models.DateTimeField(null=True, blank=True, help_text=None)
-    subnet_vlans = models.CharField(max_length=128, null=True, help_text="Comma-separated list of VLAN IDs for subnets")
+    maintenance_exclusion_name_1 = models.CharField(
+        null=True,
+        blank=True,
+        max_length=64,
+        verbose_name="Maintenance Exclusion Rule Name",
+        help_text="The name of a maintenance exclusion rule (e.g., Black Friday-Cyber Monday)",
+    )
+    maintenance_exclusion_start_1 = models.DateTimeField(
+        null=True, blank=True, verbose_name="Maintenance Exclusion Rule Start", help_text=None
+    )
+    maintenance_exclusion_end_1 = models.DateTimeField(
+        null=True, blank=True, verbose_name="Maintenance Exclusion Rule End", help_text=None
+    )
+    subnet_vlans = models.CharField(
+        max_length=128,
+        null=True,
+        verbose_name="Secondary Network VLAN IDs",
+        help_text="A comma-separated list of VLAN IDs for secondary networks (e.g., 500,2100,2500)",
+    )
     recreate_on_delete = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -574,7 +617,8 @@ class ValidatorAssignment(models.Model):
         blank=False,
         null=False,
         choices=get_model_field_choices(),
-        help_text="Select model and its field",
+        verbose_name="Model Field",
+        help_text="Select model and it's field",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
