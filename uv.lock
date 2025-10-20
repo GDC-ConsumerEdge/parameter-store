@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.12"
 
 [[package]]
@@ -174,14 +174,14 @@ wheels = [
 
 [[package]]
 name = "django-unfold"
-version = "0.66.0"
+version = "0.68.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "django" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/47/ac/ff8638f22b7d03d3f291e1348995f23ac9409c0ea02a3088770fc0cd0da5/django_unfold-0.66.0.tar.gz", hash = "sha256:26d2a6886f05077d5f2e84b289acf584f07c787dc1a31fd3311152b556e42c0f", size = 1077703, upload-time = "2025-09-23T07:18:31.148Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/80/60/7576e6530b560a74e758b342e3dcc11b0c8719d3d936c77275edb02f446c/django_unfold-0.68.0.tar.gz", hash = "sha256:2a7bb063feb031a5bfc7c2e6570f9dc44ed90a7eb49ccea8eb10f261f4e37fb0", size = 1080554, upload-time = "2025-10-15T05:41:21.467Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d9/a9/97a3acbb8cee9c84ad6de06b5b088a699146875268f11a9632071458a865/django_unfold-0.66.0-py3-none-any.whl", hash = "sha256:19027523441c684774f0f22325c1f6b785552f698bff6b282dfce046aa39e3ea", size = 1186326, upload-time = "2025-09-23T07:18:29.412Z" },
+    { url = "https://files.pythonhosted.org/packages/54/6a/a81c27f73249fdc7bb4c0cfa2f8824bbaacc5e0769d7bbc7f61d06042645/django_unfold-0.68.0-py3-none-any.whl", hash = "sha256:6764cc37117833c3ea869b483c6531e544821d4222fa203e2ff4dc03420ceacd", size = 1190666, upload-time = "2025-10-15T05:41:19.951Z" },
 ]
 
 [[package]]
@@ -358,7 +358,7 @@ requires-dist = [
     { name = "django", specifier = ">=5.2.4" },
     { name = "django-guardian", specifier = ">=3.0.3" },
     { name = "django-ninja", specifier = ">=1.4.3" },
-    { name = "django-unfold", specifier = ">=0.62.0" },
+    { name = "django-unfold", specifier = ">=0.68.0" },
     { name = "google-auth", specifier = ">=2.40.3" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "psycopg", specifier = ">=3.2.9" },
