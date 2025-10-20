@@ -1,25 +1,25 @@
 [project]
-name = "parameter-store"
-version = "1.2.1"
-description = "Parameter Store is a Django application that holds parameter data for deployments of Google Distributed Cloud Connected clusters"
-authors = [
+  name = "parameter-store"
+  version = "1.2.1"
+  description = "Parameter Store is a Django application that holds parameter data for deployments of Google Distributed Cloud Connected clusters"
+  authors = [
     { name = "Paul Durivage", email = "durivage@google.com" },
     { name = "Daniel Xia", email = "danielxia@google.com" },
     { name = "Kodanda Rama", email = "kodrama@google.com" },
     { name = "Abhishek Patil", email = "psabhishek@google.com" },
-    { name = "Ben Chapman", email="benchapman@google.com" },
+    { name = "Ben Chapman", email = "benchapman@google.com" },
     { name = "Janani Pandurangan", email = "jananip@google.com" },
     { name = "Jimit Rangras", email = "jimitrangras@google.com" },
-    { name = "Kevin Liang", email = "kevinlia@google.com" }
-]
-license = "LicenseRef-My-Custom-License"
-readme = "README.md"
-requires-python = ">=3.12"
-dependencies = [
+    { name = "Kevin Liang", email = "kevinlia@google.com" },
+  ]
+  license = "LicenseRef-My-Custom-License"
+  readme = "README.md"
+  requires-python = ">=3.12"
+  dependencies = [
     "django>=5.2.4",
     "django-guardian>=3.0.3",
     "django-ninja>=1.4.3",
-    "django-unfold>=0.62.0",
+    "django-unfold>=0.68.0",
     "google-auth>=2.40.3",
     "jinja2>=3.1.6",
     "psycopg>=3.2.9",
@@ -29,18 +29,18 @@ dependencies = [
     "servestatic>=3.1.0",
     "uvicorn>=0.35.0",
     "uvicorn-worker>=0.3.0",
-]
+  ]
 
 [dependency-groups]
-dev = [
+  dev = [
     "django-debug-toolbar>=5.2.0",
     "pre-commit>=4.2.0",
     "pytest>=8.4.2",
     "pytest-django>=4.11.1",
     "ruff>=0.12.4",
     "typing-extensions>=4.14.1",
-]
+  ]
 
 [tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "parameter_store.settings"
-pythonpath = ["."]
+  DJANGO_SETTINGS_MODULE = "parameter_store.settings"
+  pythonpath             = ["."]
