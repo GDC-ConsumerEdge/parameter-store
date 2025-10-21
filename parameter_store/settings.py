@@ -236,7 +236,8 @@ def generate_hls_palette(hex_color):
 # Param Store App Settings
 UNFOLD = {
     "STYLES": [
-        lambda request: static("parameter_store/css/custom_admin.css"),
+        lambda request: static("css/custom_admin.css"),
+        lambda request: static("css/styles.css"),
     ],
     "USER_LINKS": [
         {"template": "unfold/helpers/userlinks.html"},
