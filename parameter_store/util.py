@@ -19,6 +19,8 @@ import inspect
 import typing
 from typing import Callable
 
+from django.utils.safestring import mark_safe
+
 if typing.TYPE_CHECKING:
     from django.http import HttpRequest
 
@@ -115,3 +117,26 @@ def get_or_create_changeset(request: "HttpRequest") -> "ChangeSet":
     request.session["active_changeset_id"] = changeset.id
     messages.info(request, f"No active changeset. Created and activated a new one: {changeset.name}")
     return changeset
+
+
+def get_active_changeset_display(request: "HttpRequest") -> list | None:
+    """Retrieves the active changeset and formats its name for display within the UI.
+
+    Args:
+        request: The HttpRequest object.
+
+    Returns:
+        A list containing a formatted string with the active changeset's name.
+    """
+    if not request.user.is_authenticated:
+        return None
+    changeset = get_or_create_changeset(request)
+    if changeset:
+        display_text = f"Active ChangeSet: {changeset.name}"
+        # The Unfold Admin theme applies a text-transform: capitalize, which doesn't look good
+        # for the display of the active changeset. We're explicitly overriding text-transform
+        # so the text displayed in the UI is as styled here
+        return [mark_safe(f'<span style="text-transform: none;">{display_text}</span>'), "success"]
+    else:
+        display_text = "Active ChangeSet: None"
+        return [mark_safe(f'<span style="text-transform: none;">{display_text}</span>'), "warning"]
