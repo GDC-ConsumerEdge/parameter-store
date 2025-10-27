@@ -85,12 +85,18 @@ def str_to_bool(value: str | bool) -> bool:
 
 
 def get_or_create_changeset(request: "HttpRequest") -> "ChangeSet":
-    """Retrieves the active changeset from the session or creates a new one.
+    """Retrieves or creates an active draft changeset for the user.
 
-    This function checks the user's session for an 'active_changeset_id'. If found, it
-    retrieves the corresponding ChangeSet object. If not found, it creates a new
-    ChangeSet, names it with the user's username and the current timestamp, stores its
-    ID in the session, and informs the user via a message.
+    This function first checks the user's session for an 'active_changeset_id'. If a valid
+    draft changeset ID is found, it returns that changeset. If the ID is invalid or the
+    changeset is not a draft, it is removed from the session.
+
+    If no active changeset is found in the session, search for the most recent draft
+    changeset for the current user. If one is found, it is set as the active changeset
+    in the session and returned.
+
+    If no draft changesets exist for the user, a new one is created, named with the
+    user's username and the current timestamp, stored in the session, and then returned.
 
     Args:
         request: The HttpRequest object, used to access the session and user information.
@@ -98,27 +104,38 @@ def get_or_create_changeset(request: "HttpRequest") -> "ChangeSet":
     Returns:
         The active ChangeSet model instance.
     """
+    from django.contrib import messages
+    from django.utils import timezone
 
     from parameter_store.models import ChangeSet
 
     active_changeset_id = request.session.get("active_changeset_id")
     if active_changeset_id:
         try:
-            return ChangeSet.objects.get(pk=active_changeset_id)
+            # Ensure the active changeset is a draft
+            return ChangeSet.objects.get(pk=active_changeset_id, status=ChangeSet.Status.DRAFT)
         except ChangeSet.DoesNotExist:
-            # The changeset ID in the session is invalid, so we'll create a new one.
+            # The changeset ID in the session is invalid or not a draft, so find or create one.
             del request.session["active_changeset_id"]
-    # TODO(thisisben): We need to refactor / rethink this default ChangeSet creation logic.
-    # Currently every time a user logs into EPS, a new changeset is created, because the user
-    # does not have an existing HTTP session with EPS. This results in a lot of unnecessary
-    # changesets and unexpected system behavior. So disabling the automatic CS creation until
-    # a better solution is developed.
-    # now_str = timezone.now().strftime("%Y%m%d-%H:%M:%S")
-    # changeset_name = f"ChangeSet {request.user.username} {now_str}"
-    # changeset = ChangeSet.objects.create(name=changeset_name, created_by=request.user)
-    # request.session["active_changeset_id"] = changeset.id
-    # messages.info(request, f"No active changeset. Created and activated a new one: {changeset.name}")
-    # return changeset
+
+    # No active changeset in session, try to find an existing draft changeset for the user.
+    user_draft_changesets = ChangeSet.objects.filter(created_by=request.user, status=ChangeSet.Status.DRAFT).order_by(
+        "-created_at"
+    )
+
+    if user_draft_changesets.exists():
+        changeset = user_draft_changesets.first()
+        request.session["active_changeset_id"] = changeset.id
+        messages.info(request, f"Activated your most recent draft changeset: {changeset.name}")
+        return changeset
+
+    # No draft changesets exist for the user, create a new one.
+    now_str = timezone.now().strftime("%Y%m%d-%H:%M:%S")
+    changeset_name = f"ChangeSet {request.user.username} {now_str}"
+    changeset = ChangeSet.objects.create(name=changeset_name, created_by=request.user)
+    request.session["active_changeset_id"] = changeset.id
+    messages.info(request, f"No active changeset. Created and activated a new one: {changeset.name}")
+    return changeset
 
 
 def get_active_changeset_display(request: "HttpRequest") -> list | None:
