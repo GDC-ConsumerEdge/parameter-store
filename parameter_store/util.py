@@ -98,8 +98,6 @@ def get_or_create_changeset(request: "HttpRequest") -> "ChangeSet":
     Returns:
         The active ChangeSet model instance.
     """
-    from django.contrib import messages
-    from django.utils import timezone
 
     from parameter_store.models import ChangeSet
 
@@ -110,13 +108,17 @@ def get_or_create_changeset(request: "HttpRequest") -> "ChangeSet":
         except ChangeSet.DoesNotExist:
             # The changeset ID in the session is invalid, so we'll create a new one.
             del request.session["active_changeset_id"]
-
-    now_str = timezone.now().strftime("%Y%m%d-%H:%M:%S")
-    changeset_name = f"ChangeSet {request.user.username} {now_str}"
-    changeset = ChangeSet.objects.create(name=changeset_name, created_by=request.user)
-    request.session["active_changeset_id"] = changeset.id
-    messages.info(request, f"No active changeset. Created and activated a new one: {changeset.name}")
-    return changeset
+    # TODO(thisisben): We need to refactor / rethink this default ChangeSet creation logic.
+    # Currently every time a user logs into EPS, a new changeset is created, because the user
+    # does not have an existing HTTP session with EPS. This results in a lot of unnecessary
+    # changesets and unexpected system behavior. So disabling the automatic CS creation until
+    # a better solution is developed.
+    # now_str = timezone.now().strftime("%Y%m%d-%H:%M:%S")
+    # changeset_name = f"ChangeSet {request.user.username} {now_str}"
+    # changeset = ChangeSet.objects.create(name=changeset_name, created_by=request.user)
+    # request.session["active_changeset_id"] = changeset.id
+    # messages.info(request, f"No active changeset. Created and activated a new one: {changeset.name}")
+    # return changeset
 
 
 def get_active_changeset_display(request: "HttpRequest") -> list | None:
