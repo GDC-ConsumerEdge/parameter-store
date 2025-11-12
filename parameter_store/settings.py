@@ -32,6 +32,7 @@ import os
 from pathlib import Path
 
 from django.templatetags.static import static
+from django.urls import reverse_lazy
 
 from parameter_store.customerconfig import img_path, primary_color_hex
 from parameter_store.util import str_to_bool
@@ -236,13 +237,18 @@ def generate_hls_palette(hex_color):
 # Param Store App Settings
 UNFOLD = {
     "STYLES": [
-        lambda request: static("parameter_store/css/custom_admin.css"),
+        # CSS customizations for this app
+        lambda request: static("css/custom_admin.css"),
+        # Enabling support for Unfold Tailwind customization:
+        # https://unfoldadmin.com/docs/styles-scripts/customizing-tailwind/
+        lambda request: static("css/styles.css"),
     ],
     "USER_LINKS": [
         {"template": "unfold/helpers/userlinks.html"},
     ],
     "SITE_HEADER": "Parameter Store",
     "SITE_TITLE": "Parameter Store",
+    "SITE_SYMBOL": "app_registration",
     "COLORS": {
         "base": {
             "50": "249 250 251",
@@ -266,6 +272,105 @@ UNFOLD = {
             "important-light": "var(--color-base-900)",  # text-base-900
             "important-dark": "var(--color-base-100)",  # text-base-100
         },
+    },
+    "SIDEBAR": {
+        "show_search": False,  # Search in applications and models names
+        "command_search": False,  # Replace the sidebar search with the command search
+        "show_all_applications": False,  # Dropdown with all applications and models
+        "navigation": [
+            {
+                # "title": "ChangeSets",
+                "icon": "rebase_edit",
+                "collapsible": False,
+                "items": [
+                    {
+                        "title": "ChangeSets",
+                        "icon": "rebase_edit",
+                        "link": reverse_lazy("admin:parameter_store_changeset_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "Clusters",
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": "Clusters",
+                        "icon": "host",
+                        "link": reverse_lazy("admin:parameter_store_cluster_changelist"),
+                    },
+                    {
+                        "title": "Groups",
+                        "icon": "linked_services",
+                        "link": reverse_lazy("admin:parameter_store_group_changelist"),
+                    },
+                    {
+                        "title": "Tags",
+                        "icon": "sell",
+                        "link": reverse_lazy("admin:parameter_store_tag_changelist"),
+                    },
+                    {
+                        "title": "Cluster Intent",
+                        "icon": "schema",
+                        "link": reverse_lazy("admin:parameter_store_clusterintent_changelist"),
+                    },
+                    {
+                        "title": "Cluster Fleet Labels",
+                        "icon": "label",
+                        "link": reverse_lazy("admin:parameter_store_clusterfleetlabel_changelist"),
+                    },
+                    {
+                        "title": "Cluster Custom Data Fields",
+                        "icon": "people",
+                        "link": reverse_lazy("admin:parameter_store_customdatafield_changelist"),
+                    },
+                    {
+                        "title": "Cluster Custom Data",
+                        "icon": "people",
+                        "link": reverse_lazy("admin:parameter_store_clusterdata_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": ("Validators"),
+                "collapsible": True,
+                "permission": lambda request: request.user.is_superuser,
+                "items": [
+                    {
+                        "title": "ChangeSet Validators",
+                        "icon": "checklist",
+                        "link": reverse_lazy("admin:parameter_store_validator_changelist"),
+                    },
+                    {
+                        "title": "Standard Data Validator Assignments",
+                        "icon": "data_check",
+                        "link": reverse_lazy("admin:parameter_store_validatorassignment_changelist"),
+                    },
+                    {
+                        "title": "Cluster Custom Data Validator Assignments",
+                        "icon": "edit_attributes",
+                        "link": reverse_lazy("admin:parameter_store_customdatafieldvalidatorassignment_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": ("Users & Groups"),
+                "collapsible": True,
+                "permission": lambda request: request.user.is_superuser,
+                "items": [
+                    {
+                        "title": ("Users"),
+                        "icon": "account_circle",
+                        "link": reverse_lazy("param_admin:auth_user_changelist"),
+                    },
+                    {
+                        "title": ("Groups"),
+                        "icon": "group",
+                        "link": reverse_lazy("param_admin:auth_group_changelist"),
+                    },
+                ],
+            },
+        ],
     },
 }
 

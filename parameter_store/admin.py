@@ -19,6 +19,10 @@ from typing import TYPE_CHECKING
 import unfold.admin as uadmin
 import unfold.sites as usites
 from django.contrib import admin
+from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.models import Group as AuthGroupModel
+from django.contrib.auth.models import User
 from guardian.admin import GuardedModelAdmin
 
 from .admin_inlines import (
@@ -53,39 +57,6 @@ class ParamStoreAdmin(usites.UnfoldAdminSite):
     site_header = "Parameter Store"
     site_title = "Parameter Store"
     index_title = "Parameter Store"
-
-    def get_app_list(self, request, app_label=None):
-        """Return a sorted list of all the installed apps that have been registered to this
-        site. Caches the result on the request object to avoid multiple database hits.
-        """
-        # Caching the result on the request object to avoid multiple database hits.
-        if hasattr(request, "_app_list"):
-            return request._app_list
-
-        ordering = {
-            "ChangeSets": 1,
-            "Clusters": 2,
-            "Groups": 3,
-            "Tags": 4,
-            "Cluster Intent": 5,
-            "Cluster Fleet Labels": 6,
-            "Cluster Custom Data Fields": 7,
-            "Cluster Custom Data": 8,
-            "Validators": 9,
-            "Standard Data Validator Assignments": 10,
-            "Cluster Custom Data Validator Assignments": 11,
-        }
-        app_dict = self._build_app_dict(request, app_label)
-
-        # Sort the apps alphabetically.
-        app_list = sorted(app_dict.values(), key=lambda x: x["name"].lower())
-
-        # Sort the models alphabetically within each app.
-        for app in app_list:
-            app["models"].sort(key=lambda x: ordering.get(x["name"], 1000))
-
-        request._app_list = app_list
-        return app_list
 
 
 param_admin_site = ParamStoreAdmin("param_admin")
@@ -646,3 +617,13 @@ class ChangeSetAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
             self.message_user(request, f"Coalesced changesets into '{target_changeset}'.")
 
     coalesce_changesets.short_description = "Coalesce selected changesets"
+
+
+@admin.register(User, site=param_admin_site)
+class UserAdmin(BaseUserAdmin, uadmin.ModelAdmin):
+    pass
+
+
+@admin.register(AuthGroupModel, site=param_admin_site)
+class AuthGroupAdmin(BaseGroupAdmin, uadmin.ModelAdmin):
+    pass
