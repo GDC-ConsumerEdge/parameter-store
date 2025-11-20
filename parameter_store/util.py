@@ -129,7 +129,7 @@ def get_or_create_changeset(request: "HttpRequest", create_if_none: bool = False
         if create_if_none:  # Only message the user if creation was attempted
             messages.info(
                 request,
-                f"An operation requires an active changeset. Activated your most recent draft: '{changeset.name}'",
+                f"An operation requires an active ChangeSet. Activated your most recent draft: '{changeset.name}'",
             )
         return changeset
 
@@ -140,7 +140,8 @@ def get_or_create_changeset(request: "HttpRequest", create_if_none: bool = False
         changeset = ChangeSet.objects.create(name=changeset_name, created_by=request.user)
         request.session["active_changeset_id"] = changeset.id
         messages.info(
-            request, f"This operation requires an active changeset; created and activated a new one: '{changeset.name}'"
+            request,
+            f"This operation requires an active ChangeSet. A new ChangeSet {changeset.name} was created and activated.",
         )
         return changeset
 

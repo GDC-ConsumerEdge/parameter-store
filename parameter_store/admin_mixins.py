@@ -48,7 +48,7 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
             models.Q(is_live=True) | models.Q(changeset_id__created_by=request.user, is_live=False)
         ).select_related("changeset_id", "locked_by_changeset")
 
-    @admin.display(description="Changeset Status")
+    @admin.display(description="ChangeSet Status")
     def changeset_status(self, obj):
         """Displays the status of the changeset associated with a draft entity.
 
@@ -63,9 +63,9 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
         if obj.changeset_id:
             active_changeset_id = self.request.session.get("active_changeset_id")
             if obj.changeset_id.id == active_changeset_id:
-                return f"Draft in active changeset: {obj.changeset_id.name}"
-            return f"Draft in changeset: {obj.changeset_id.name}"
-        return "Draft (no changeset)"
+                return f"Draft in active ChangeSet: {obj.changeset_id.name}"
+            return f"Draft in ChangeSet: {obj.changeset_id.name}"
+        return "Draft (no ChangeSet)"
 
     @admin.action(description="Create Draft & Edit")
     def create_draft_action(self, request, queryset) -> Optional[HttpResponseRedirect]:
@@ -94,7 +94,7 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
 
         if instance.is_locked:
             self.message_user(
-                request, "This entity is locked by another changeset. Cannot create a new draft.", level=messages.ERROR
+                request, "This entity is locked by another ChangeSet. Cannot create a new draft.", level=messages.ERROR
             )
             return
 
@@ -142,7 +142,7 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
             if original_instance.is_locked:
                 self.message_user(
                     request,
-                    "This entity is locked by another changeset. Cannot create a new draft.",
+                    "This entity is locked by another ChangeSet. Cannot create a new draft.",
                     level=messages.ERROR,
                 )
                 return
@@ -211,7 +211,7 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
             if obj.is_locked:
                 self.message_user(
                     request,
-                    "This entity is locked by another changeset and cannot be marked for deletion.",
+                    "This entity is locked by another ChangeSet and cannot be marked for deletion.",
                     level=messages.ERROR,
                 )
                 return
@@ -232,8 +232,8 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
 
                     self.message_user(
                         request,
-                        f"'{obj.name}' is now pending deletion in changeset '{changeset.name}'. "
-                        f"Commit the changeset to finalize deletion.",
+                        f"'{obj.name}' is now pending deletion in ChangeSet '{changeset.name}'. "
+                        f"Commit the ChangeSet to finalize deletion.",
                         level=messages.SUCCESS,
                     )
             except Exception as e:

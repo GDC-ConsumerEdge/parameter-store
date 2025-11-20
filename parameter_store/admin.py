@@ -464,7 +464,7 @@ class ChangeSetAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
         with transaction.atomic():
             for changeset in queryset:
                 if changeset.status != ChangeSet.Status.DRAFT:
-                    self.message_user(request, f"Changeset '{changeset}' is not in draft state.", level="warning")
+                    self.message_user(request, f"ChangeSet '{changeset}' is not in draft state.", level="warning")
                     continue
 
                 # Process top-level entities
@@ -532,9 +532,9 @@ class ChangeSetAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
                 changeset.committed_at = timezone.now()
                 changeset.committed_by = request.user
                 changeset.save()
-                self.message_user(request, f"Changeset '{changeset}' has been committed.")
+                self.message_user(request, f"ChangeSet '{changeset}' has been committed.")
 
-    commit_changeset.short_description = "Commit selected changesets"
+    commit_changeset.short_description = "Commit selected ChangeSets"
 
     def discard_changeset(self, request, queryset):
         """Discards the selected changesets.
@@ -556,7 +556,7 @@ class ChangeSetAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
         with transaction.atomic():
             for changeset in queryset:
                 if changeset.status != ChangeSet.Status.DRAFT:
-                    self.message_user(request, f"Changeset '{changeset}' is not in draft state.", level="warning")
+                    self.message_user(request, f"ChangeSet '{changeset}' is not in draft state.", level="warning")
                     continue
 
                 # Unlock parent live entities
@@ -576,9 +576,9 @@ class ChangeSetAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
                     model.objects.filter(changeset_id=changeset.id, is_live=False).delete()
 
                 changeset.delete()
-                self.message_user(request, f"Changeset '{changeset}' has been discarded.")
+                self.message_user(request, f"ChangeSet '{changeset}' has been discarded.")
 
-    discard_changeset.short_description = "Discard selected changesets"
+    discard_changeset.short_description = "Discard selected ChangeSets"
 
     def coalesce_changesets(self, request, queryset):
         """Coalesces multiple changesets into a single one.
@@ -595,7 +595,7 @@ class ChangeSetAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
         from .models import Cluster, ClusterData, ClusterFleetLabel, ClusterIntent, ClusterTag, Group, GroupData
 
         if queryset.count() < 2:
-            self.message_user(request, "Please select at least two changesets to coalesce.", level="warning")
+            self.message_user(request, "Please select at least two ChangeSets to coalesce.", level="warning")
             return
 
         with transaction.atomic():
@@ -607,7 +607,7 @@ class ChangeSetAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
 
             for changeset in source_changesets:
                 if changeset.status != ChangeSet.Status.DRAFT:
-                    self.message_user(request, f"Changeset '{changeset}' is not in draft state.", level="warning")
+                    self.message_user(request, f"ChangeSet '{changeset}' is not in draft state.", level="warning")
                     continue
 
                 # Re-point the locks on live entities from the source to the target changeset.
@@ -623,9 +623,9 @@ class ChangeSetAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
 
                 changeset.delete()
 
-            self.message_user(request, f"Coalesced changesets into '{target_changeset}'.")
+            self.message_user(request, f"Coalesced ChangeSets into '{target_changeset}'.")
 
-    coalesce_changesets.short_description = "Coalesce selected changesets"
+    coalesce_changesets.short_description = "Coalesce selected ChangeSets"
 
 
 @admin.register(User, site=param_admin_site)
