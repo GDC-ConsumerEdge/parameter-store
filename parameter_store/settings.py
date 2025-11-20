@@ -249,6 +249,8 @@ UNFOLD = {
     "SITE_HEADER": "Parameter Store",
     "SITE_TITLE": "Parameter Store",
     "SITE_SYMBOL": "app_registration",
+    # Repurpose this setting to display the currently active ChangeSet
+    "ENVIRONMENT": "parameter_store.util.get_active_changeset_display",
     "COLORS": {
         "base": {
             "50": "249 250 251",

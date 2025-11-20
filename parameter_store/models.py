@@ -180,6 +180,9 @@ class ChangeSetAwareTopLevelEntity(models.Model):
         ChangeSet, on_delete=models.SET_NULL, null=True, verbose_name="Obsoleted by ChangeSet", related_name="+"
     )
     draft_of = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="drafts")
+    is_pending_deletion = models.BooleanField(
+        default=False, editable=False, help_text="Marks a draft entity for deletion upon commit."
+    )
 
 
 class ChangeSetAwareChildEntity(models.Model):
