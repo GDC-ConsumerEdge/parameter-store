@@ -1,5 +1,56 @@
 # Changelog
 
+## [2.0.0](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v1.2.1...v2.0.0) (2025-11-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* add changeset models ([#83](https://github.com/GDC-ConsumerEdge/parameter-store/issues/83))
+
+### Features
+
+* Add ability to create/modify ChangeSets from object creation pages ([4b1ff83](https://github.com/GDC-ConsumerEdge/parameter-store/commit/4b1ff838cd6dda5b9a86961f9179eeb202dc5e1a))
+* add changeset interception for top-level entities ([40411b7](https://github.com/GDC-ConsumerEdge/parameter-store/commit/40411b7f3e91ac96b1a609e0659c63fd0fa7a9f8))
+* add changeset interception for top-level entities ([#92](https://github.com/GDC-ConsumerEdge/parameter-store/issues/92)) ([40411b7](https://github.com/GDC-ConsumerEdge/parameter-store/commit/40411b7f3e91ac96b1a609e0659c63fd0fa7a9f8))
+* add changeset models ([#83](https://github.com/GDC-ConsumerEdge/parameter-store/issues/83)) ([4734e6c](https://github.com/GDC-ConsumerEdge/parameter-store/commit/4734e6ccc23a46f4a925a81cdbeeb3601f38dda4))
+* add interception of saving for TLEs ([40411b7](https://github.com/GDC-ConsumerEdge/parameter-store/commit/40411b7f3e91ac96b1a609e0659c63fd0fa7a9f8))
+* add support for a visual indicator of the active ChangeSet ([#101](https://github.com/GDC-ConsumerEdge/parameter-store/issues/101)) ([cb53deb](https://github.com/GDC-ConsumerEdge/parameter-store/commit/cb53deb4dc9f2a09082c51ed3a3066529e9c5ded))
+* **changesets:** add initial support for changeset management through the UI ([9f5d484](https://github.com/GDC-ConsumerEdge/parameter-store/commit/9f5d48476a8cde063511951572b64f4070c8bf48))
+* **changesets:** Add initial support for management of ChangeSets through the Admin UI ([4b1ff83](https://github.com/GDC-ConsumerEdge/parameter-store/commit/4b1ff838cd6dda5b9a86961f9179eeb202dc5e1a))
+* Implement ChangeSet Management in Django Admin ([#90](https://github.com/GDC-ConsumerEdge/parameter-store/issues/90)) ([9f5d484](https://github.com/GDC-ConsumerEdge/parameter-store/commit/9f5d48476a8cde063511951572b64f4070c8bf48))
+* initial support for the addition and display of ChangeSets in the Admin UI ([#88](https://github.com/GDC-ConsumerEdge/parameter-store/issues/88)) ([4b1ff83](https://github.com/GDC-ConsumerEdge/parameter-store/commit/4b1ff838cd6dda5b9a86961f9179eeb202dc5e1a))
+* update the visual appearance of the sidebar ([594d348](https://github.com/GDC-ConsumerEdge/parameter-store/commit/594d348ba6d6fc57c63ecf36952866d6b810becf))
+
+
+### Bug Fixes
+
+* **admin:** ensure new entities are created as drafts ([40411b7](https://github.com/GDC-ConsumerEdge/parameter-store/commit/40411b7f3e91ac96b1a609e0659c63fd0fa7a9f8))
+* bug where updating a group would incorrectly fail to create a draft and would persist draft changes to live objects ([40411b7](https://github.com/GDC-ConsumerEdge/parameter-store/commit/40411b7f3e91ac96b1a609e0659c63fd0fa7a9f8))
+* changeset actions logic and object deletion logic when deleting a changeset ([40411b7](https://github.com/GDC-ConsumerEdge/parameter-store/commit/40411b7f3e91ac96b1a609e0659c63fd0fa7a9f8))
+* changeset selector works; rendering in UI improved ([40411b7](https://github.com/GDC-ConsumerEdge/parameter-store/commit/40411b7f3e91ac96b1a609e0659c63fd0fa7a9f8))
+* **changesets:** changeset name now a required field ([4b1ff83](https://github.com/GDC-ConsumerEdge/parameter-store/commit/4b1ff838cd6dda5b9a86961f9179eeb202dc5e1a))
+* **changesets:** correct changeset button link ([4b1ff83](https://github.com/GDC-ConsumerEdge/parameter-store/commit/4b1ff838cd6dda5b9a86961f9179eeb202dc5e1a))
+* **changesets:** correct comment ([9f5d484](https://github.com/GDC-ConsumerEdge/parameter-store/commit/9f5d48476a8cde063511951572b64f4070c8bf48))
+* **changesets:** fix menu dropdown behavior, now selecting draft changesets ([9f5d484](https://github.com/GDC-ConsumerEdge/parameter-store/commit/9f5d48476a8cde063511951572b64f4070c8bf48))
+* constraints, logic for deleting drafts, and update changeset actions based on new columns and constraints ([40411b7](https://github.com/GDC-ConsumerEdge/parameter-store/commit/40411b7f3e91ac96b1a609e0659c63fd0fa7a9f8))
+* draft clusters can only see draft groups within the same changeset ([40411b7](https://github.com/GDC-ConsumerEdge/parameter-store/commit/40411b7f3e91ac96b1a609e0659c63fd0fa7a9f8))
+* ensure all views use 'Parameter Store' ([#94](https://github.com/GDC-ConsumerEdge/parameter-store/issues/94)) ([091c03e](https://github.com/GDC-ConsumerEdge/parameter-store/commit/091c03e121c21609f523dc52c97a8f740cc11378))
+* ensure changeset dropdown supports dark theme ([9f5d484](https://github.com/GDC-ConsumerEdge/parameter-store/commit/9f5d48476a8cde063511951572b64f4070c8bf48))
+* ensure optimal query perf for clusters; fix readonly fields for top-level entities ([40411b7](https://github.com/GDC-ConsumerEdge/parameter-store/commit/40411b7f3e91ac96b1a609e0659c63fd0fa7a9f8))
+* group interception was failing; fix and add tests ([40411b7](https://github.com/GDC-ConsumerEdge/parameter-store/commit/40411b7f3e91ac96b1a609e0659c63fd0fa7a9f8))
+* optimize queries in cluster view with new related objects ([40411b7](https://github.com/GDC-ConsumerEdge/parameter-store/commit/40411b7f3e91ac96b1a609e0659c63fd0fa7a9f8))
+* swap the order of template engines to preference the Django engine ([9f5d484](https://github.com/GDC-ConsumerEdge/parameter-store/commit/9f5d48476a8cde063511951572b64f4070c8bf48))
+* update changeset-aware entities to default to is_live=False ([#89](https://github.com/GDC-ConsumerEdge/parameter-store/issues/89)) ([ea87538](https://github.com/GDC-ConsumerEdge/parameter-store/commit/ea8753889d7a02406f760d84a836867091b8bf5b))
+* update deps ([#91](https://github.com/GDC-ConsumerEdge/parameter-store/issues/91)) ([ade1712](https://github.com/GDC-ConsumerEdge/parameter-store/commit/ade1712edc6b5d7ba317d05db9945ced391f0640))
+
+
+### Documentation
+
+* add changesets tdd ([#93](https://github.com/GDC-ConsumerEdge/parameter-store/issues/93)) ([86747d6](https://github.com/GDC-ConsumerEdge/parameter-store/commit/86747d64d6d411d970a0994de64895029ce57374))
+* add docstrings to new functions ([9f5d484](https://github.com/GDC-ConsumerEdge/parameter-store/commit/9f5d48476a8cde063511951572b64f4070c8bf48))
+* update all references of Edge Parameter Store to Parameter Store only, but retain the EPS acronym ([091c03e](https://github.com/GDC-ConsumerEdge/parameter-store/commit/091c03e121c21609f523dc52c97a8f740cc11378))
+* update README.md ([40411b7](https://github.com/GDC-ConsumerEdge/parameter-store/commit/40411b7f3e91ac96b1a609e0659c63fd0fa7a9f8))
+
 ## [1.2.1](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v1.2.0...v1.2.1) (2025-09-03)
 
 
