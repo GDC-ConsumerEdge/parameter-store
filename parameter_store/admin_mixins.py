@@ -98,7 +98,7 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
             )
             return
 
-        changeset = get_or_create_changeset(request)
+        changeset = get_or_create_changeset(request, create_if_none=True)
 
         try:
             with transaction.atomic():
@@ -126,7 +126,7 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
           applies the changes to the draft, and locks the live object.
         - For existing draft objects, it saves the changes normally.
         """
-        changeset = get_or_create_changeset(request)
+        changeset = get_or_create_changeset(request, create_if_none=True)
 
         if not change:
             # This is a new object; create it as a draft
@@ -197,6 +197,51 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
                 )
             )
         return super().response_change(request, obj)
+
+    def delete_model(self, request, obj):
+        """
+        Overrides the default delete_model to handle changeset-aware entities.
+
+        - For live objects, it intercepts the deletion, creates a draft marked for deletion,
+          and locks the live object.
+        - For draft objects, it deletes them directly.
+        """
+        if obj.is_live:
+            # This is a live object. Intercept the delete to create a deletion draft.
+            if obj.is_locked:
+                self.message_user(
+                    request,
+                    "This entity is locked by another changeset and cannot be marked for deletion.",
+                    level=messages.ERROR,
+                )
+                return
+
+            changeset = get_or_create_changeset(request, create_if_none=True)
+
+            try:
+                with transaction.atomic():
+                    # Create a draft marked for deletion.
+                    draft_instance = self.deep_copy_instance(obj, changeset)
+                    draft_instance.is_pending_deletion = True
+                    draft_instance.save()
+
+                    # Lock the original live instance.
+                    obj.is_locked = True
+                    obj.locked_by_changeset = changeset
+                    obj.save()
+
+                    self.message_user(
+                        request,
+                        f"'{obj.name}' is now pending deletion in changeset '{changeset.name}'. "
+                        f"Commit the changeset to finalize deletion.",
+                        level=messages.SUCCESS,
+                    )
+            except Exception as e:
+                logger.exception("Failed to create deletion draft for instance %s", obj.pk)
+                self.message_user(request, f"An unexpected error occurred: {e}", level=messages.ERROR)
+        else:
+            # This is a draft object, so it's safe to delete it directly.
+            super().delete_model(request, obj)
 
     def deep_copy_instance(self, original_instance, changeset):
         """Performs a deep copy of a model instance and its related children.

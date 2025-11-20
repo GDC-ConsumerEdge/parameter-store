@@ -471,9 +471,18 @@ class ChangeSetAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
                 for model in top_level_models:
                     draft_entities = model.objects.filter(changeset_id=changeset.id, is_live=False)
                     for draft_entity in draft_entities:
-                        live_entity = model.objects.filter(
-                            shared_entity_id=draft_entity.shared_entity_id, is_live=True
-                        ).first()
+                        live_entity = (
+                            model.objects.filter(shared_entity_id=draft_entity.shared_entity_id, is_live=True).first()
+                            if draft_entity.shared_entity_id
+                            else None
+                        )
+
+                        if draft_entity.is_pending_deletion:
+                            if live_entity:
+                                live_entity.delete()  # Delete the original live entity
+                            draft_entity.delete()  # Delete the deletion draft
+                            continue
+
                         if live_entity:
                             # Demote the old live entity to historical.
                             live_entity.is_locked = False

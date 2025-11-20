@@ -84,27 +84,28 @@ def str_to_bool(value: str | bool) -> bool:
             raise ValueError(f"{value} isn't an expected boolean value")
 
 
-def get_or_create_changeset(request: "HttpRequest") -> "ChangeSet":
-    """Retrieves or creates an active draft changeset for the user.
+def get_or_create_changeset(request: "HttpRequest", create_if_none: bool = False) -> "ChangeSet":
+    """Retrieves an active draft changeset for the user, optionally creating one.
 
     This function first checks the user's session for an 'active_changeset_id'. If a valid
-    draft changeset ID is found, it returns that changeset. If the ID is invalid or the
-    changeset is not a draft, it is removed from the session.
+    draft changeset ID is found, it returns that changeset.
 
-    If no active changeset is found in the session, search for the most recent draft
+    If no active changeset is found in the session, it searches for the most recent draft
     changeset for the current user. If one is found, it is set as the active changeset
     in the session and returned.
 
-    If no draft changesets exist for the user, no ChangeSet is created. The user is
-    assumed to be a read-only viewer of the data.
+    If no draft changesets exist for the user and `create_if_none` is True, a new one
+    is created, stored in the session, and then returned. Otherwise, it returns None.
 
     Args:
         request: The HttpRequest object, used to access the session and user information.
+        create_if_none: If True, a new changeset will be created if none are found.
 
     Returns:
-        The active ChangeSet model instance.
+        The active ChangeSet model instance, or None if not found and not created.
     """
     from django.contrib import messages
+    from django.utils import timezone
 
     from parameter_store.models import ChangeSet
 
@@ -114,7 +115,7 @@ def get_or_create_changeset(request: "HttpRequest") -> "ChangeSet":
             # Ensure the active changeset is a draft
             return ChangeSet.objects.get(pk=active_changeset_id, status=ChangeSet.Status.DRAFT)
         except ChangeSet.DoesNotExist:
-            # The changeset ID in the session is invalid or not a draft, so find or create one.
+            # The changeset ID in the session is invalid or not a draft, so clear it.
             del request.session["active_changeset_id"]
 
     # No active changeset in session, try to find an existing draft changeset for the user.
@@ -125,8 +126,25 @@ def get_or_create_changeset(request: "HttpRequest") -> "ChangeSet":
     if user_draft_changesets.exists():
         changeset = user_draft_changesets.first()
         request.session["active_changeset_id"] = changeset.id
-        messages.info(request, f"Activated your most recent draft changeset: {changeset.name}")
+        if create_if_none:  # Only message the user if creation was attempted
+            messages.info(
+                request,
+                f"An operation requires an active changeset. Activated your most recent draft: '{changeset.name}'",
+            )
         return changeset
+
+    if create_if_none:
+        # No draft changesets exist for the user, create a new one.
+        now_str = timezone.now().strftime("%Y%m%d-%H:%M:%S")
+        changeset_name = f"{request.user.username}-{now_str}"
+        changeset = ChangeSet.objects.create(name=changeset_name, created_by=request.user)
+        request.session["active_changeset_id"] = changeset.id
+        messages.info(
+            request, f"This operation requires an active changeset; created and activated a new one: '{changeset.name}'"
+        )
+        return changeset
+
+    return None
 
 
 def get_active_changeset_display(request: "HttpRequest") -> list | None:
@@ -140,7 +158,8 @@ def get_active_changeset_display(request: "HttpRequest") -> list | None:
     """
     if not request.user.is_authenticated:
         return None
-    changeset = get_or_create_changeset(request)
+    # Call with create_if_none=False because this is a read-only display function.
+    changeset = get_or_create_changeset(request, create_if_none=False)
     if changeset:
         display_text = f"Active ChangeSet: {changeset.name}"
         # The Unfold Admin theme applies a text-transform: capitalize, which doesn't look good
@@ -148,5 +167,5 @@ def get_active_changeset_display(request: "HttpRequest") -> list | None:
         # so the text displayed in the UI is as styled here
         return [mark_safe(f'<span style="text-transform: none;">{display_text}</span>'), "success"]
     else:
-        display_text = "Active ChangeSet: None"
+        display_text = "No Active ChangeSet"
         return [mark_safe(f'<span style="text-transform: none;">{display_text}</span>'), "warning"]
