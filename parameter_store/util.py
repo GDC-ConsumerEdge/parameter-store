@@ -95,8 +95,8 @@ def get_or_create_changeset(request: "HttpRequest") -> "ChangeSet":
     changeset for the current user. If one is found, it is set as the active changeset
     in the session and returned.
 
-    If no draft changesets exist for the user, a new one is created, named with the
-    user's username and the current timestamp, stored in the session, and then returned.
+    If no draft changesets exist for the user, no ChangeSet is created. The user is
+    assumed to be a read-only viewer of the data.
 
     Args:
         request: The HttpRequest object, used to access the session and user information.
@@ -105,7 +105,6 @@ def get_or_create_changeset(request: "HttpRequest") -> "ChangeSet":
         The active ChangeSet model instance.
     """
     from django.contrib import messages
-    from django.utils import timezone
 
     from parameter_store.models import ChangeSet
 
@@ -128,14 +127,6 @@ def get_or_create_changeset(request: "HttpRequest") -> "ChangeSet":
         request.session["active_changeset_id"] = changeset.id
         messages.info(request, f"Activated your most recent draft changeset: {changeset.name}")
         return changeset
-
-    # No draft changesets exist for the user, create a new one.
-    now_str = timezone.now().strftime("%Y%m%d-%H:%M:%S")
-    changeset_name = f"ChangeSet {request.user.username} {now_str}"
-    changeset = ChangeSet.objects.create(name=changeset_name, created_by=request.user)
-    request.session["active_changeset_id"] = changeset.id
-    messages.info(request, f"No active changeset. Created and activated a new one: {changeset.name}")
-    return changeset
 
 
 def get_active_changeset_display(request: "HttpRequest") -> list | None:
