@@ -54,6 +54,7 @@ def ping(request: HttpRequest):
 
 
 @api_v1.get("/status", response=HealthResponse, summary="Deep health check with database status")
+@api_v1.get("/healthz", response=HealthResponse, summary="Deep health check with database status")
 def health(request: HttpRequest):
     """Health check endpoint that verifies database connectivity and migrations status."""
     health_status = {
