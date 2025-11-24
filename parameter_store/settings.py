@@ -252,7 +252,7 @@ UNFOLD = {
     # Enable the ability to specify the order of items which appear on the site homepage
     "DASHBOARD_CALLBACK": "parameter_store.util.reorder_homepage_dashboard",
     # Enable env variable DJANGO_DEBUG=True to console log all available dashboard items
-    "DASHBOARD_ITEMS_ORDER": ["parameter_store", "auth"],
+    "DASHBOARD_ITEMS_ORDER": ["parameter_store"],
     # Repurpose this setting to display the currently active ChangeSet
     "ENVIRONMENT": "parameter_store.util.get_active_changeset_display",
     "COLORS": {
