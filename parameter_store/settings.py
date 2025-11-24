@@ -102,7 +102,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
-                "parameter_store.context_processors.custom_header_links",
+                "parameter_store.context_processors.changeset_context",
             ],
         },
     },
