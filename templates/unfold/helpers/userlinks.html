@@ -1,59 +1,13 @@
 {% load i18n static %}
 
 <div class="flex items-center ml-auto">
-    <div class="flex flex-row group items-center leading-none relative">
-        <div class="flex gap-4 items-center">
-            <div x-data="{ open: false }" @click.outside="open = false" @keydown.escape.window="open = false" class="relative">
-                {% if environment %}
-                    <div @click="open = !open" class="cursor-pointer hover:opacity-80">
-                        {% include "unfold/helpers/label.html" with text=environment.0 type=environment.1 %}
-                    </div>
-                {% endif %}
-
-                <div x-show="open"
-                     x-transition:enter="transition ease-out duration-100"
-                     x-transition:enter-start="transform opacity-0 scale-95"
-                     x-transition:enter-end="transform opacity-100 scale-100"
-                     x-transition:leave="transition ease-in duration-75"
-                     x-transition:leave-start="transform opacity-100 scale-100"
-                     x-transition:leave-end="transform opacity-0 scale-95"
-                     class="absolute right-0 mt-2 origin-top-right bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none"
-                     style="display: none;"
-                     aria-orientation="vertical"
-                     role="menu">
-                    <div class="py-1 w-40" role="none">
-                        <div class="px-4 py-2 text-sm text-gray-700 border-b" role="none">
-                            <p class="font-semibold">{% trans "Active ChangeSet" %}</p>
-                            <p>{{ active_changeset.name|default:"None" }}</p>
-                        </div>
-                        <div class="px-4 py-4 text-sm text-gray-700 border-b" role="none">
-                            <p class="font-semibold">{% trans "Draft ChangeSets" %}</p>
-                            {% for changeset in draft_changesets %}
-                                <a href="?active_changeset={{ changeset.id }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 {% if changeset.id == active_changeset.id %} bg-gray-100 {% endif %}" role="menuitem">
-                                    {{ changeset.name }}
-                                </a>
-                            {% empty %}
-                                <p class="px-4 py-2 text-sm text-gray-500">{% trans "No draft ChangeSets" %}</p>
-                            {% endfor %}
-                        </div>
-                        <div class="border-t">
-                            <a href="{% url 'param_admin:parameter_store_changeset_add' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">
-                                {% trans "Create new ChangeSet" %}
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {% include "unfold/helpers/language_switch.html" %}
-
-            {% include "unfold/helpers/theme_switch.html" %}
-
-            {% include "unfold/helpers/account_links.html" %}
-        </div>
+  <div class="flex flex-row group items-center leading-none relative">
+    <div class="flex gap-4 items-center">
+      {% include "unfold/helpers/changeset_dropdown.html" %}
+      {% include "unfold/helpers/language_switch.html" %}
+      {% include "unfold/helpers/theme_switch.html" %}
+      {% include "unfold/helpers/account_links.html" %}
     </div>
-
-    {% if nav_global_side %}
-        {{ nav_global_side }}
-    {% endif %}
+  </div>
+  {% if nav_global_side %} {{ nav_global_side }} {% endif %}
 </div>
