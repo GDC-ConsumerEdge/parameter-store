@@ -1,0 +1,50 @@
+{% load i18n static %}
+
+<div x-data="{ open: false }" @click.outside="open = false" @keydown.escape.window="open = false" class="relative">
+  {% if environment %}
+      <div @click="open = !open" class="cursor-pointer hover:opacity-80">
+          {% include "unfold/helpers/label.html" with text=environment.0 type=environment.1 %}
+      </div>
+  {% endif %}
+  <div
+    x-show="open"
+    x-transition:enter="transition ease-out duration-100"
+    x-transition:enter-start="transform opacity-0 scale-95"
+    x-transition:enter-end="transform opacity-100 scale-100"
+    x-transition:leave="transition ease-in duration-75"
+    x-transition:leave-start="transform opacity-100 scale-100"
+    x-transition:leave-end="transform opacity-0 scale-95"
+    class="absolute right-0 mt-2 origin-top-right bg-white border border-base-200 rounded-default shadow-lg dark:text-font-default-dark focus:outline-none dark:bg-base-800 dark:border-base-700"
+    style="display: none"
+    aria-orientation="vertical"
+    role="menu"
+  >
+    <div class="py-1 w-40" role="none">
+      <div class="px-4 py-4 text-sm text-gray-700" role="none">
+        <p class="font-semibold">{% trans "Draft ChangeSets" %}</p>
+        {% for changeset in draft_changesets %}
+        <a
+          href="?active_changeset={{ changeset.id }}"
+          class="block px-4 py-2 text-sm rounded-default hover:bg-base-100 hover:text-base-700 dark:hover:bg-base-700 dark:hover:text-base-200 {% if changeset.id == active_changeset.id %} rounded-default hover:bg-base-100 hover:text-base-700 dark:hover:bg-base-700 dark:hover:text-base-200 text-primary-600 dark:text-primary-500 dark:hover:text-primary-500! hover:text-primary-600! {% endif %}"
+          role="menuitem"
+        >
+          <p class="hover:font-bold">{{ changeset.name }}</p>
+        </a>
+        {% empty %}
+        <p class="px-4 py-2 text-sm text-gray-500">
+          {% trans "No draft ChangeSets" %}
+        </p>
+        {% endfor %}
+      </div>
+      <div class="border-t border-base-200 dark:border-base-700">
+        <a
+          href="{% url 'param_admin:parameter_store_changeset_add' %}"
+          class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+          role="menuitem"
+        >
+          <p class="font-semibold">{% trans "Create new ChangeSet" %}</p>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>

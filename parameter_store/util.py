@@ -26,6 +26,8 @@ if typing.TYPE_CHECKING:
 
     from .models import ChangeSet
 
+from django.conf import settings
+
 
 def get_class_from_full_path(full_path):
     module_name, class_name = full_path.rsplit(".", 1)
@@ -170,3 +172,32 @@ def get_active_changeset_display(request: "HttpRequest") -> list | None:
     else:
         display_text = "No Active ChangeSet"
         return [mark_safe(f'<span style="text-transform: none;">{display_text}</span>'), "warning"]
+
+
+def reorder_homepage_dashboard(request, context):
+    """Reorders homepage dashboard items given the order defined within DASHBOARD_ITEMS_ORDER in settings.py.
+
+    Args:
+        request: The HttpRequest object.
+        context: The template context.
+
+    Returns:
+        The updated context dictionary.
+    """
+
+    # Get the desired order of dashboard items from settings.py
+    homepage_dashboard_order = settings.UNFOLD["DASHBOARD_ITEMS_ORDER"]
+
+    app_list = context.get("app_list", [])
+
+    # Print a list of items which are available to order on the homepage
+    if settings.DEBUG:
+        print(f"DEBUG: Available homepage dashboard items: {', '.join([item['app_label'] for item in app_list])}")
+
+    ordered_app_list = []
+    for app_label in homepage_dashboard_order:
+        ordered_app_list.append(next((item for item in app_list if item.get("app_label") == app_label), None))
+
+    context["app_list"] = ordered_app_list
+
+    return context
