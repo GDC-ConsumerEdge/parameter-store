@@ -6,7 +6,7 @@ from django.db.models import Q
 from ninja import FilterSchema
 from pydantic import Field
 
-from api.schema.out import LogicalExpression
+from api.schema.response import LogicalExpression
 
 
 class ClusterFilter(FilterSchema):
