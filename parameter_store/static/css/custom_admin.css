@@ -16,30 +16,3 @@ permissions are notoriously big and hard to read in the standard-size selects.
 div.selector {
     max-width: 100rem;
 }
-
-/* Dark mode for changeset dropdown */
-.dark .changeset-dropdown .bg-white {
-    background-color: #1f2937; /* gray-800 */
-    border-color: #374151; /* gray-700 */
-}
-
-.dark .changeset-dropdown .text-gray-700 {
-    color: #d1d5db; /* gray-300 */
-}
-
-.dark .changeset-dropdown .text-gray-500 {
-    color: #9ca3af; /* gray-400 */
-}
-
-.dark .changeset-dropdown .border-b,
-.dark .changeset-dropdown .border-t {
-    border-color: #374151; /* gray-700 */
-}
-
-.dark .changeset-dropdown a:hover {
-    background-color: #374151; /* gray-700 */
-}
-
-.dark .changeset-dropdown .bg-gray-100 {
-    background-color: #374151; /* gray-700 */
-}
