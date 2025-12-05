@@ -26,7 +26,7 @@ class FleetLabelResponse(Schema):
     value: str
 
 
-ClusterIntentResponse = create_schema(ClusterIntent, exclude=("id", "cluster", "created_at", "updated_at"))
+ClusterIntentResponse: Schema = create_schema(ClusterIntent, exclude=("id", "cluster", "created_at", "updated_at"))
 
 
 class LogicalExpression(enum.StrEnum):
@@ -71,4 +71,24 @@ class GroupResponse(Schema):
 
 class GroupsResponse(Schema):
     groups: list[GroupResponse]
+    count: int
+
+
+class ChangeSetResponse(Schema):
+    id: int
+    name: str
+    description: str | None
+    status: str
+    created_by: str
+    committed_by: str | None
+    created_at: datetime | None
+    updated_at: datetime | None
+    committed_at: datetime | None
+    #
+    # class Config:
+    #     extra = 'ignore'
+
+
+class ChangeSetsResponse(Schema):
+    changesets: list[ChangeSetResponse]
     count: int

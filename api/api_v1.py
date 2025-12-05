@@ -15,25 +15,27 @@
 #
 ###############################################################################
 from django.contrib.admin.views.decorators import staff_member_required
+from django.core.exceptions import ValidationError
 from django.db import connection, connections
 from django.db.migrations.executor import MigrationExecutor
-from django.db.models import Prefetch
 from django.http import HttpRequest
 from ninja import NinjaAPI, Query
 from ninja.errors import HttpError
 from ninja.pagination import LimitOffsetPagination
 from ninja.pagination import paginate as ninja_paginate
+from ninja.responses import codes_4xx, codes_5xx
 from ninja.security import django_auth
 
-from parameter_store.models import Cluster, Group, GroupData, Tag
+from parameter_store.models import Cluster, Tag
 
+from .api_changesets import changesets_router
+from .api_groups import groups_router
+from .exc import validation_errors
 from .schema.filters import ClusterFilter
-from .schema.out import (
+from .schema.response import (
     ClusterResponse,
     ClustersResponse,
     FleetLabelResponse,
-    GroupResponse,
-    GroupsResponse,
     HealthResponse,
     MessageResponse,
     NameDescResponse,
@@ -42,6 +44,12 @@ from .schema.out import (
 from .utils import paginate, require_permissions
 
 api_v1 = NinjaAPI(title="Parameter Store API", version="1.0.0", docs_decorator=staff_member_required)
+
+api_v1.add_router("", changesets_router)
+api_v1.add_router("", groups_router)
+
+
+api_v1.exception_handler(ValidationError)(validation_errors)
 
 
 @api_v1.get("/ping", response=PingResponse, summary="Basic health check")
@@ -54,6 +62,7 @@ def ping(request: HttpRequest):
 
 
 @api_v1.get("/status", response=HealthResponse, summary="Deep health check with database status")
+@api_v1.get("/healthz", response=HealthResponse, summary="Deep health check with database status")
 def health(request: HttpRequest):
     """Health check endpoint that verifies database connectivity and migrations status."""
     health_status = {
@@ -99,9 +108,14 @@ def health(request: HttpRequest):
     return health_status
 
 
-@api_v1.get("/tags", response=list[NameDescResponse], auth=django_auth, summary="Get cluster tags")
+@api_v1.get(
+    "/tags",
+    response={200: list[NameDescResponse], codes_4xx: MessageResponse},
+    auth=django_auth,
+    summary="Get cluster tags",
+)
 @ninja_paginate(LimitOffsetPagination)
-@require_permissions("can_get_params_api")
+@require_permissions("api.params_api_read_tag", "api.params_api_read_objects")
 def tags(request):
     """Clusters may have tags associated with them. Tags are simple string values. This endpoint
     returns all available tags which may be associated with a cluster.
@@ -109,64 +123,28 @@ def tags(request):
     return Tag.objects.all()
 
 
-@api_v1.get(
-    "/group/{group}",
-    response={200: GroupResponse, 404: MessageResponse, 409: MessageResponse},
-    auth=django_auth,
-    summary="Get a single group",
-)
-def get_group(request: HttpRequest, group: str):
-    """Gets a specific group by its name."""
-    # Query the for the group, prefetch related data
-    groups = Group.objects.prefetch_related(Prefetch("group_data", queryset=GroupData.objects.select_related("field")))
-
-    try:
-        g = groups.get(name=group)
-    except Group.DoesNotExist:
-        return 404, {"message": "group not found"}
-    except Group.MultipleObjectsReturned:
-        raise HttpError(500, "multiple groups found")
-
-    return GroupResponse(
-        name=g.name,
-        description=g.description,
-        data={d.field.name: d.value for d in g.group_data.all()} if g.group_data.exists() else None,
-        created_at=g.created_at,
-        updated_at=g.updated_at,
+def _generate_cluster_response(cluster: Cluster) -> ClusterResponse:
+    return ClusterResponse(
+        name=cluster.name,
+        description=cluster.description,
+        group=cluster.group.name,
+        secondary_groups=[g.name for g in cluster.secondary_groups.all()],
+        tags=[tag.name for tag in cluster.tags.all()],
+        fleet_labels=[FleetLabelResponse(key=fl.key, value=fl.value) for fl in cluster.fleet_labels.all()],
+        intent=cluster.intent if hasattr(cluster, "intent") else None,
+        data={d.field.name: d.value for d in cluster.cluster_data.all()} if cluster.cluster_data.exists() else None,
+        created_at=cluster.created_at,
+        updated_at=cluster.updated_at,
     )
-
-
-@api_v1.get("/groups", response=GroupsResponse, auth=django_auth, summary="Get many groups")
-@require_permissions("can_get_params_api")
-def get_groups(request: HttpRequest, limit=250, offset=0):
-    """Clusters belong to groups. This endpoint returns all available groups to which a cluster
-    may belong.
-    """
-    # Query the for the groups while prefetching related data
-    data_prefetch = Prefetch("group_data", queryset=GroupData.objects.select_related("field"))
-    qs = Group.objects.prefetch_related(data_prefetch).all()
-    groups = paginate(qs, limit, offset)
-
-    out = (
-        GroupResponse(
-            name=group.name,
-            description=group.description,
-            data={d.field.name: d.value for d in group.group_data.all()} if group.group_data.exists() else None,
-            created_at=group.created_at,
-            updated_at=group.updated_at,
-        )
-        for group in groups
-    )
-    return {"groups": out, "count": groups.count()}
 
 
 @api_v1.get(
     "/cluster/{cluster}",
-    response={200: ClusterResponse, 404: MessageResponse, 500: MessageResponse},
+    response={200: ClusterResponse, codes_4xx: MessageResponse, codes_5xx: MessageResponse},
     auth=django_auth,
     summary="Get a single cluster",
 )
-@require_permissions("can_get_params_api")
+@require_permissions("api.params_api_read_cluster", "api.params_api_read_objects")
 def get_cluster(request: HttpRequest, cluster: str):
     """This API endpoint provides view-only cluster objects and their associated metadata,
     including cluster group, fleet label, custom data, cluster intent.
@@ -178,41 +156,22 @@ def get_cluster(request: HttpRequest, cluster: str):
     except Cluster.MultipleObjectsReturned:
         raise HttpError(500, "multiple clusters found")
 
-    return ClusterResponse(
-        name=c.name,
-        description=c.description,
-        group=c.group.name,
-        secondary_groups=[g.name for g in c.secondary_groups.all()],
-        tags=[tag.name for tag in c.tags.all()],
-        fleet_labels=[FleetLabelResponse(key=fl.key, value=fl.value) for fl in c.fleet_labels.all()],
-        intent=c.intent if hasattr(c, "intent") else None,
-        data={d.field.name: d.value for d in c.cluster_data.all()} if c.cluster_data.exists() else None,
-        created_at=c.created_at,
-        updated_at=c.updated_at,
-    )
+    return _generate_cluster_response(c)
 
 
-@api_v1.get("/clusters", response=ClustersResponse, auth=django_auth, summary="Get many clusters")
-@require_permissions("can_get_params_api")
+@api_v1.get(
+    "/clusters",
+    response={200: ClustersResponse, codes_4xx: MessageResponse},
+    auth=django_auth,
+    summary="Get many clusters",
+)
+@require_permissions("api.params_api_read_cluster", "api.params_api_read_objects")
 def get_clusters(request: HttpRequest, filters: Query[ClusterFilter], limit=250, offset=0):
     """This API endpoint provides view-only cluster objects and their associated metadata,
     including cluster group, fleet label, custom data, cluster intent.
     """
-    clusters = paginate(filters.filter(Cluster.objects.with_related()), limit, offset)
+    qs = Cluster.objects.filter(is_live=True).with_related()
+    clusters = paginate(filters.filter(qs), limit, offset)
 
-    out = (
-        ClusterResponse(
-            name=cluster.name,
-            description=cluster.description,
-            group=cluster.group.name,
-            secondary_groups=[g.name for g in cluster.secondary_groups.all()],
-            tags=[tag.name for tag in cluster.tags.all()],
-            fleet_labels=[FleetLabelResponse(key=fl.key, value=fl.value) for fl in cluster.fleet_labels.all()],
-            intent=cluster.intent if hasattr(cluster, "intent") else None,
-            data={d.field.name: d.value for d in cluster.cluster_data.all()} if cluster.cluster_data.exists() else None,
-            created_at=cluster.created_at,
-            updated_at=cluster.updated_at,
-        )
-        for cluster in clusters
-    )
+    out = (_generate_cluster_response(cluster) for cluster in clusters)
     return {"clusters": out, "count": clusters.count()}

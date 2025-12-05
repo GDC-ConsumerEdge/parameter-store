@@ -2,19 +2,18 @@ import functools
 import logging
 from typing import Callable
 
-from ninja import NinjaAPI
+from ninja.errors import HttpError
 
 logger = logging.getLogger(__name__)
 
 
-def require_permissions(api: NinjaAPI, *permissions: list[str]) -> Callable:
+def require_permissions(*permissions: str) -> Callable:
     def decorator(func):
         @functools.wraps(func)
         def wrapped(request, *args, **kwargs):
-            logger.info(f"Checking permissions on {func.__name__} for {request.user}")
-            has_perms = request.user.has_perms(permissions)
-            if not has_perms:
-                return api.create_response(request, {"message": "Permission denied"}, status=403)
+            logger.info(f"Checking for permissions {permissions} on {func.__name__} for {request.user}")
+            if not any(request.user.has_perm(perm) for perm in permissions):
+                raise HttpError(403, "Permission denied")
             return func(request, *args, **kwargs)
 
         return wrapped

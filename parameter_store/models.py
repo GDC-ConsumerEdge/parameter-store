@@ -171,13 +171,23 @@ class ChangeSetAwareTopLevelEntity(models.Model):
     is_live = models.BooleanField(editable=False, db_index=True, null=False, default=False)
     is_locked = models.BooleanField(editable=False, db_index=True, null=False, default=False)
     changeset_id = models.ForeignKey(
-        ChangeSet, on_delete=models.SET_NULL, null=True, verbose_name="ChangeSet ID", related_name="+"
+        ChangeSet, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="ChangeSet ID", related_name="+"
     )
     locked_by_changeset = models.ForeignKey(
-        ChangeSet, on_delete=models.SET_NULL, null=True, verbose_name="Locked by ChangeSet", related_name="+"
+        ChangeSet,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Locked by ChangeSet",
+        related_name="+",
     )
     obsoleted_by_changeset = models.ForeignKey(
-        ChangeSet, on_delete=models.SET_NULL, null=True, verbose_name="Obsoleted by ChangeSet", related_name="+"
+        ChangeSet,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Obsoleted by ChangeSet",
+        related_name="+",
     )
     draft_of = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="drafts")
     is_pending_deletion = models.BooleanField(
