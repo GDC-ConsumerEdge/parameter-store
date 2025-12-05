@@ -17,3 +17,14 @@ class ChangeSetCreateRequest(Schema):
 class ChangeSetUpdateRequest(Schema):
     name: str | None = None
     description: str | None = None
+
+
+class GroupCreateRequest(Schema):
+    name: str
+    description: str | None = None
+    changeset_id: int
+
+
+class GroupUpdateRequest(Schema):
+    description: str | None = None
+    changeset_id: int | None = None

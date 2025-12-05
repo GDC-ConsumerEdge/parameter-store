@@ -15,9 +15,9 @@
 #
 ###############################################################################
 from django.contrib.admin.views.decorators import staff_member_required
+from django.core.exceptions import ValidationError
 from django.db import connection, connections
 from django.db.migrations.executor import MigrationExecutor
-from django.db.models import Prefetch
 from django.http import HttpRequest
 from ninja import NinjaAPI, Query
 from ninja.errors import HttpError
@@ -26,16 +26,16 @@ from ninja.pagination import paginate as ninja_paginate
 from ninja.responses import codes_4xx, codes_5xx
 from ninja.security import django_auth
 
-from parameter_store.models import Cluster, Group, GroupData, Tag
+from parameter_store.models import Cluster, Tag
 
 from .api_changesets import changesets_router
+from .api_groups import groups_router
+from .exc import validation_errors
 from .schema.filters import ClusterFilter
 from .schema.response import (
     ClusterResponse,
     ClustersResponse,
     FleetLabelResponse,
-    GroupResponse,
-    GroupsResponse,
     HealthResponse,
     MessageResponse,
     NameDescResponse,
@@ -46,6 +46,10 @@ from .utils import paginate, require_permissions
 api_v1 = NinjaAPI(title="Parameter Store API", version="1.0.0", docs_decorator=staff_member_required)
 
 api_v1.add_router("", changesets_router)
+api_v1.add_router("", groups_router)
+
+
+api_v1.exception_handler(ValidationError)(validation_errors)
 
 
 @api_v1.get("/ping", response=PingResponse, summary="Basic health check")
@@ -117,62 +121,6 @@ def tags(request):
     returns all available tags which may be associated with a cluster.
     """
     return Tag.objects.all()
-
-
-@api_v1.get(
-    "/group/{group}",
-    response={200: GroupResponse, codes_4xx: MessageResponse, codes_5xx: MessageResponse},
-    auth=django_auth,
-    summary="Get a single group",
-)
-@require_permissions("api.params_api_read_group", "api.params_api_read_objects")
-def get_group(request: HttpRequest, group: str):
-    """Gets a specific group by its name."""
-    # Query the for the group, prefetch related data
-    groups = Group.objects.prefetch_related(
-        Prefetch("group_data", queryset=GroupData.objects.select_related("field"))
-    ).filter()
-
-    try:
-        g = groups.get(name=group)
-    except Group.DoesNotExist:
-        return 404, {"message": "group not found"}
-    except Group.MultipleObjectsReturned:
-        raise HttpError(500, "multiple groups found")
-
-    return GroupResponse(
-        name=g.name,
-        description=g.description,
-        data={d.field.name: d.value for d in g.group_data.all()} if g.group_data.exists() else None,
-        created_at=g.created_at,
-        updated_at=g.updated_at,
-    )
-
-
-@api_v1.get(
-    "/groups", response={200: GroupsResponse, codes_4xx: MessageResponse}, auth=django_auth, summary="Get many groups"
-)
-@require_permissions("api.params_api_read_group", "api.params_api_read_objects")
-def get_groups(request: HttpRequest, limit=250, offset=0):
-    """Clusters belong to groups. This endpoint returns all available groups to which a cluster
-    may belong.
-    """
-    # Query the for the groups while prefetching related data
-    data_prefetch = Prefetch("group_data", queryset=GroupData.objects.select_related("field"))
-    qs = Group.objects.prefetch_related(data_prefetch).all()
-    groups = paginate(qs, limit, offset)
-
-    out = (
-        GroupResponse(
-            name=group.name,
-            description=group.description,
-            data={d.field.name: d.value for d in group.group_data.all()} if group.group_data.exists() else None,
-            created_at=group.created_at,
-            updated_at=group.updated_at,
-        )
-        for group in groups
-    )
-    return {"groups": out, "count": groups.count()}
 
 
 def _generate_cluster_response(cluster: Cluster) -> ClusterResponse:
