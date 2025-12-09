@@ -152,6 +152,166 @@ class ChangeSet(models.Model):
     def __str__(self):
         return f"{self.name or f'ChangeSet {self.id}'} ({self.get_status_display()})"
 
+    def commit(self, user):
+        """Commits the changeset, making its changes live."""
+        from django.db import transaction
+        from django.utils import timezone
+
+        from .models import Cluster, ClusterData, ClusterFleetLabel, ClusterIntent, ClusterTag, Group, GroupData
+
+        if self.status != self.Status.DRAFT:
+            raise ValueError(f"ChangeSet '{self.name}' is not in draft state.")
+
+        top_level_models = [Group, Cluster]
+        child_models = [ClusterTag, ClusterIntent, ClusterFleetLabel, ClusterData, GroupData]
+
+        with transaction.atomic():
+            # Process top-level entities
+            for model in top_level_models:
+                draft_entities = model.objects.filter(changeset_id=self.id, is_live=False)
+                for draft_entity in draft_entities:
+                    live_entity = (
+                        model.objects.filter(shared_entity_id=draft_entity.shared_entity_id, is_live=True).first()
+                        if draft_entity.shared_entity_id
+                        else None
+                    )
+
+                    if draft_entity.is_pending_deletion:
+                        if live_entity:
+                            # "Retire" the live entity instead of deleting it
+                            live_entity.is_locked = False
+                            live_entity.locked_by_changeset = None
+                            live_entity.is_live = False
+                            live_entity.obsoleted_by_changeset = self
+                            live_entity.save()
+
+                            # Retire associated live child entities manually since we aren't deleting the parent
+                            for child_model in child_models:
+                                # Determine the ForeignKey name pointing to the parent model
+                                fk_name = model.__name__.lower()
+                                filter_kwargs = {fk_name: live_entity, "is_live": True}
+                                try:
+                                    child_model.objects.filter(**filter_kwargs).update(is_live=False)
+                                except Exception:
+                                    # Some child models might not link to this parent type (e.g. GroupData doesn't link to Cluster)
+                                    pass
+
+                        # Delete children of the draft entity to satisfy foreign key constraints (specifically DO_NOTHING on ClusterTag)
+                        for child_model in child_models:
+                            fk_name = model.__name__.lower()
+                            try:
+                                child_model.objects.filter(**{fk_name: draft_entity}).delete()
+                            except Exception:
+                                pass
+
+                        # The draft's purpose was just to signal deletion; it is now consumed.
+                        draft_entity.delete()
+                        continue
+
+                    if live_entity:
+                        # Demote old live
+                        live_entity.is_locked = False
+                        live_entity.locked_by_changeset = None
+                        live_entity.is_live = False
+                        live_entity.obsoleted_by_changeset = self
+                        live_entity.save()
+
+                        # Promote draft
+                        draft_entity.is_live = True
+                        draft_entity.changeset_id = None
+                        draft_entity.is_locked = False
+                        draft_entity.locked_by_changeset = None
+                        draft_entity.draft_of = None
+                        draft_entity.save()
+
+                        # Cascade updates
+                        if model == Group:
+                            Cluster.objects.filter(group=live_entity).update(group=draft_entity)
+                            clusters_with_secondary = Cluster.objects.filter(secondary_groups=live_entity)
+                            for cluster in clusters_with_secondary:
+                                cluster.secondary_groups.remove(live_entity)
+                                cluster.secondary_groups.add(draft_entity)
+                    else:
+                        # New entity
+                        draft_entity.is_live = True
+                        draft_entity.changeset_id = None
+                        draft_entity.is_locked = False
+                        draft_entity.locked_by_changeset = None
+                        draft_entity.draft_of = None
+                        draft_entity.save()
+
+            # Process child entities (that were drafted directly, e.g. edits to children)
+            for model in child_models:
+                draft_entities = model.objects.filter(changeset_id=self.id, is_live=False)
+                for draft_entity in draft_entities:
+                    draft_entity.is_live = True
+                    draft_entity.changeset_id = None
+                    draft_entity.save()
+
+            self.status = self.Status.COMMITTED
+            self.committed_at = timezone.now()
+            self.committed_by = user
+            self.save()
+
+    def abandon(self):
+        """Abandons the changeset, deleting drafts and unlocking parents."""
+        from django.db import transaction
+
+        from .models import Cluster, ClusterData, ClusterFleetLabel, ClusterIntent, ClusterTag, Group, GroupData
+
+        if self.status != self.Status.DRAFT:
+            raise ValueError(f"ChangeSet '{self.name}' is not in draft state.")
+
+        top_level_models = [Group, Cluster]
+        child_models = [ClusterTag, ClusterIntent, ClusterFleetLabel, ClusterData, GroupData]
+
+        with transaction.atomic():
+            # Unlock parent live entities
+            for model in top_level_models:
+                locked_live_entities = model.objects.filter(locked_by_changeset=self, is_live=True)
+                for entity in locked_live_entities:
+                    entity.is_locked = False
+                    entity.locked_by_changeset = None
+                    entity.save()
+
+            # Delete draft rows
+            for model in top_level_models:
+                model.objects.filter(changeset_id=self.id, is_live=False).delete()
+
+            for model in child_models:
+                model.objects.filter(changeset_id=self.id, is_live=False).delete()
+
+            self.status = self.Status.ABANDONED
+            self.save()
+
+    def coalesce(self, target_changeset):
+        """Merges this changeset into a target changeset and deletes self."""
+        from django.db import transaction
+
+        from .models import Cluster, ClusterData, ClusterFleetLabel, ClusterIntent, ClusterTag, Group, GroupData
+
+        if self.status != self.Status.DRAFT:
+            raise ValueError(f"Source ChangeSet '{self.name}' is not in draft state.")
+        if target_changeset.status != self.Status.DRAFT:
+            raise ValueError(f"Target ChangeSet '{target_changeset.name}' is not in draft state.")
+
+        top_level_models = [Group, Cluster]
+        child_models = [ClusterTag, ClusterIntent, ClusterFleetLabel, ClusterData, GroupData]
+
+        with transaction.atomic():
+            # Re-point locks
+            for model in top_level_models:
+                model.objects.filter(locked_by_changeset=self).update(locked_by_changeset=target_changeset)
+
+            # Move draft entities
+            for model in top_level_models:
+                model.objects.filter(changeset_id=self.id).update(changeset_id=target_changeset.id)
+
+            for model in child_models:
+                model.objects.filter(changeset_id=self.id).update(changeset_id=target_changeset.id)
+
+            self.delete()
+
     class Meta:
         verbose_name = "ChangeSet"
         verbose_name_plural = "ChangeSets"

@@ -38,8 +38,29 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
     entities.
     """
 
-    actions = ["create_draft_action"]
+    actions = ["create_draft_action", "stage_for_deletion_action"]
     list_display = ["name", "group", "comma_separated_tags", "changeset_status"]
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        if "delete_selected" in actions:
+            del actions["delete_selected"]
+        return actions
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        if object_id:
+            try:
+                obj = self.get_object(request, object_id)
+                if obj and obj.is_pending_deletion:
+                    self.message_user(
+                        request,
+                        "WARNING: This entity is marked for DELETION in the active ChangeSet. "
+                        "Committing the ChangeSet will retire this record.",
+                        level=messages.WARNING,
+                    )
+            except Exception:
+                pass
+        return super().change_view(request, object_id, form_url, extra_context)
 
     def get_queryset(self, request):
         """Filters the queryset to show all live and draft entities for the current user."""
@@ -58,14 +79,64 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
         Returns:
             A string indicating the changeset status, or "Live" if the entity is live.
         """
+        from django.utils.safestring import mark_safe
+
         if obj.is_live:
             return "Live"
+
+        status_text = ""
+        # Default blue: Light mode (bg-blue-100 text-blue-800), Dark mode (bg-blue-500/20 dark:text-blue-200)
+        badge_color = "bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-200"
+
         if obj.changeset_id:
             active_changeset_id = self.request.session.get("active_changeset_id")
             if obj.changeset_id.id == active_changeset_id:
-                return f"Draft in active ChangeSet: {obj.changeset_id.name}"
-            return f"Draft in ChangeSet: {obj.changeset_id.name}"
-        return "Draft (no ChangeSet)"
+                status_text = f"Draft in active ChangeSet: {obj.changeset_id.name}"
+            else:
+                status_text = f"Draft in ChangeSet: {obj.changeset_id.name}"
+        else:
+            status_text = "Draft (no ChangeSet)"
+
+        if getattr(obj, "is_pending_deletion", False):
+            status_text += " (Pending Deletion)"
+            # Red: Light mode (bg-red-100 text-red-800), Dark mode (bg-red-500/20 dark:text-red-200)
+            badge_color = "bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-200"
+
+        # Using Tailwind classes for the badge, consistent with Unfold
+        return mark_safe(
+            f'<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {badge_color}">{status_text}</span>'
+        )
+
+    @admin.action(description="Delete / Stage for Deletion")
+    def stage_for_deletion_action(self, request, queryset):
+        """Stages selected live entities for deletion or deletes drafts."""
+        changeset = get_or_create_changeset(request, create_if_none=True)
+
+        success_count = 0
+        with transaction.atomic():
+            for obj in queryset:
+                if obj.is_live:
+                    if obj.is_locked:
+                        self.message_user(request, f"Skipping locked entity: {obj}", level=messages.WARNING)
+                        continue
+
+                    # Create deletion draft
+                    draft_instance = self.deep_copy_instance(obj, changeset)
+                    draft_instance.is_pending_deletion = True
+                    draft_instance.save()
+
+                    # Lock live entity
+                    obj.is_locked = True
+                    obj.locked_by_changeset = changeset
+                    obj.save()
+                    success_count += 1
+                else:
+                    # It's a draft, just delete it (discard changes)
+                    obj.delete()
+                    success_count += 1
+
+        if success_count > 0:
+            self.message_user(request, f"Successfully processed {success_count} items.", level=messages.SUCCESS)
 
     @admin.action(description="Create Draft & Edit")
     def create_draft_action(self, request, queryset) -> Optional[HttpResponseRedirect]:

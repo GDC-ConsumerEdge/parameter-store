@@ -133,10 +133,14 @@ def test_discard_changeset(changeset_admin, user, rf):
     assert Group.objects.count() == 2
     assert ChangeSet.objects.count() == 1
 
-    changeset_admin.discard_changeset(request, ChangeSet.objects.filter(pk=changeset.pk))
+    changeset_admin.abandon_changeset(request, ChangeSet.objects.filter(pk=changeset.pk))
 
-    assert ChangeSet.objects.count() == 0
-    assert Group.objects.count() == 1
+    # The changeset should now be ABANDONED, not deleted.
+    changeset.refresh_from_db()
+    assert changeset.status == ChangeSet.Status.ABANDONED
+    assert ChangeSet.objects.count() == 1  # The changeset itself should still exist
+
+    assert Group.objects.count() == 1  # Only the live group should remain
     live_group.refresh_from_db()
     assert live_group.is_locked is False
     assert live_group.locked_by_changeset is None
