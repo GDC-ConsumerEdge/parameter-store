@@ -395,7 +395,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "django", specifier = ">=5.2.4" },
+    { name = "django", specifier = ">=5.2.4,<6.0.0" },
     { name = "django-guardian", specifier = ">=3.0.3" },
     { name = "django-ninja", specifier = ">=1.4.3" },
     { name = "django-unfold", specifier = ">=0.68.0" },
