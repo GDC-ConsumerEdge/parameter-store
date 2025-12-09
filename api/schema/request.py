@@ -19,6 +19,10 @@ class ChangeSetUpdateRequest(Schema):
     description: str | None = None
 
 
+class ChangeSetCoalesceRequest(Schema):
+    target_changeset_id: int
+
+
 class GroupCreateRequest(Schema):
     name: str
     description: str | None = None

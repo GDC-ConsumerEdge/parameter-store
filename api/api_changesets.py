@@ -5,7 +5,11 @@ from ninja.security import django_auth
 
 from parameter_store.models import ChangeSet
 
-from .schema.request import ChangeSetCreateRequest, ChangeSetUpdateRequest
+from .schema.request import (
+    ChangeSetCoalesceRequest,
+    ChangeSetCreateRequest,
+    ChangeSetUpdateRequest,
+)
 from .schema.response import (
     ChangeSetResponse,
     ChangeSetsResponse,
@@ -139,21 +143,67 @@ def get_changeset_by_name(request: HttpRequest, changeset_name: str):
     return _build_changeset_response(changeset)
 
 
-@changesets_router.delete(
-    "/changeset/{changeset_id}",
-    response={204: None, codes_4xx: MessageResponse},
+@changesets_router.post(
+    "/changeset/{changeset_id}/abandon",
+    response={200: MessageResponse, codes_4xx: MessageResponse},
     auth=django_auth,
-    summary="Delete a ChangeSet",
+    summary="Abandon a ChangeSet",
 )
 @require_permissions("api.params_api_delete_changeset", "api.params_api_delete_objects")
-def delete_changeset(request: HttpRequest, changeset_id: int):
-    """Deletes a ChangeSet. Only DRAFT changesets can be deleted."""
+def abandon_changeset(request: HttpRequest, changeset_id: int):
+    """Abandons a ChangeSet and deletes its associated draft data. Only DRAFT changesets can be abandoned."""
     changeset = _get_changeset_or_404(changeset_id=changeset_id)
     if isinstance(changeset, tuple):
         return changeset  # Return 404 response
 
-    if changeset.status != ChangeSet.Status.DRAFT:
-        return 409, {"message": f"Cannot delete ChangeSet in status '{changeset.status}'."}
+    try:
+        changeset.abandon()
+        return 200, {"message": f"ChangeSet '{changeset.name}' (ID: {changeset_id}) has been abandoned."}
+    except ValueError as e:
+        return 409, {"message": str(e)}
 
-    changeset.delete()
-    return 204, None
+
+@changesets_router.post(
+    "/changeset/{changeset_id}/commit",
+    response={200: MessageResponse, codes_4xx: MessageResponse},
+    auth=django_auth,
+    summary="Commit a ChangeSet",
+)
+@require_permissions("api.params_api_update_changeset", "api.params_api_update_objects")
+def commit_changeset(request: HttpRequest, changeset_id: int):
+    """Commits a ChangeSet, applying all its changes to the live data. Only DRAFT changesets can be committed."""
+    changeset = _get_changeset_or_404(changeset_id=changeset_id)
+    if isinstance(changeset, tuple):
+        return changeset
+
+    try:
+        changeset.commit(request.user)
+        return 200, {"message": f"ChangeSet '{changeset.name}' (ID: {changeset_id}) has been committed."}
+    except ValueError as e:
+        return 409, {"message": str(e)}
+
+
+@changesets_router.post(
+    "/changeset/{changeset_id}/coalesce",
+    response={200: MessageResponse, codes_4xx: MessageResponse},
+    auth=django_auth,
+    summary="Coalesce a ChangeSet",
+)
+@require_permissions("api.params_api_update_changeset", "api.params_api_update_objects")
+def coalesce_changeset(request: HttpRequest, changeset_id: int, payload: ChangeSetCoalesceRequest):
+    """Coalesces (merges) this ChangeSet into a target ChangeSet. The source ChangeSet is deleted."""
+    source_changeset = _get_changeset_or_404(changeset_id=changeset_id)
+    if isinstance(source_changeset, tuple):
+        return source_changeset
+
+    target_changeset = _get_changeset_or_404(changeset_id=payload.target_changeset_id)
+    if isinstance(target_changeset, tuple):
+        return 404, {"message": f"Target ChangeSet {payload.target_changeset_id} not found."}
+
+    try:
+        source_changeset.coalesce(target_changeset)
+        return 200, {
+            "message": f"ChangeSet '{source_changeset.name}' has been coalesced into '{target_changeset.name}'."
+        }
+    except ValueError as e:
+        return 409, {"message": str(e)}

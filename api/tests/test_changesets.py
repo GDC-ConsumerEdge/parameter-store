@@ -210,13 +210,13 @@ def test_update_changeset_partial(permission_to_grant):
     "permission_to_grant",
     ["api.params_api_delete_changeset", "api.params_api_delete_objects"],
 )
-def test_delete_changeset(permission_to_grant):
-    """Test deleting a ChangeSet via DELETE with specific and global permissions."""
+def test_abandon_changeset(permission_to_grant):
+    """Test abandoning a DRAFT ChangeSet via POST with specific and global permissions."""
     user = setup_user_with_permission(permission_to_grant)
 
     cs = ChangeSet.objects.create(
-        name="changeset-to-delete",
-        description="will be deleted",
+        name="changeset-to-abandon",
+        description="will be abandoned",
         created_by=user,
         status=ChangeSet.Status.DRAFT,
     )
@@ -224,8 +224,82 @@ def test_delete_changeset(permission_to_grant):
     client = Client()
     client.force_login(user)
 
-    response = client.delete(f"/api/v1/changeset/{cs.id}")
-    assert response.status_code == 204, f"Failed with permission {permission_to_grant}: {response.content}"
+    response = client.post(f"/api/v1/changeset/{cs.id}/abandon")
+    assert response.status_code == 200, f"Failed with permission {permission_to_grant}: {response.content}"
 
-    # Verify deletion
-    assert not ChangeSet.objects.filter(id=cs.id).exists()
+    cs.refresh_from_db()
+    assert cs.status == ChangeSet.Status.ABANDONED
+
+    # Test abandoning a non-DRAFT changeset
+    cs.status = ChangeSet.Status.COMMITTED
+    cs.save()
+    response = client.post(f"/api/v1/changeset/{cs.id}/abandon")
+    assert response.status_code == 409
+    assert "not in draft state" in response.json()["message"]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "permission_to_grant",
+    ["api.params_api_delete_changeset", "api.params_api_delete_objects"],
+)
+def test_abandon_changeset_404(permission_to_grant):
+    """Test abandoning a non-existent ChangeSet returns 404."""
+    user = setup_user_with_permission(permission_to_grant)
+    client = Client()
+    client.force_login(user)
+
+    response = client.post("/api/v1/changeset/999999/abandon")
+    assert response.status_code == 404
+    assert "changeset not found" in response.json()["message"]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "permission_to_grant",
+    ["api.params_api_update_changeset", "api.params_api_update_objects"],
+)
+def test_commit_changeset_api(permission_to_grant):
+    """Test committing a ChangeSet via POST with specific and global permissions."""
+    user = setup_user_with_permission(permission_to_grant)
+
+    cs = ChangeSet.objects.create(
+        name="changeset-to-commit",
+        created_by=user,
+        status=ChangeSet.Status.DRAFT,
+    )
+
+    client = Client()
+    client.force_login(user)
+
+    response = client.post(f"/api/v1/changeset/{cs.id}/commit")
+    assert response.status_code == 200, f"Failed with permission {permission_to_grant}: {response.content}"
+
+    cs.refresh_from_db()
+    assert cs.status == ChangeSet.Status.COMMITTED
+    assert cs.committed_by == user
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "permission_to_grant",
+    ["api.params_api_update_changeset", "api.params_api_update_objects"],
+)
+def test_coalesce_changeset_api(permission_to_grant):
+    """Test coalescing a ChangeSet via POST with specific and global permissions."""
+    user = setup_user_with_permission(permission_to_grant)
+
+    source_cs = ChangeSet.objects.create(name="source-cs", created_by=user, status=ChangeSet.Status.DRAFT)
+    target_cs = ChangeSet.objects.create(name="target-cs", created_by=user, status=ChangeSet.Status.DRAFT)
+
+    client = Client()
+    client.force_login(user)
+
+    payload = {"target_changeset_id": target_cs.id}
+    response = client.post(f"/api/v1/changeset/{source_cs.id}/coalesce", data=payload, content_type="application/json")
+    assert response.status_code == 200, f"Failed with permission {permission_to_grant}: {response.content}"
+
+    # Source should be deleted
+    assert not ChangeSet.objects.filter(id=source_cs.id).exists()
+    # Target should remain
+    assert ChangeSet.objects.filter(id=target_cs.id).exists()
