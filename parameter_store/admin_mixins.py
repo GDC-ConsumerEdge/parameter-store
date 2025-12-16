@@ -24,7 +24,6 @@ from django.http import HttpResponseRedirect
 from django.shortcuts import redirect
 from django.urls import reverse
 
-from parameter_store.models import Cluster, Group
 from parameter_store.util import get_or_create_changeset
 
 logger = logging.getLogger(__name__)
@@ -107,36 +106,8 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
             f'<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {badge_color}">{status_text}</span>'
         )
 
-    @admin.action(description="Delete / Stage for Deletion")
-    def stage_for_deletion_action(self, request, queryset):
-        """Stages selected live entities for deletion or deletes drafts."""
-        changeset = get_or_create_changeset(request, create_if_none=True)
-
-        success_count = 0
-        with transaction.atomic():
-            for obj in queryset:
-                if obj.is_live:
-                    if obj.is_locked:
-                        self.message_user(request, f"Skipping locked entity: {obj}", level=messages.WARNING)
-                        continue
-
-                    # Create deletion draft
-                    draft_instance = self.deep_copy_instance(obj, changeset)
-                    draft_instance.is_pending_deletion = True
-                    draft_instance.save()
-
-                    # Lock live entity
-                    obj.is_locked = True
-                    obj.locked_by_changeset = changeset
-                    obj.save()
-                    success_count += 1
-                else:
-                    # It's a draft, just delete it (discard changes)
-                    obj.delete()
-                    success_count += 1
-
-        if success_count > 0:
-            self.message_user(request, f"Successfully processed {success_count} items.", level=messages.SUCCESS)
+    # The `stage_for_deletion_action` is for bulk actions on the list view.
+    # The `delete_model` and `delete_view` methods handle single object deletions.
 
     @admin.action(description="Create Draft & Edit")
     def create_draft_action(self, request, queryset) -> Optional[HttpResponseRedirect]:
@@ -173,7 +144,7 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
 
         try:
             with transaction.atomic():
-                draft_instance = self.deep_copy_instance(instance, changeset)
+                draft_instance = instance.create_draft(changeset)
                 instance.is_locked = True
                 instance.locked_by_changeset = changeset
                 instance.save()
@@ -221,7 +192,7 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
             try:
                 with transaction.atomic():
                     # Create a draft from the original, unmodified instance.
-                    draft_instance = self.deep_copy_instance(original_instance, changeset)
+                    draft_instance = original_instance.create_draft(changeset)
 
                     # Apply the changes from the form to the new draft instance.
                     m2m_fields = [f.name for f in self.model._meta.many_to_many]
@@ -269,114 +240,88 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
             )
         return super().response_change(request, obj)
 
+    @admin.action(description="Delete / Stage for Deletion")
+    def stage_for_deletion_action(self, request, queryset):
+        """Stages selected live entities for deletion or deletes drafts."""
+        changeset = get_or_create_changeset(request, create_if_none=True)
+
+        success_count = 0
+        with transaction.atomic():
+            for obj in queryset:
+                if obj.is_live:
+                    if obj.is_locked:
+                        self.message_user(request, f"Skipping locked entity: {obj}", level=messages.WARNING)
+                        continue
+
+                    # Create deletion draft
+                    obj.create_draft(changeset, is_pending_deletion=True)
+
+                    # Lock live entity
+                    obj.is_locked = True
+                    obj.locked_by_changeset = changeset
+                    obj.save()
+                    success_count += 1
+                else:
+                    # It's a draft, just delete it (discard changes)
+                    obj.delete()
+                    success_count += 1
+
+        if success_count > 0:
+            self.message_user(request, f"Successfully processed {success_count} items.", level=messages.SUCCESS)
+
+    def delete_view(self, request, object_id, extra_context=None):
+        """
+        Overrides the default delete view to handle changeset-aware staging for deletion.
+        This prevents the standard 'deleted successfully' message from appearing when
+        we only staged the item.
+        """
+        if request.method == "POST":
+            obj = self.get_object(request, object_id)
+            if obj and obj.is_live:
+                # Bypass standard deletion logic for live objects
+                self.delete_model(request, obj)
+                # Redirect to the changelist (or wherever successful deletion goes)
+                return HttpResponseRedirect(
+                    reverse(f"param_admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist")
+                )
+
+        return super().delete_view(request, object_id, extra_context)
+
     def delete_model(self, request, obj):
         """
-        Overrides the default delete_model to handle changeset-aware entities.
-
-        - For live objects, it intercepts the deletion, creates a draft marked for deletion,
-          and locks the live object.
-        - For draft objects, it deletes them directly.
+        Overrides the default delete behavior.
+        If the object is live, stage it for deletion in the active changeset.
+        If the object is a draft, delete it (discard changes).
         """
+        changeset = get_or_create_changeset(request, create_if_none=True)
+
         if obj.is_live:
-            # This is a live object. Intercept the delete to create a deletion draft.
             if obj.is_locked:
                 self.message_user(
                     request,
-                    "This entity is locked by another ChangeSet and cannot be marked for deletion.",
+                    f"Entity {obj} is locked by another ChangeSet. Cannot stage for deletion.",
                     level=messages.ERROR,
                 )
                 return
 
-            changeset = get_or_create_changeset(request, create_if_none=True)
-
             try:
                 with transaction.atomic():
-                    # Create a draft marked for deletion.
-                    draft_instance = self.deep_copy_instance(obj, changeset)
-                    draft_instance.is_pending_deletion = True
-                    draft_instance.save()
+                    # Create deletion draft
+                    obj.create_draft(changeset, is_pending_deletion=True)
 
-                    # Lock the original live instance.
+                    # Lock live entity
                     obj.is_locked = True
                     obj.locked_by_changeset = changeset
                     obj.save()
 
                     self.message_user(
                         request,
-                        f"'{obj.name}' is now pending deletion in ChangeSet '{changeset.name}'. "
-                        f"Commit the ChangeSet to finalize deletion.",
+                        f"Entity {obj} has been staged for deletion in ChangeSet '{changeset.name}'.",
                         level=messages.SUCCESS,
                     )
             except Exception as e:
-                logger.exception("Failed to create deletion draft for instance %s", obj.pk)
+                logger.exception("Failed to stage %s for deletion", obj)
                 self.message_user(request, f"An unexpected error occurred: {e}", level=messages.ERROR)
         else:
-            # This is a draft object, so it's safe to delete it directly.
+            # It's a draft, just delete it (discard changes)
             super().delete_model(request, obj)
-
-    def deep_copy_instance(self, original_instance, changeset):
-        """Performs a deep copy of a model instance and its related children.
-
-        This method creates a new draft instance from a live one, preserving its data and
-        many-to-many relationships. It then invokes `_copy_child_relations` to handle the
-        duplication of related child objects.
-
-        Args:
-            original_instance: The model instance to copy.
-            changeset: The changeset to associate with the new draft.
-
-        Returns:
-            The newly created draft instance.
-        """
-        # Create a new instance in memory
-        draft_instance = self.model()
-
-        # Copy attributes from the original instance
-        for field in original_instance._meta.fields:
-            # Don't copy the primary key
-            if field.primary_key:
-                continue
-            setattr(draft_instance, field.name, getattr(original_instance, field.name))
-
-        # Set the new state for the draft and save to get a PK
-        draft_instance.shared_entity_id = original_instance.shared_entity_id
-        draft_instance.is_live = False
-        draft_instance.is_locked = False
-        draft_instance.changeset_id = changeset
-        draft_instance.draft_of = original_instance
-        draft_instance.save()
-
-        # Now that the draft has a PK, we can set M2M relationships
-        for field in original_instance._meta.many_to_many:
-            getattr(draft_instance, field.name).set(getattr(original_instance, field.name).all())
-
-        # Copy the child relations from the original to the new draft
-        self._copy_child_relations(original_instance, draft_instance, changeset)
-
-        # If the model being copied is a Group, we need to check if there are any
-        # draft Clusters in the same changeset that need their group FK updated.
-        if isinstance(draft_instance, Group):
-            clusters_in_changeset = Cluster.objects.filter(changeset_id=changeset.id, is_live=False)
-            for cluster in clusters_in_changeset:
-                if cluster.group == original_instance:
-                    cluster.group = draft_instance
-                    cluster.save()
-
-        return draft_instance
-
-    def _copy_child_relations(self, original_instance, draft_instance, changeset):
-        """Handles the deep copying of child relationships for a new draft instance.
-
-        This method must be implemented by the ModelAdmin class that uses this mixin. It is
-        responsible for iterating through the child objects of the original instance and
-        creating corresponding copies linked to the new draft instance.
-
-        Args:
-            original_instance: The original live instance from which children are copied.
-            draft_instance: The new draft instance to which copied children will be linked.
-            changeset: The active changeset to be associated with the new child drafts.
-
-        Raises:
-            NotImplementedError: If the method is not overridden in the consuming ModelAdmin.
-        """
-        raise NotImplementedError("You must implement _copy_child_relations in your ModelAdmin.")

@@ -186,3 +186,28 @@ def test_update_group_validation_error(permission_to_grant):
     data = response.json()
     assert "description" in data["message"]
     assert "ensure this value has at most 255 characters" in str(data["message"]["description"][0]).lower()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "permission_to_grant",
+    ["api.params_api_delete_group", "api.params_api_delete_objects"],
+)
+def test_delete_group_api(permission_to_grant):
+    """Test staging a Group for deletion via DELETE with specific and global permissions."""
+    user = setup_user_with_permission(permission_to_grant)
+    cs = ChangeSet.objects.create(name="delete-cs", created_by=user, status=ChangeSet.Status.DRAFT)
+    group = Group.objects.create(name="group-to-delete", is_live=True)
+
+    client = Client()
+    client.force_login(user)
+
+    response = client.delete(f"/api/v1/group/group-to-delete?changeset_id={cs.id}")
+    assert response.status_code == 200, f"Failed with permission {permission_to_grant}: {response.content}"
+
+    group.refresh_from_db()
+    assert group.is_locked is True
+    assert group.locked_by_changeset == cs
+
+    draft = Group.objects.get(changeset_id=cs, draft_of=group)
+    assert draft.is_pending_deletion is True

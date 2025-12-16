@@ -43,7 +43,7 @@ from .schema.response import (
 )
 from .utils import paginate, require_permissions
 
-api_v1 = NinjaAPI(title="Parameter Store API", version="1.0.0", docs_decorator=staff_member_required)
+api_v1 = NinjaAPI(title="Parameter Store API", version="1.0.0", docs_decorator=staff_member_required, auth=django_auth)
 
 api_v1.add_router("", changesets_router)
 api_v1.add_router("", groups_router)

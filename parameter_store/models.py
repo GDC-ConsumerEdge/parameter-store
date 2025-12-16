@@ -354,6 +354,61 @@ class ChangeSetAwareTopLevelEntity(models.Model):
         default=False, editable=False, help_text="Marks a draft entity for deletion upon commit."
     )
 
+    def create_draft(self, changeset, is_pending_deletion=False):
+        """Creates a draft copy of this entity within a changeset.
+
+        Args:
+            changeset: The changeset to associate with the new draft.
+            is_pending_deletion: If True, marks the draft for deletion.
+
+        Returns:
+            The newly created draft instance.
+        """
+        # Create a new instance in memory
+        draft_instance = self.__class__()
+
+        # Copy attributes from the original instance
+        for field in self._meta.fields:
+            # Don't copy the primary key
+            if field.primary_key:
+                continue
+            setattr(draft_instance, field.name, getattr(self, field.name))
+
+        # Set the new state for the draft
+        draft_instance.shared_entity_id = self.shared_entity_id
+        draft_instance.is_live = False
+        draft_instance.is_locked = False
+        draft_instance.changeset_id = changeset
+        draft_instance.draft_of = self
+        draft_instance.is_pending_deletion = is_pending_deletion
+        draft_instance.save()
+
+        # Now that the draft has a PK, we can set M2M relationships
+        for field in self._meta.many_to_many:
+            getattr(draft_instance, field.name).set(getattr(self, field.name).all())
+
+        # Copy the child relations from the original to the new draft
+        self.copy_child_relations(draft_instance, changeset)
+
+        # If the model being copied is a Group, we need to check if there are any
+        # draft Clusters in the same changeset that need their group FK updated.
+        if self.__class__.__name__ == "Group":
+            # Avoid circular import
+            Cluster = self._meta.apps.get_model("parameter_store", "Cluster")
+            clusters_in_changeset = Cluster.objects.filter(changeset_id=changeset.id, is_live=False)
+            for cluster in clusters_in_changeset:
+                if cluster.group_id == self.pk:
+                    cluster.group = draft_instance
+                    cluster.save()
+
+        return draft_instance
+
+    def copy_child_relations(self, draft_instance, changeset):
+        """Handles the deep copying of child relationships for a new draft instance.
+        Must be implemented by subclasses.
+        """
+        raise NotImplementedError("Subclasses must implement copy_child_relations")
+
 
 class ChangeSetAwareChildEntity(models.Model):
     class Meta:
@@ -382,6 +437,20 @@ class Group(ChangeSetAwareTopLevelEntity, DynamicValidatingModel):
 
     def __str__(self):
         return self.name
+
+    def copy_child_relations(self, draft_instance, changeset):
+        # Iterate over all custom data related to the original group.
+        for group_data in self.group_data.all():
+            # Setting pk and id to None ensures that a new object will be created.
+            group_data.pk = None
+            group_data.id = None
+            # Link the new child object to the draft group.
+            group_data.group = draft_instance
+            # Mark the new child object as a draft.
+            group_data.is_live = False
+            # Associate the new child object with the active changeset.
+            group_data.changeset_id = changeset
+            group_data.save()
 
 
 class Tag(DynamicValidatingModel):
@@ -452,6 +521,35 @@ class Cluster(ChangeSetAwareTopLevelEntity, DynamicValidatingModel):
 
     def __str__(self):
         return self.name
+
+    def copy_child_relations(self, draft_instance, changeset):
+        # Iterate over all custom data related to the original cluster.
+        for cluster_data in self.cluster_data.all():
+            cluster_data.pk = None
+            cluster_data.id = None
+            cluster_data.cluster = draft_instance
+            cluster_data.is_live = False
+            cluster_data.changeset_id = changeset
+            cluster_data.save()
+
+        # Iterate over all fleet labels related to the original cluster.
+        for fleet_label in self.fleet_labels.all():
+            fleet_label.pk = None
+            fleet_label.id = None
+            fleet_label.cluster = draft_instance
+            fleet_label.is_live = False
+            fleet_label.changeset_id = changeset
+            fleet_label.save()
+
+        # Check if the original cluster has an intent and copy it.
+        if hasattr(self, "intent"):
+            intent = self.intent
+            intent.pk = None
+            intent.id = None
+            intent.cluster = draft_instance
+            intent.is_live = False
+            intent.changeset_id = changeset
+            intent.save()
 
     @property
     def tags_list(self):
