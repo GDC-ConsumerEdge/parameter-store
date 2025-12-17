@@ -52,6 +52,26 @@ def test_get_group_by_name(permission_to_grant):
     "permission_to_grant",
     ["api.params_api_read_group", "api.params_api_read_objects"],
 )
+def test_get_group_by_id(permission_to_grant):
+    """Test retrieving a Group by its ID."""
+    user = setup_user_with_permission(permission_to_grant)
+    g = Group.objects.create(name="test-group-id", description="A test group by ID", is_live=True)
+
+    client = Client()
+    client.force_login(user)
+
+    response = client.get(f"/api/v1/group/id/{g.id}")
+    assert response.status_code == 200, f"Failed with permission {permission_to_grant}: {response.content}"
+    data = response.json()
+    assert data["name"] == "test-group-id"
+    assert data["description"] == "A test group by ID"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "permission_to_grant",
+    ["api.params_api_read_group", "api.params_api_read_objects"],
+)
 def test_get_groups_list(permission_to_grant):
     """Test retrieving a list of Groups."""
     user = setup_user_with_permission(permission_to_grant)
@@ -122,6 +142,9 @@ def test_update_group(permission_to_grant):
     """Test updating an existing Group."""
     user = setup_user_with_permission(permission_to_grant)
     cs = ChangeSet.objects.create(name="test-update-cs", created_by=user, status=ChangeSet.Status.DRAFT)
+    # The API logic prefers finding a draft if changeset_id is passed, but if not found, it looks for live.
+    # To test pure update via name, we should probably have a live group or matching draft.
+    # Here we create a draft and update it.
     Group.objects.create(name="update-group", description="Original description", is_live=False, changeset_id=cs)
 
     client = Client()
@@ -133,6 +156,30 @@ def test_update_group(permission_to_grant):
 
     group = Group.objects.get(name="update-group")
     assert group.description == "Updated description"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "permission_to_grant",
+    ["api.params_api_update_group", "api.params_api_update_objects"],
+)
+def test_update_group_by_id(permission_to_grant):
+    """Test updating an existing Group by ID."""
+    user = setup_user_with_permission(permission_to_grant)
+    cs = ChangeSet.objects.create(name="test-update-id-cs", created_by=user, status=ChangeSet.Status.DRAFT)
+    g = Group.objects.create(name="update-group-id", description="Original description", is_live=True)
+
+    client = Client()
+    client.force_login(user)
+
+    payload = {"description": "Updated description via ID", "changeset_id": cs.id}
+    response = client.put(f"/api/v1/group/id/{g.id}", data=payload, content_type="application/json")
+    assert response.status_code == 200, f"Failed with permission {permission_to_grant}: {response.content}"
+
+    # Check that a draft was created and updated
+    draft = Group.objects.get(draft_of=g, changeset_id=cs)
+    assert draft.description == "Updated description via ID"
+    assert draft.is_live is False
 
 
 @pytest.mark.django_db
@@ -203,6 +250,31 @@ def test_delete_group_api(permission_to_grant):
     client.force_login(user)
 
     response = client.delete(f"/api/v1/group/group-to-delete?changeset_id={cs.id}")
+    assert response.status_code == 200, f"Failed with permission {permission_to_grant}: {response.content}"
+
+    group.refresh_from_db()
+    assert group.is_locked is True
+    assert group.locked_by_changeset == cs
+
+    draft = Group.objects.get(changeset_id=cs, draft_of=group)
+    assert draft.is_pending_deletion is True
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "permission_to_grant",
+    ["api.params_api_delete_group", "api.params_api_delete_objects"],
+)
+def test_delete_group_by_id_api(permission_to_grant):
+    """Test staging a Group for deletion by ID."""
+    user = setup_user_with_permission(permission_to_grant)
+    cs = ChangeSet.objects.create(name="delete-id-cs", created_by=user, status=ChangeSet.Status.DRAFT)
+    group = Group.objects.create(name="group-to-delete-id", is_live=True)
+
+    client = Client()
+    client.force_login(user)
+
+    response = client.delete(f"/api/v1/group/id/{group.id}?changeset_id={cs.id}")
     assert response.status_code == 200, f"Failed with permission {permission_to_grant}: {response.content}"
 
     group.refresh_from_db()

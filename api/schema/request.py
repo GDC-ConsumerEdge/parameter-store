@@ -32,3 +32,16 @@ class GroupCreateRequest(Schema):
 class GroupUpdateRequest(Schema):
     description: str | None = None
     changeset_id: int | None = None
+
+
+class ClusterCreateRequest(Schema):
+    name: str
+    description: str | None = None
+    group: str
+    changeset_id: int | None = None
+
+
+class ClusterUpdateRequest(Schema):
+    description: str | None = None
+    group: str | None = None
+    changeset_id: int | None = None
