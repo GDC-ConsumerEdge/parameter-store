@@ -102,15 +102,13 @@ def get_clusters(request: HttpRequest, limit=250, offset=0):
 )
 @require_permissions("api.params_api_create_cluster", "api.params_api_create_objects")
 def create_cluster(request: HttpRequest, payload: ClusterCreateRequest):
-    """Creates a new Cluster. If changeset_id is provided, checks if it exists and is a draft."""
-    changeset = None
-    if payload.changeset_id:
-        try:
-            changeset = ChangeSet.objects.get(id=payload.changeset_id)
-            if changeset.status != ChangeSet.Status.DRAFT:
-                return 409, {"message": f"ChangeSet {changeset.id} is not in DRAFT status."}
-        except ChangeSet.DoesNotExist:
-            return 404, {"message": f"ChangeSet {payload.changeset_id} not found."}
+    """Creates a new Cluster. Validates that the provided ChangeSet exists and is a draft."""
+    try:
+        changeset = ChangeSet.objects.get(id=payload.changeset_id)
+        if changeset.status != ChangeSet.Status.DRAFT:
+            return 409, {"message": f"ChangeSet {changeset.id} is not in DRAFT status."}
+    except ChangeSet.DoesNotExist:
+        return 404, {"message": f"ChangeSet {payload.changeset_id} not found."}
 
     try:
         group_obj = Group.objects.get(name=payload.group, is_live=True)
@@ -168,37 +166,34 @@ def update_cluster_by_id(request: HttpRequest, cluster_id: int, payload: Cluster
 
 
 def _update_cluster_logic(cluster_obj: Cluster, payload: ClusterUpdateRequest):
-    changeset = None
-    if payload.changeset_id:
-        try:
-            changeset = ChangeSet.objects.get(id=payload.changeset_id)
-            if changeset.status != ChangeSet.Status.DRAFT:
-                return 409, {"message": f"ChangeSet {changeset.id} is not in DRAFT status."}
-        except ChangeSet.DoesNotExist:
-            return 404, {"message": f"ChangeSet {payload.changeset_id} not found."}
+    try:
+        changeset = ChangeSet.objects.get(id=payload.changeset_id)
+        if changeset.status != ChangeSet.Status.DRAFT:
+            return 409, {"message": f"ChangeSet {changeset.id} is not in DRAFT status."}
+    except ChangeSet.DoesNotExist:
+        return 404, {"message": f"ChangeSet {payload.changeset_id} not found."}
 
-        if cluster_obj.changeset_id == changeset:
-            pass
-        elif cluster_obj.is_live:
-            if cluster_obj.is_locked:
-                if cluster_obj.locked_by_changeset != changeset:
-                    return 409, {
-                        "message": f"Cluster is locked by another ChangeSet: {cluster_obj.locked_by_changeset.id}"
-                    }
-                else:
-                    try:
-                        draft_cluster = Cluster.objects.get(draft_of=cluster_obj, changeset_id=changeset)
-                        cluster_obj = draft_cluster
-                    except Cluster.DoesNotExist:
-                        return 500, {"message": "Inconsistent state: Locked by changeset but draft not found."}
+    if cluster_obj.changeset_id == changeset:
+        pass
+    elif cluster_obj.is_live:
+        if cluster_obj.is_locked:
+            if cluster_obj.locked_by_changeset != changeset:
+                return 409, {"message": f"Cluster is locked by another ChangeSet: {cluster_obj.locked_by_changeset.id}"}
             else:
-                cluster_obj = cluster_obj.create_draft(changeset)
-                live_cluster = cluster_obj.draft_of
-                live_cluster.is_locked = True
-                live_cluster.locked_by_changeset = changeset
-                live_cluster.save()
+                try:
+                    draft_cluster = Cluster.objects.get(draft_of=cluster_obj, changeset_id=changeset)
+                    cluster_obj = draft_cluster
+                except Cluster.DoesNotExist:
+                    return 500, {"message": "Inconsistent state: Locked by changeset but draft not found."}
         else:
-            pass
+            cluster_obj = cluster_obj.create_draft(changeset)
+            live_cluster = cluster_obj.draft_of
+            live_cluster.is_locked = True
+            live_cluster.locked_by_changeset = changeset
+            live_cluster.save()
+    else:
+        # Case: cluster_obj is a draft but NOT in the requested changeset
+        return 409, {"message": f"Cluster '{cluster_obj.name}' is already a draft in another ChangeSet."}
 
     if payload.description is not None:
         cluster_obj.description = payload.description

@@ -26,43 +26,41 @@ def _get_group_or_404(group_name: str):
 
 
 def _update_group_logic(group_obj: Group, payload: GroupUpdateRequest):
-    changeset = None
-    if payload.changeset_id:
-        try:
-            changeset = ChangeSet.objects.get(id=payload.changeset_id)
-            if changeset.status != ChangeSet.Status.DRAFT:
-                return 409, {"message": f"ChangeSet {changeset.id} is not in DRAFT status."}
-        except ChangeSet.DoesNotExist:
-            return 404, {"message": f"ChangeSet {payload.changeset_id} not found."}
+    try:
+        changeset = ChangeSet.objects.get(id=payload.changeset_id)
+        if changeset.status != ChangeSet.Status.DRAFT:
+            return 409, {"message": f"ChangeSet {changeset.id} is not in DRAFT status."}
+    except ChangeSet.DoesNotExist:
+        return 404, {"message": f"ChangeSet {payload.changeset_id} not found."}
 
-        # If group_obj is already a draft in this changeset, we are good to go.
-        if group_obj.changeset_id == changeset:
-            pass
-        # If group_obj is LIVE, we need to handle draft creation/locking
-        elif group_obj.is_live:
-            if group_obj.is_locked:
-                # Check if locked by THIS changeset - if so, we can update the draft (conceptually)
-                # If locked by another changeset -> 409
-                if group_obj.locked_by_changeset != changeset:
-                    return 409, {"message": f"Group is locked by another ChangeSet: {group_obj.locked_by_changeset.id}"}
+    # If group_obj is already a draft in this changeset, we are good to go.
+    if group_obj.changeset_id == changeset:
+        pass
+    # If group_obj is LIVE, we need to handle draft creation/locking
+    elif group_obj.is_live:
+        if group_obj.is_locked:
+            # Check if locked by THIS changeset - if so, we can update the draft (conceptually)
+            # If locked by another changeset -> 409
+            if group_obj.locked_by_changeset != changeset:
+                return 409, {"message": f"Group is locked by another ChangeSet: {group_obj.locked_by_changeset.id}"}
 
-                try:
-                    draft_group = Group.objects.get(draft_of=group_obj, changeset_id=changeset)
-                    group_obj = draft_group  # Operate on the draft
-                except Group.DoesNotExist:
-                    # Should not happen if locked by this changeset, but safeguard
-                    return 500, {"message": "Inconsistent state: Locked by changeset but draft not found."}
-            else:
-                # Not locked, create new draft
-                group_obj = group_obj.create_draft(changeset)
-                live_group = group_obj.draft_of
-                live_group.is_locked = True
-                live_group.locked_by_changeset = changeset
-                live_group.save()
+            try:
+                draft_group = Group.objects.get(draft_of=group_obj, changeset_id=changeset)
+                group_obj = draft_group  # Operate on the draft
+            except Group.DoesNotExist:
+                # Should not happen if locked by this changeset, but safeguard
+                return 500, {"message": "Inconsistent state: Locked by changeset but draft not found."}
         else:
-            # Case: group_obj is a draft but NOT in the requested changeset (e.g. name collision or wrong ID passed)
-            # But we fetched it by name + changeset_id above, so this shouldn't be reached if we are careful.
-            pass
+            # Not locked, create new draft
+            group_obj = group_obj.create_draft(changeset)
+            live_group = group_obj.draft_of
+            live_group.is_locked = True
+            live_group.locked_by_changeset = changeset
+            live_group.save()
+    else:
+        # Case: group_obj is a draft but NOT in the requested changeset (e.g. name collision or wrong ID passed)
+        # This will now fail because we require the changeset_id in the payload to match.
+        return 409, {"message": f"Group '{group_obj.name}' is already a draft in another ChangeSet."}
 
     if payload.description is not None:
         group_obj.description = payload.description
@@ -203,15 +201,13 @@ def get_groups(request: HttpRequest, limit: int = 250, offset: int = 0):
 )
 @require_permissions("api.params_api_create_group", "api.params_api_create_objects")
 def create_group(request: HttpRequest, payload: GroupCreateRequest):
-    """Creates a new Group. If changeset_id is provided, checks if it exists and is a draft."""
-    changeset = None
-    if payload.changeset_id:
-        try:
-            changeset = ChangeSet.objects.get(id=payload.changeset_id)
-            if changeset.status != ChangeSet.Status.DRAFT:
-                return 409, {"message": f"ChangeSet {changeset.id} is not in DRAFT status."}
-        except ChangeSet.DoesNotExist:
-            return 404, {"message": f"ChangeSet {payload.changeset_id} not found."}
+    """Creates a new Group. Validates that the provided ChangeSet exists and is a draft."""
+    try:
+        changeset = ChangeSet.objects.get(id=payload.changeset_id)
+        if changeset.status != ChangeSet.Status.DRAFT:
+            return 409, {"message": f"ChangeSet {changeset.id} is not in DRAFT status."}
+    except ChangeSet.DoesNotExist:
+        return 404, {"message": f"ChangeSet {payload.changeset_id} not found."}
 
     group = Group(
         name=payload.name,

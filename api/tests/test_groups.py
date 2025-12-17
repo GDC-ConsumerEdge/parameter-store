@@ -11,7 +11,12 @@ User = get_user_model()
 
 def setup_user_with_permission(permission_to_grant):
     """Helper to create a user and grant them a specific API permission."""
-    user = User.objects.create_user(username="testuser", password="password")
+    user, _ = User.objects.get_or_create(username="testuser", defaults={"password": "password"})
+    if not user.check_password("password"):
+        user.set_password("password")
+        user.save()
+
+    user.user_permissions.clear()  # Ensure clean state
 
     # Get the ContentType for our custom API permissions
     api_content_type, _ = ContentType.objects.get_or_create(app_label="api", model="customapipermissions")
@@ -95,21 +100,36 @@ def test_get_groups_list(permission_to_grant):
     "permission_to_grant",
     ["api.params_api_create_group", "api.params_api_create_objects"],
 )
-def test_create_group(permission_to_grant):
-    """Test creating a new Group."""
+def test_create_group_no_changeset(permission_to_grant):
+    """Test that creating a Group without a changeset ID fails."""
     user = setup_user_with_permission(permission_to_grant)
     client = Client()
     client.force_login(user)
 
-    cs = ChangeSet.objects.create(name="test-create-cs", created_by=user, status=ChangeSet.Status.DRAFT)
-
-    payload = {"name": "new-group", "description": "Created via API", "changeset_id": cs.id}
+    payload = {"name": "no-cs-group", "description": "Should fail"}
     response = client.post("/api/v1/group", data=payload, content_type="application/json")
-    assert response.status_code == 200, f"Failed with permission {permission_to_grant}: {response.content}"
+    assert response.status_code == 422
 
-    data = response.json()
-    assert data["name"] == "new-group"
-    assert Group.objects.filter(name="new-group").exists()
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "permission_to_grant",
+    ["api.params_api_update_group", "api.params_api_update_objects"],
+)
+def test_update_group_no_changeset(permission_to_grant):
+    """Test that updating a Group without a changeset ID fails."""
+    user = setup_user_with_permission(permission_to_grant)
+    # Use shorter unique name
+    suffix = permission_to_grant.split(".")[-1][:10]
+    Group.objects.create(name=f"lg-no-cs-{suffix}", description="Original", is_live=True)
+
+    client = Client()
+    client.force_login(user)
+
+    payload = {"description": "Updated"}
+    response = client.put(f"/api/v1/group/lg-no-cs-{suffix}", data=payload, content_type="application/json")
+    # This currently FAILS (returns 200) because the API logic allows it.
+    assert response.status_code == 422
 
 
 @pytest.mark.django_db
