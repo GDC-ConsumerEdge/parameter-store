@@ -1,8 +1,9 @@
 import enum
+import uuid
 from datetime import datetime
 from typing import Any
 
-from ninja import Schema
+from ninja import Field, Schema
 from ninja.orm import create_schema
 
 from parameter_store.models import ClusterIntent
@@ -35,6 +36,8 @@ class LogicalExpression(enum.StrEnum):
 
 
 class ClusterResponse(Schema):
+    id: uuid.UUID = Field(..., description="The stable, unique identifier for the logical cluster entity.")
+    record_id: int = Field(..., description="The unique identifier for this specific version record.")
     name: str
     description: str | None
     group: str
@@ -62,6 +65,8 @@ class PingResponse(Schema):
 
 
 class GroupResponse(Schema):
+    id: uuid.UUID = Field(..., description="The stable, unique identifier for the logical group entity.")
+    record_id: int = Field(..., description="The unique identifier for this specific version record.")
     name: str
     description: str | None
     data: dict[str, str | None] | None
@@ -91,4 +96,51 @@ class ChangeSetResponse(Schema):
 
 class ChangeSetsResponse(Schema):
     changesets: list[ChangeSetResponse]
+    count: int
+
+
+class ChangeAction(enum.StrEnum):
+    CREATE = "create"
+    UPDATE = "update"
+    DELETE = "delete"
+
+
+class GroupChangeItem(Schema):
+    action: ChangeAction
+    entity: GroupResponse
+
+
+class ClusterChangeItem(Schema):
+    action: ChangeAction
+    entity: ClusterResponse
+
+
+class ChangeSetChangesResponse(Schema):
+    groups: list[GroupChangeItem]
+    clusters: list[ClusterChangeItem]
+
+
+class HistoryMetadata(Schema):
+    obsoleted_at: datetime | None
+    obsoleted_by_changeset_id: int | None
+    obsoleted_by_changeset_name: str | None
+
+
+class GroupHistoryItem(Schema):
+    metadata: HistoryMetadata
+    entity: GroupResponse
+
+
+class ClusterHistoryItem(Schema):
+    metadata: HistoryMetadata
+    entity: ClusterResponse
+
+
+class GroupHistoryResponse(Schema):
+    history: list[GroupHistoryItem]
+    count: int
+
+
+class ClusterHistoryResponse(Schema):
+    history: list[ClusterHistoryItem]
     count: int

@@ -1,9 +1,10 @@
+from django.db.models import Prefetch
 from django.http import HttpRequest
 from ninja import Router
 from ninja.responses import codes_4xx
 from ninja.security import django_auth
 
-from parameter_store.models import ChangeSet
+from parameter_store.models import ChangeSet, Cluster, Group, GroupData
 
 from .schema.request import (
     ChangeSetCoalesceRequest,
@@ -11,13 +12,31 @@ from .schema.request import (
     ChangeSetUpdateRequest,
 )
 from .schema.response import (
+    ChangeAction,
+    ChangeSetChangesResponse,
     ChangeSetResponse,
     ChangeSetsResponse,
+    ClusterChangeItem,
+    GroupChangeItem,
+    GroupResponse,
     MessageResponse,
 )
 from .utils import paginate, require_permissions
 
 changesets_router = Router()
+
+
+def _generate_group_response(group: Group) -> GroupResponse:
+    """Helper to construct GroupResponse from a Group model instance."""
+    return GroupResponse(
+        id=group.shared_entity_id,
+        record_id=group.id,
+        name=group.name,
+        description=group.description,
+        data={d.field.name: d.value for d in group.group_data.all()} if group.group_data.exists() else None,
+        created_at=group.created_at,
+        updated_at=group.updated_at,
+    )
 
 
 def _get_changeset_or_404(changeset_id: int = None, changeset_name: str = None):
@@ -181,6 +200,56 @@ def commit_changeset(request: HttpRequest, changeset_id: int):
         return 200, {"message": f"ChangeSet '{changeset.name}' (ID: {changeset_id}) has been committed."}
     except ValueError as e:
         return 409, {"message": str(e)}
+
+
+@changesets_router.get(
+    "/changeset/{changeset_id}/changes",
+    response={200: ChangeSetChangesResponse, codes_4xx: MessageResponse},
+    auth=django_auth,
+    summary="Get summary of changes in a ChangeSet",
+)
+@require_permissions("api.params_api_read_changeset", "api.params_api_read_objects")
+def get_changeset_changes(request: HttpRequest, changeset_id: int):
+    """Provides a summarized list of all provisional changes in a ChangeSet."""
+    changeset = _get_changeset_or_404(changeset_id=changeset_id)
+    if isinstance(changeset, tuple):
+        return changeset
+
+    # Import here to avoid circular dependencies if necessary,
+    # but we've already imported them at the top.
+    from .api_clusters import _generate_cluster_response
+
+    # Fetch groups in this changeset
+    groups = Group.objects.filter(changeset_id=changeset).prefetch_related(
+        Prefetch("group_data", queryset=GroupData.objects.select_related("field"))
+    )
+
+    group_changes = []
+    for g in groups:
+        if g.is_pending_deletion:
+            action = ChangeAction.DELETE
+        elif g.draft_of_id is None:
+            action = ChangeAction.CREATE
+        else:
+            action = ChangeAction.UPDATE
+
+        group_changes.append(GroupChangeItem(action=action, entity=_generate_group_response(g)))
+
+    # Fetch clusters in this changeset
+    clusters = Cluster.objects.with_related().filter(changeset_id=changeset)
+
+    cluster_changes = []
+    for c in clusters:
+        if c.is_pending_deletion:
+            action = ChangeAction.DELETE
+        elif c.draft_of_id is None:
+            action = ChangeAction.CREATE
+        else:
+            action = ChangeAction.UPDATE
+
+        cluster_changes.append(ClusterChangeItem(action=action, entity=_generate_cluster_response(c)))
+
+    return ChangeSetChangesResponse(groups=group_changes, clusters=cluster_changes)
 
 
 @changesets_router.post(

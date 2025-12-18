@@ -51,6 +51,9 @@ def test_get_cluster_by_name(permission_to_grant):
     data = response.json()
     assert data["name"] == "test-cluster"
     assert data["group"] == "test-group"
+    assert "id" in data
+    assert "record_id" in data
+    assert str(data["id"]) != str(data["record_id"])
 
 
 @pytest.mark.django_db
@@ -67,10 +70,12 @@ def test_get_cluster_by_id(permission_to_grant):
     client = Client()
     client.force_login(user)
 
-    response = client.get(f"/api/v1/cluster/id/{c.id}")
+    response = client.get(f"/api/v1/cluster/id/{c.shared_entity_id}")
     assert response.status_code == 200, f"Failed with permission {permission_to_grant}: {response.content}"
     data = response.json()
     assert data["name"] == "test-cluster-id"
+    assert data["record_id"] == c.id
+    assert str(data["id"]) == str(c.shared_entity_id)
 
 
 @pytest.mark.django_db
@@ -204,7 +209,7 @@ def test_update_cluster_by_id(permission_to_grant):
     client.force_login(user)
 
     payload = {"description": "Updated description via ID", "changeset_id": cs.id}
-    response = client.put(f"/api/v1/cluster/id/{c.id}", data=payload, content_type="application/json")
+    response = client.put(f"/api/v1/cluster/id/{c.shared_entity_id}", data=payload, content_type="application/json")
     assert response.status_code == 200, f"Failed with permission {permission_to_grant}: {response.content}"
 
     draft = Cluster.objects.get(draft_of=c, changeset_id=cs)
@@ -252,7 +257,7 @@ def test_delete_cluster_by_id_api(permission_to_grant):
     client = Client()
     client.force_login(user)
 
-    response = client.delete(f"/api/v1/cluster/id/{cluster.id}?changeset_id={cs.id}")
+    response = client.delete(f"/api/v1/cluster/id/{cluster.shared_entity_id}?changeset_id={cs.id}")
     assert response.status_code == 200, f"Failed with permission {permission_to_grant}: {response.content}"
 
     cluster.refresh_from_db()

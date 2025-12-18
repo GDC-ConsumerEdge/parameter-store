@@ -1,3 +1,5 @@
+import uuid
+
 from django.db.models import Prefetch
 from django.http import HttpRequest
 from ninja import Router
@@ -9,8 +11,11 @@ from parameter_store.models import ChangeSet, Group, GroupData
 
 from .schema.request import GroupCreateRequest, GroupUpdateRequest
 from .schema.response import (
+    GroupHistoryItem,
+    GroupHistoryResponse,
     GroupResponse,
     GroupsResponse,
+    HistoryMetadata,
     MessageResponse,
 )
 from .utils import paginate, require_permissions
@@ -23,6 +28,40 @@ def _get_group_or_404(group_name: str):
         return Group.objects.get(name=group_name, is_live=True)
     except Group.DoesNotExist:
         return 404, {"message": "group not found"}
+
+
+def _get_group_history_logic(shared_entity_id: uuid.UUID, limit: int, offset: int):
+    qs = (
+        Group.objects.filter(shared_entity_id=shared_entity_id, is_live=False, obsoleted_by_changeset__isnull=False)
+        .select_related("obsoleted_by_changeset")
+        .prefetch_related(Prefetch("group_data", queryset=GroupData.objects.select_related("field")))
+        .order_by("-created_at")
+    )
+
+    history_page = paginate(qs, limit, offset)
+
+    out = []
+    for g in history_page:
+        metadata = HistoryMetadata(
+            obsoleted_at=g.obsoleted_by_changeset.committed_at if g.obsoleted_by_changeset else None,
+            obsoleted_by_changeset_id=g.obsoleted_by_changeset.id if g.obsoleted_by_changeset else None,
+            obsoleted_by_changeset_name=g.obsoleted_by_changeset.name if g.obsoleted_by_changeset else None,
+        )
+        entity = GroupResponse(
+            id=g.shared_entity_id,
+            record_id=g.id,
+            name=g.name,
+            description=g.description,
+            data={d.field.name: d.value for d in g.group_data.all()} if g.group_data.exists() else None,
+            created_at=g.created_at,
+            updated_at=g.updated_at,
+        )
+        out.append(GroupHistoryItem(metadata=metadata, entity=entity))
+
+    return GroupHistoryResponse(history=out, count=qs.count())
+
+
+# ... (existing _update_group_logic and _delete_group_logic) ...
 
 
 def _update_group_logic(group_obj: Group, payload: GroupUpdateRequest):
@@ -69,6 +108,8 @@ def _update_group_logic(group_obj: Group, payload: GroupUpdateRequest):
     group_obj.save()
 
     return GroupResponse(
+        id=group_obj.shared_entity_id,
+        record_id=group_obj.id,
         name=group_obj.name,
         description=group_obj.description,
         data={d.field.name: d.value for d in group_obj.group_data.all()} if group_obj.group_data.exists() else None,
@@ -134,6 +175,8 @@ def get_group_by_name(request: HttpRequest, group_name: str):
         raise HttpError(500, "multiple groups found")
 
     return GroupResponse(
+        id=g.shared_entity_id,
+        record_id=g.id,
         name=g.name,
         description=g.description,
         data={d.field.name: d.value for d in g.group_data.all()} if g.group_data.exists() else None,
@@ -143,22 +186,51 @@ def get_group_by_name(request: HttpRequest, group_name: str):
 
 
 @groups_router.get(
+    "/group/{group_name}/history",
+    response={200: GroupHistoryResponse, codes_4xx: MessageResponse, codes_5xx: MessageResponse},
+    auth=django_auth,
+    summary="Get history of a group by name",
+)
+@require_permissions("api.params_api_read_group", "api.params_api_read_objects")
+def get_group_history_by_name(request: HttpRequest, group_name: str, limit: int = 250, offset: int = 0):
+    """Gets the history of a specific group by its name (resolving via the current live entity)."""
+    group_obj = _get_group_or_404(group_name)
+    if isinstance(group_obj, tuple):
+        return group_obj
+    return _get_group_history_logic(group_obj.shared_entity_id, limit, offset)
+
+
+@groups_router.get(
+    "/group/id/{group_id}/history",
+    response={200: GroupHistoryResponse, codes_4xx: MessageResponse, codes_5xx: MessageResponse},
+    auth=django_auth,
+    summary="Get history of a group by ID",
+)
+@require_permissions("api.params_api_read_group", "api.params_api_read_objects")
+def get_group_history_by_id(request: HttpRequest, group_id: uuid.UUID, limit: int = 250, offset: int = 0):
+    """Gets the history of a specific group by its shared entity ID."""
+    return _get_group_history_logic(group_id, limit, offset)
+
+
+@groups_router.get(
     "/group/id/{group_id}",
     response={200: GroupResponse, codes_4xx: MessageResponse, codes_5xx: MessageResponse},
     auth=django_auth,
     summary="Get a single group by ID",
 )
 @require_permissions("api.params_api_read_group", "api.params_api_read_objects")
-def get_group_by_id(request: HttpRequest, group_id: int):
+def get_group_by_id(request: HttpRequest, group_id: uuid.UUID):
     """Gets a specific group by its internal ID."""
     try:
         g = Group.objects.prefetch_related(
             Prefetch("group_data", queryset=GroupData.objects.select_related("field"))
-        ).get(id=group_id)
+        ).get(shared_entity_id=group_id, is_live=True)
     except Group.DoesNotExist:
         return 404, {"message": "group not found"}
 
     return GroupResponse(
+        id=g.shared_entity_id,
+        record_id=g.id,
         name=g.name,
         description=g.description,
         data={d.field.name: d.value for d in g.group_data.all()} if g.group_data.exists() else None,
@@ -182,6 +254,8 @@ def get_groups(request: HttpRequest, limit: int = 250, offset: int = 0):
 
     out = (
         GroupResponse(
+            id=group.shared_entity_id,
+            record_id=group.id,
             name=group.name,
             description=group.description,
             data={d.field.name: d.value for d in group.group_data.all()} if group.group_data.exists() else None,
@@ -218,6 +292,8 @@ def create_group(request: HttpRequest, payload: GroupCreateRequest):
     group.save()
 
     return GroupResponse(
+        id=group.shared_entity_id,
+        record_id=group.id,
         name=group.name,
         description=group.description,
         data=None,
@@ -257,12 +333,17 @@ def update_group_by_name(request: HttpRequest, group_name: str, payload: GroupUp
     summary="Update a Group by ID",
 )
 @require_permissions("api.params_api_update_group", "api.params_api_update_objects")
-def update_group_by_id(request: HttpRequest, group_id: int, payload: GroupUpdateRequest):
+def update_group_by_id(request: HttpRequest, group_id: uuid.UUID, payload: GroupUpdateRequest):
     """Updates a Group by ID. If changeset_id is provided, validates it."""
+    # Try to find a draft first
     try:
-        group_obj = Group.objects.get(id=group_id)
+        group_obj = Group.objects.get(shared_entity_id=group_id, is_live=False, changeset_id__isnull=False)
     except Group.DoesNotExist:
-        return 404, {"message": "group not found"}
+        # If no draft, try to find live
+        try:
+            group_obj = Group.objects.get(shared_entity_id=group_id, is_live=True)
+        except Group.DoesNotExist:
+            return 404, {"message": "group not found"}
 
     return _update_group_logic(group_obj, payload)
 
@@ -290,11 +371,16 @@ def delete_group_by_name(request: HttpRequest, group_name: str, changeset_id: in
     summary="Stage a Group for Deletion by ID",
 )
 @require_permissions("api.params_api_delete_group", "api.params_api_delete_objects")
-def delete_group_by_id(request: HttpRequest, group_id: int, changeset_id: int):
+def delete_group_by_id(request: HttpRequest, group_id: uuid.UUID, changeset_id: int):
     """Stages a Group for deletion by ID within a ChangeSet."""
+    # Try to find a draft first
     try:
-        group_obj = Group.objects.get(id=group_id)
+        group_obj = Group.objects.get(shared_entity_id=group_id, is_live=False, changeset_id__isnull=False)
     except Group.DoesNotExist:
-        return 404, {"message": "group not found"}
+        # If no draft, try to find live
+        try:
+            group_obj = Group.objects.get(shared_entity_id=group_id, is_live=True)
+        except Group.DoesNotExist:
+            return 404, {"message": "group not found"}
 
     return _delete_group_logic(group_obj, changeset_id)

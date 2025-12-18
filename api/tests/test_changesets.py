@@ -11,7 +11,12 @@ User = get_user_model()
 
 def setup_user_with_permission(permission_to_grant):
     """Helper to create a user and grant them a specific API permission."""
-    user = User.objects.create_user(username="testuser", password="password")
+    user, _ = User.objects.get_or_create(username="testuser", defaults={"password": "password"})
+    if not user.check_password("password"):
+        user.set_password("password")
+        user.save()
+
+    user.user_permissions.clear()
 
     # Get the ContentType for our custom API permissions
     api_content_type, _ = ContentType.objects.get_or_create(app_label="api", model="customapipermissions")
@@ -25,6 +30,97 @@ def setup_user_with_permission(permission_to_grant):
     user.user_permissions.add(perm)
     user.refresh_from_db()
     return user
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "permission_to_grant",
+    ["api.params_api_read_changeset", "api.params_api_read_objects"],
+)
+def test_get_changeset_changes(permission_to_grant):
+    """Test retrieving the summary of changes in a ChangeSet."""
+    from parameter_store.models import Cluster, Group
+
+    user = setup_user_with_permission(permission_to_grant)
+
+    cs = ChangeSet.objects.create(name="Summary Test", created_by=user)
+
+    # --- Groups ---
+    # 1. Create a new draft group (CREATE)
+    Group.objects.create(name="new-group-1", changeset_id=cs, is_live=False)
+
+    # 2. Create another new draft group (CREATE)
+    Group.objects.create(name="new-group-2", changeset_id=cs, is_live=False)
+
+    # 3. Create a draft of an existing group (UPDATE)
+    live_group_update = Group.objects.create(name="update-group", is_live=True)
+    Group.objects.create(
+        name="update-group",
+        draft_of=live_group_update,
+        changeset_id=cs,
+        is_live=False,
+        shared_entity_id=live_group_update.shared_entity_id,
+    )
+
+    # 4. Create a deletion draft of an existing group (DELETE)
+    live_group_delete = Group.objects.create(name="delete-group", is_live=True)
+    Group.objects.create(
+        name="delete-group",
+        draft_of=live_group_delete,
+        changeset_id=cs,
+        is_live=False,
+        shared_entity_id=live_group_delete.shared_entity_id,
+        is_pending_deletion=True,
+    )
+
+    # --- Clusters ---
+    base_group = Group.objects.create(name="base-group", is_live=True)
+
+    # 5. Create a new draft cluster (CREATE)
+    Cluster.objects.create(name="new-cluster-1", group=base_group, changeset_id=cs, is_live=False)
+
+    # 6. Create a draft of an existing cluster (UPDATE)
+    live_cluster_update = Cluster.objects.create(name="update-cluster", group=base_group, is_live=True)
+    Cluster.objects.create(
+        name="update-cluster",
+        group=base_group,
+        draft_of=live_cluster_update,
+        changeset_id=cs,
+        is_live=False,
+        shared_entity_id=live_cluster_update.shared_entity_id,
+    )
+
+    # 7. Create a deletion draft of an existing cluster (DELETE)
+    live_cluster_delete = Cluster.objects.create(name="delete-cluster", group=base_group, is_live=True)
+    Cluster.objects.create(
+        name="delete-cluster",
+        group=base_group,
+        draft_of=live_cluster_delete,
+        changeset_id=cs,
+        is_live=False,
+        shared_entity_id=live_cluster_delete.shared_entity_id,
+        is_pending_deletion=True,
+    )
+
+    client = Client()
+    client.force_login(user)
+
+    response = client.get(f"/api/v1/changeset/{cs.id}/changes")
+    assert response.status_code == 200, f"Failed with permission {permission_to_grant}: {response.content}"
+    data = response.json()
+
+    assert len(data["groups"]) == 4
+    assert len(data["clusters"]) == 3
+
+    group_actions = [g["action"] for g in data["groups"]]
+    assert group_actions.count("create") == 2
+    assert group_actions.count("update") == 1
+    assert group_actions.count("delete") == 1
+
+    cluster_actions = [c["action"] for c in data["clusters"]]
+    assert cluster_actions.count("create") == 1
+    assert cluster_actions.count("update") == 1
+    assert cluster_actions.count("delete") == 1
 
 
 @pytest.mark.django_db

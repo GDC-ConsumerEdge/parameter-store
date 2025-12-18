@@ -22,6 +22,7 @@ from django.conf import settings  # Required for ForeignKey to User
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.query import Prefetch
+from django.utils import timezone
 
 from parameter_store.constraints import top_level_constraints
 from parameter_store.util import get_class_from_full_path, inspect_callable_signature

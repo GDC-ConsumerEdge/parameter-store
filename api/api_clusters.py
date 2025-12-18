@@ -1,3 +1,5 @@
+import uuid
+
 from django.http import HttpRequest
 from ninja import Router
 from ninja.errors import HttpError
@@ -6,9 +8,12 @@ from ninja.security import django_auth
 
 from api.schema.request import ClusterCreateRequest, ClusterUpdateRequest
 from api.schema.response import (
+    ClusterHistoryItem,
+    ClusterHistoryResponse,
     ClusterResponse,
     ClustersResponse,
     FleetLabelResponse,
+    HistoryMetadata,
     MessageResponse,
 )
 from parameter_store.models import ChangeSet, Cluster, Group
@@ -27,6 +32,8 @@ def _get_cluster_or_404(cluster_name: str):
 
 def _generate_cluster_response(cluster: Cluster) -> ClusterResponse:
     return ClusterResponse(
+        id=cluster.shared_entity_id,
+        record_id=cluster.id,
         name=cluster.name,
         description=cluster.description,
         group=cluster.group.name,
@@ -38,6 +45,56 @@ def _generate_cluster_response(cluster: Cluster) -> ClusterResponse:
         created_at=cluster.created_at,
         updated_at=cluster.updated_at,
     )
+
+
+def _get_cluster_history_logic(shared_entity_id: uuid.UUID, limit: int, offset: int):
+    qs = (
+        Cluster.objects.with_related()
+        .filter(shared_entity_id=shared_entity_id, is_live=False, obsoleted_by_changeset__isnull=False)
+        .select_related("obsoleted_by_changeset")
+        .order_by("-created_at")
+    )
+
+    history_page = paginate(qs, limit, offset)
+
+    out = []
+    for c in history_page:
+        metadata = HistoryMetadata(
+            obsoleted_at=c.obsoleted_by_changeset.committed_at if c.obsoleted_by_changeset else None,
+            obsoleted_by_changeset_id=c.obsoleted_by_changeset.id if c.obsoleted_by_changeset else None,
+            obsoleted_by_changeset_name=c.obsoleted_by_changeset.name if c.obsoleted_by_changeset else None,
+        )
+        entity = _generate_cluster_response(c)
+        out.append(ClusterHistoryItem(metadata=metadata, entity=entity))
+
+    return ClusterHistoryResponse(history=out, count=qs.count())
+
+
+@clusters_router.get(
+    "/cluster/{cluster_name}/history",
+    response={200: ClusterHistoryResponse, codes_4xx: MessageResponse, codes_5xx: MessageResponse},
+    auth=django_auth,
+    summary="Get history of a cluster by name",
+)
+@require_permissions("api.params_api_read_cluster", "api.params_api_read_objects")
+def get_cluster_history_by_name(request: HttpRequest, cluster_name: str, limit: int = 250, offset: int = 0):
+    """Gets the history of a specific cluster by its name (resolving via the current live entity)."""
+    cluster_obj = _get_cluster_or_404(cluster_name)
+    if isinstance(cluster_obj, tuple):
+        return cluster_obj
+    return _get_cluster_history_logic(cluster_obj.shared_entity_id, limit, offset)
+
+
+@clusters_router.get(
+    "/cluster/id/{cluster_id}/history",
+    response={200: ClusterHistoryResponse, codes_4xx: MessageResponse, codes_5xx: MessageResponse},
+    auth=django_auth,
+    summary="Get history of a cluster by ID",
+)
+@require_permissions("api.params_api_read_cluster", "api.params_api_read_objects")
+def get_cluster_history_by_id(request: HttpRequest, cluster_id: uuid.UUID, limit: int = 250, offset: int = 0):
+    """Gets the history of a specific cluster by its shared entity ID."""
+    return _get_cluster_history_logic(cluster_id, limit, offset)
 
 
 @clusters_router.get(
@@ -66,10 +123,10 @@ def get_cluster_by_name(request: HttpRequest, cluster_name: str):
     summary="Get a single cluster by ID",
 )
 @require_permissions("api.params_api_read_cluster", "api.params_api_read_objects")
-def get_cluster_by_id(request: HttpRequest, cluster_id: int):
+def get_cluster_by_id(request: HttpRequest, cluster_id: uuid.UUID):
     """Gets a specific cluster by its internal ID."""
     try:
-        c = Cluster.objects.with_related().get(id=cluster_id)
+        c = Cluster.objects.with_related().get(shared_entity_id=cluster_id, is_live=True)
     except Cluster.DoesNotExist:
         return 404, {"message": "cluster not found"}
 
@@ -155,12 +212,17 @@ def update_cluster_by_name(request: HttpRequest, cluster_name: str, payload: Clu
     summary="Update a Cluster by ID",
 )
 @require_permissions("api.params_api_update_cluster", "api.params_api_update_objects")
-def update_cluster_by_id(request: HttpRequest, cluster_id: int, payload: ClusterUpdateRequest):
+def update_cluster_by_id(request: HttpRequest, cluster_id: uuid.UUID, payload: ClusterUpdateRequest):
     """Updates a Cluster by ID. If changeset_id is provided, validates it."""
+    # Try to find a draft first
     try:
-        cluster_obj = Cluster.objects.get(id=cluster_id)
+        cluster_obj = Cluster.objects.get(shared_entity_id=cluster_id, is_live=False, changeset_id__isnull=False)
     except Cluster.DoesNotExist:
-        return 404, {"message": "cluster not found"}
+        # If no draft, try to find live
+        try:
+            cluster_obj = Cluster.objects.get(shared_entity_id=cluster_id, is_live=True)
+        except Cluster.DoesNotExist:
+            return 404, {"message": "cluster not found"}
 
     return _update_cluster_logic(cluster_obj, payload)
 
@@ -238,12 +300,17 @@ def delete_cluster_by_name(request: HttpRequest, cluster_name: str, changeset_id
     summary="Stage a Cluster for Deletion by ID",
 )
 @require_permissions("api.params_api_delete_cluster", "api.params_api_delete_objects")
-def delete_cluster_by_id(request: HttpRequest, cluster_id: int, changeset_id: int):
+def delete_cluster_by_id(request: HttpRequest, cluster_id: uuid.UUID, changeset_id: int):
     """Stages a Cluster for deletion by ID within a ChangeSet."""
+    # Try to find a draft first
     try:
-        cluster_obj = Cluster.objects.get(id=cluster_id)
+        cluster_obj = Cluster.objects.get(shared_entity_id=cluster_id, is_live=False, changeset_id__isnull=False)
     except Cluster.DoesNotExist:
-        return 404, {"message": "cluster not found"}
+        # If no draft, try to find live
+        try:
+            cluster_obj = Cluster.objects.get(shared_entity_id=cluster_id, is_live=True)
+        except Cluster.DoesNotExist:
+            return 404, {"message": "cluster not found"}
 
     return _delete_cluster_logic(cluster_obj, changeset_id)
 

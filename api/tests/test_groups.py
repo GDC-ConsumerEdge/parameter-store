@@ -50,6 +50,10 @@ def test_get_group_by_name(permission_to_grant):
     data = response.json()
     assert data["name"] == "test-group"
     assert data["description"] == "A test group"
+    assert "id" in data
+    assert "record_id" in data
+    # Basic check that ID is not the int record ID
+    assert str(data["id"]) != str(data["record_id"])
 
 
 @pytest.mark.django_db
@@ -65,11 +69,13 @@ def test_get_group_by_id(permission_to_grant):
     client = Client()
     client.force_login(user)
 
-    response = client.get(f"/api/v1/group/id/{g.id}")
+    response = client.get(f"/api/v1/group/id/{g.shared_entity_id}")
     assert response.status_code == 200, f"Failed with permission {permission_to_grant}: {response.content}"
     data = response.json()
     assert data["name"] == "test-group-id"
     assert data["description"] == "A test group by ID"
+    assert data["record_id"] == g.id
+    assert str(data["id"]) == str(g.shared_entity_id)
 
 
 @pytest.mark.django_db
@@ -193,7 +199,7 @@ def test_update_group_by_id(permission_to_grant):
     client.force_login(user)
 
     payload = {"description": "Updated description via ID", "changeset_id": cs.id}
-    response = client.put(f"/api/v1/group/id/{g.id}", data=payload, content_type="application/json")
+    response = client.put(f"/api/v1/group/id/{g.shared_entity_id}", data=payload, content_type="application/json")
     assert response.status_code == 200, f"Failed with permission {permission_to_grant}: {response.content}"
 
     # Check that a draft was created and updated
@@ -294,7 +300,7 @@ def test_delete_group_by_id_api(permission_to_grant):
     client = Client()
     client.force_login(user)
 
-    response = client.delete(f"/api/v1/group/id/{group.id}?changeset_id={cs.id}")
+    response = client.delete(f"/api/v1/group/id/{group.shared_entity_id}?changeset_id={cs.id}")
     assert response.status_code == 200, f"Failed with permission {permission_to_grant}: {response.content}"
 
     group.refresh_from_db()
