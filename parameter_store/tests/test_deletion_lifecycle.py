@@ -14,6 +14,14 @@
 # limitations under the License.
 #
 ###############################################################################
+"""
+Tests for the deletion lifecycle of ChangeSet-aware entities.
+
+This module verifies that deleting entities within a ChangeSet (drafts) works as
+expected, and that committing a deletion correctly retires the live entity
+and cleans up dependent objects.
+"""
+
 import pytest
 from django.contrib.auth.models import User
 

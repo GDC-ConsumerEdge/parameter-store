@@ -14,6 +14,14 @@
 # limitations under the License.
 #
 ###############################################################################
+"""
+Tests for ChangeSet administrative actions.
+
+This module validates the functionality of custom Django Admin actions for
+ChangeSets, such as committing changes, abandoning drafts, and coalescing
+multiple changesets.
+"""
+
 import pytest
 from django.contrib import admin
 from django.contrib.auth.models import User

@@ -1,3 +1,26 @@
+###############################################################################
+# Copyright 2024 Google, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+###############################################################################
+"""
+API endpoints for managing ChangeSets.
+
+This module provides the CRUD operations and lifecycle management for ChangeSets,
+which allow for atomic staging and committing of changes to Clusters and Groups.
+"""
+
 from django.db.models import Prefetch
 from django.http import HttpRequest
 from ninja import Router
@@ -27,7 +50,15 @@ changesets_router = Router()
 
 
 def _generate_group_response(group: Group) -> GroupResponse:
-    """Helper to construct GroupResponse from a Group model instance."""
+    """
+    Helper to construct GroupResponse from a Group model instance.
+
+    Args:
+        group: The Group model instance.
+
+    Returns:
+        GroupResponse: The Pydantic response object.
+    """
     return GroupResponse(
         id=group.shared_entity_id,
         record_id=group.id,
@@ -40,7 +71,17 @@ def _generate_group_response(group: Group) -> GroupResponse:
 
 
 def _get_changeset_or_404(changeset_id: int = None, changeset_name: str = None):
-    """Helper to retrieve a ChangeSet by ID or name, returning the object or a 404 response."""
+    """
+    Retrieves a ChangeSet by ID or name, returning the object or a 404 response.
+
+    Args:
+        changeset_id: Optional ID of the changeset.
+        changeset_name: Optional name of the changeset.
+
+    Returns:
+        ChangeSet: The retrieved changeset instance.
+        tuple: A (404, msg) tuple if not found.
+    """
     qs = ChangeSet.objects.select_related("committed_by", "created_by")
     try:
         if changeset_id is not None:
@@ -53,7 +94,15 @@ def _get_changeset_or_404(changeset_id: int = None, changeset_name: str = None):
 
 
 def _build_changeset_response(cs: ChangeSet) -> ChangeSetResponse:
-    """Helper to build ChangeSetResponse from a ChangeSet model instance."""
+    """
+    Helper to build ChangeSetResponse from a ChangeSet model instance.
+
+    Args:
+        cs: The ChangeSet model instance.
+
+    Returns:
+        ChangeSetResponse: The Pydantic response object.
+    """
     return ChangeSetResponse(
         id=cs.id,
         name=cs.name,
@@ -80,7 +129,9 @@ def get_changesets(
     limit: int = 250,
     offset: int = 0,
 ):
-    """Provides view-only ChangeSet objects"""
+    """
+    Retrieves a paginated list of ChangeSets, filtered by status.
+    """
     qs = ChangeSet.objects.filter(status=ChangeSet.Status(status)).select_related("committed_by", "created_by")
     changesets = paginate(qs, limit, offset)
     out = (_build_changeset_response(cs) for cs in changesets)
@@ -95,7 +146,9 @@ def get_changesets(
 )
 @require_permissions("api.params_api_create_changeset", "api.params_api_create_objects")
 def create_changeset(request: HttpRequest, payload: ChangeSetCreateRequest):
-    """Creates a new ChangeSet."""
+    """
+    Creates a new ChangeSet in DRAFT status.
+    """
     cs = ChangeSet(
         name=payload.name,
         description=payload.description,
@@ -114,12 +167,13 @@ def create_changeset(request: HttpRequest, payload: ChangeSetCreateRequest):
 )
 @require_permissions("api.params_api_update_changeset", "api.params_api_update_objects")
 def update_changeset(request: HttpRequest, changeset_id: int, payload: ChangeSetUpdateRequest):
-    """Updates an existing ChangeSet. Only DRAFT changesets can be updated."""
+    """
+    Updates the metadata (name, description) of a DRAFT ChangeSet.
+    """
     changeset = _get_changeset_or_404(changeset_id=changeset_id)
     if isinstance(changeset, tuple):
         return changeset  # Return 404 response
 
-    # Status check (retained as core business logic)
     if changeset.status != ChangeSet.Status.DRAFT:
         return 409, {"message": f"Cannot edit ChangeSet in status '{changeset.status}'."}
 
@@ -140,7 +194,9 @@ def update_changeset(request: HttpRequest, changeset_id: int, payload: ChangeSet
 )
 @require_permissions("api.params_api_read_changeset", "api.params_api_read_objects")
 def get_changeset_by_id(request: HttpRequest, changeset_id: int):
-    """Gets a specific ChangeSet by its ID."""
+    """
+    Retrieves a specific ChangeSet by its database ID.
+    """
     changeset = _get_changeset_or_404(changeset_id=changeset_id)
     if isinstance(changeset, tuple):
         return changeset  # Return 404 response
@@ -155,7 +211,9 @@ def get_changeset_by_id(request: HttpRequest, changeset_id: int):
 )
 @require_permissions("api.params_api_read_changeset", "api.params_api_read_objects")
 def get_changeset_by_name(request: HttpRequest, changeset_name: str):
-    """Gets a specific ChangeSet by its name."""
+    """
+    Retrieves a specific ChangeSet by its unique name.
+    """
     changeset = _get_changeset_or_404(changeset_name=changeset_name)
     if isinstance(changeset, tuple):
         return changeset  # Return 404 response
@@ -170,7 +228,9 @@ def get_changeset_by_name(request: HttpRequest, changeset_name: str):
 )
 @require_permissions("api.params_api_delete_changeset", "api.params_api_delete_objects")
 def abandon_changeset(request: HttpRequest, changeset_id: int):
-    """Abandons a ChangeSet and deletes its associated draft data. Only DRAFT changesets can be abandoned."""
+    """
+    Abandons a ChangeSet and deletes all associated draft data.
+    """
     changeset = _get_changeset_or_404(changeset_id=changeset_id)
     if isinstance(changeset, tuple):
         return changeset  # Return 404 response
@@ -190,7 +250,9 @@ def abandon_changeset(request: HttpRequest, changeset_id: int):
 )
 @require_permissions("api.params_api_update_changeset", "api.params_api_update_objects")
 def commit_changeset(request: HttpRequest, changeset_id: int):
-    """Commits a ChangeSet, applying all its changes to the live data. Only DRAFT changesets can be committed."""
+    """
+    Commits a ChangeSet, making all staged changes live atomically.
+    """
     changeset = _get_changeset_or_404(changeset_id=changeset_id)
     if isinstance(changeset, tuple):
         return changeset
@@ -210,13 +272,13 @@ def commit_changeset(request: HttpRequest, changeset_id: int):
 )
 @require_permissions("api.params_api_read_changeset", "api.params_api_read_objects")
 def get_changeset_changes(request: HttpRequest, changeset_id: int):
-    """Provides a summarized list of all provisional changes in a ChangeSet."""
+    """
+    Provides a structured summary of all provisional changes (Create/Update/Delete) in a ChangeSet.
+    """
     changeset = _get_changeset_or_404(changeset_id=changeset_id)
     if isinstance(changeset, tuple):
         return changeset
 
-    # Import here to avoid circular dependencies if necessary,
-    # but we've already imported them at the top.
     from .api_clusters import _generate_cluster_response
 
     # Fetch groups in this changeset
@@ -260,7 +322,9 @@ def get_changeset_changes(request: HttpRequest, changeset_id: int):
 )
 @require_permissions("api.params_api_update_changeset", "api.params_api_update_objects")
 def coalesce_changeset(request: HttpRequest, changeset_id: int, payload: ChangeSetCoalesceRequest):
-    """Coalesces (merges) this ChangeSet into a target ChangeSet. The source ChangeSet is deleted."""
+    """
+    Merges all changes from the current ChangeSet into another target ChangeSet.
+    """
     source_changeset = _get_changeset_or_404(changeset_id=changeset_id)
     if isinstance(source_changeset, tuple):
         return source_changeset

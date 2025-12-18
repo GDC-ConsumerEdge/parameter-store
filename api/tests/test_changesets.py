@@ -1,3 +1,26 @@
+###############################################################################
+# Copyright 2024 Google, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+###############################################################################
+"""
+Tests for the Parameter Store ChangeSet API.
+
+This module contains functional tests verifying the lifecycle of ChangeSets,
+including creation, metadata updates, abandonment, committing, and coalescing.
+"""
+
 import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
@@ -10,7 +33,15 @@ User = get_user_model()
 
 
 def setup_user_with_permission(permission_to_grant):
-    """Helper to create a user and grant them a specific API permission."""
+    """
+    Helper to create a user and grant them a specific API permission.
+
+    Args:
+        permission_to_grant: The full permission codename.
+
+    Returns:
+        User: The user instance.
+    """
     user, _ = User.objects.get_or_create(username="testuser", defaults={"password": "password"})
     if not user.check_password("password"):
         user.set_password("password")
@@ -38,7 +69,12 @@ def setup_user_with_permission(permission_to_grant):
     ["api.params_api_read_changeset", "api.params_api_read_objects"],
 )
 def test_get_changeset_changes(permission_to_grant):
-    """Test retrieving the summary of changes in a ChangeSet."""
+    """
+    Test retrieving the summary of changes in a ChangeSet.
+
+    Verifies that various actions (create, update, delete) for both groups
+    and clusters are correctly categorized in the summary response.
+    """
     from parameter_store.models import Cluster, Group
 
     user = setup_user_with_permission(permission_to_grant)
@@ -129,7 +165,9 @@ def test_get_changeset_changes(permission_to_grant):
     ["api.params_api_read_changeset", "api.params_api_read_objects"],
 )
 def test_get_changeset_by_id(permission_to_grant):
-    """Test retrieving a ChangeSet by its ID using specific and global permissions."""
+    """
+    Test retrieving a ChangeSet by its ID using specific and global permissions.
+    """
     user = setup_user_with_permission(permission_to_grant)
 
     cs = ChangeSet.objects.create(
@@ -141,7 +179,6 @@ def test_get_changeset_by_id(permission_to_grant):
     client = Client()
     client.force_login(user)
 
-    # Test get by ID
     response = client.get(f"/api/v1/changeset/id/{cs.id}")
     assert response.status_code == 200, f"Failed with permission {permission_to_grant}: {response.content}"
     data = response.json()
@@ -159,7 +196,9 @@ def test_get_changeset_by_id(permission_to_grant):
     ["api.params_api_read_changeset", "api.params_api_read_objects"],
 )
 def test_get_changeset_by_name(permission_to_grant):
-    """Test retrieving a ChangeSet by its name using specific and global permissions."""
+    """
+    Test retrieving a ChangeSet by its name using specific and global permissions.
+    """
     user = setup_user_with_permission(permission_to_grant)
 
     cs_name = ChangeSet.objects.create(
@@ -171,7 +210,6 @@ def test_get_changeset_by_name(permission_to_grant):
     client = Client()
     client.force_login(user)
 
-    # Test get by Name
     response = client.get(f"/api/v1/changeset/name/{cs_name.name}")
     assert response.status_code == 200, f"Failed with permission {permission_to_grant}: {response.content}"
     data = response.json()
@@ -189,7 +227,9 @@ def test_get_changeset_by_name(permission_to_grant):
     ["api.params_api_create_changeset", "api.params_api_create_objects"],
 )
 def test_create_changeset(permission_to_grant):
-    """Test creating a new ChangeSet via POST with specific and global permissions."""
+    """
+    Test creating a new ChangeSet via POST.
+    """
     user = setup_user_with_permission(permission_to_grant)
 
     client = Client()
@@ -211,7 +251,9 @@ def test_create_changeset(permission_to_grant):
     ["api.params_api_update_changeset", "api.params_api_update_objects"],
 )
 def test_update_changeset(permission_to_grant):
-    """Test updating an existing ChangeSet via PUT with specific and global permissions."""
+    """
+    Test updating an existing ChangeSet via PUT.
+    """
     user = setup_user_with_permission(permission_to_grant)
 
     cs = ChangeSet.objects.create(
@@ -241,13 +283,15 @@ def test_update_changeset(permission_to_grant):
     ["api.params_api_update_changeset", "api.params_api_update_objects"],
 )
 def test_update_changeset_by_other_user(permission_to_grant):
-    """Test updating another user's ChangeSet with specific and global permissions."""
+    """
+    Test updating another user's ChangeSet.
+    """
     # Create creator user manually
     user1 = User.objects.create_user(username="user1", password="password")
 
     # Create updater user with helper
     user2 = setup_user_with_permission(permission_to_grant)
-    user2.username = "user2"  # Ensure distinct username if helper defaults
+    user2.username = "user2"  # Ensure distinct username
     user2.save()
 
     cs = ChangeSet.objects.create(
@@ -275,7 +319,9 @@ def test_update_changeset_by_other_user(permission_to_grant):
     ["api.params_api_update_changeset", "api.params_api_update_objects"],
 )
 def test_update_changeset_partial(permission_to_grant):
-    """Test partial update of a ChangeSet via PUT with specific and global permissions."""
+    """
+    Test partial update of a ChangeSet via PUT.
+    """
     user = setup_user_with_permission(permission_to_grant)
 
     cs = ChangeSet.objects.create(
@@ -307,7 +353,9 @@ def test_update_changeset_partial(permission_to_grant):
     ["api.params_api_delete_changeset", "api.params_api_delete_objects"],
 )
 def test_abandon_changeset(permission_to_grant):
-    """Test abandoning a DRAFT ChangeSet via POST with specific and global permissions."""
+    """
+    Test abandoning a DRAFT ChangeSet via POST.
+    """
     user = setup_user_with_permission(permission_to_grant)
 
     cs = ChangeSet.objects.create(
@@ -340,7 +388,9 @@ def test_abandon_changeset(permission_to_grant):
     ["api.params_api_delete_changeset", "api.params_api_delete_objects"],
 )
 def test_abandon_changeset_404(permission_to_grant):
-    """Test abandoning a non-existent ChangeSet returns 404."""
+    """
+    Test abandoning a non-existent ChangeSet returns 404.
+    """
     user = setup_user_with_permission(permission_to_grant)
     client = Client()
     client.force_login(user)
@@ -356,7 +406,9 @@ def test_abandon_changeset_404(permission_to_grant):
     ["api.params_api_update_changeset", "api.params_api_update_objects"],
 )
 def test_commit_changeset_api(permission_to_grant):
-    """Test committing a ChangeSet via POST with specific and global permissions."""
+    """
+    Test committing a ChangeSet via POST.
+    """
     user = setup_user_with_permission(permission_to_grant)
 
     cs = ChangeSet.objects.create(
@@ -382,7 +434,9 @@ def test_commit_changeset_api(permission_to_grant):
     ["api.params_api_update_changeset", "api.params_api_update_objects"],
 )
 def test_coalesce_changeset_api(permission_to_grant):
-    """Test coalescing a ChangeSet via POST with specific and global permissions."""
+    """
+    Test coalescing a ChangeSet via POST.
+    """
     user = setup_user_with_permission(permission_to_grant)
 
     source_cs = ChangeSet.objects.create(name="source-cs", created_by=user, status=ChangeSet.Status.DRAFT)

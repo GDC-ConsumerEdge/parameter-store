@@ -1,3 +1,29 @@
+###############################################################################
+# Copyright 2024 Google, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+###############################################################################
+"""
+API endpoints for managing Clusters.
+
+This module provides the CRUD operations for Clusters, including support for:
+- Retrieving live and historical cluster data.
+- Creating and updating clusters within the context of a ChangeSet (drafts).
+- Staging clusters for deletion.
+- Resolving clusters by name or stable Entity ID (UUID).
+"""
+
 import uuid
 
 from django.http import HttpRequest
@@ -24,6 +50,16 @@ clusters_router = Router()
 
 
 def _get_cluster_or_404(cluster_name: str):
+    """
+    Retrieves a live Cluster by name or returns a 404 error.
+
+    Args:
+        cluster_name: The unique name of the cluster.
+
+    Returns:
+        Cluster: The live cluster object if found.
+        tuple: A (status_code, response_dict) tuple if not found.
+    """
     try:
         return Cluster.objects.get(name=cluster_name, is_live=True)
     except Cluster.DoesNotExist:
@@ -31,6 +67,15 @@ def _get_cluster_or_404(cluster_name: str):
 
 
 def _generate_cluster_response(cluster: Cluster) -> ClusterResponse:
+    """
+    Constructs a ClusterResponse object from a Cluster model instance.
+
+    Args:
+        cluster: The Cluster model instance.
+
+    Returns:
+        ClusterResponse: The Pydantic response object populated with cluster data.
+    """
     return ClusterResponse(
         id=cluster.shared_entity_id,
         record_id=cluster.id,
@@ -48,6 +93,17 @@ def _generate_cluster_response(cluster: Cluster) -> ClusterResponse:
 
 
 def _get_cluster_history_logic(shared_entity_id: uuid.UUID, limit: int, offset: int):
+    """
+    Core logic for retrieving the history of a cluster by its stable Entity ID.
+
+    Args:
+        shared_entity_id: The stable unique identifier (UUID) for the cluster entity.
+        limit: Pagination limit.
+        offset: Pagination offset.
+
+    Returns:
+        ClusterHistoryResponse: A paginated list of historical cluster versions.
+    """
     qs = (
         Cluster.objects.with_related()
         .filter(shared_entity_id=shared_entity_id, is_live=False, obsoleted_by_changeset__isnull=False)
@@ -78,7 +134,11 @@ def _get_cluster_history_logic(shared_entity_id: uuid.UUID, limit: int, offset: 
 )
 @require_permissions("api.params_api_read_cluster", "api.params_api_read_objects")
 def get_cluster_history_by_name(request: HttpRequest, cluster_name: str, limit: int = 250, offset: int = 0):
-    """Gets the history of a specific cluster by its name (resolving via the current live entity)."""
+    """
+    Gets the history of a specific cluster by its name.
+
+    Resolves the name to the current live entity's stable Entity ID to fetch the history trail.
+    """
     cluster_obj = _get_cluster_or_404(cluster_name)
     if isinstance(cluster_obj, tuple):
         return cluster_obj
@@ -93,7 +153,9 @@ def get_cluster_history_by_name(request: HttpRequest, cluster_name: str, limit: 
 )
 @require_permissions("api.params_api_read_cluster", "api.params_api_read_objects")
 def get_cluster_history_by_id(request: HttpRequest, cluster_id: uuid.UUID, limit: int = 250, offset: int = 0):
-    """Gets the history of a specific cluster by its shared entity ID."""
+    """
+    Gets the history of a specific cluster by its stable Entity ID (UUID).
+    """
     return _get_cluster_history_logic(cluster_id, limit, offset)
 
 
@@ -105,7 +167,9 @@ def get_cluster_history_by_id(request: HttpRequest, cluster_id: uuid.UUID, limit
 )
 @require_permissions("api.params_api_read_cluster", "api.params_api_read_objects")
 def get_cluster_by_name(request: HttpRequest, cluster_name: str):
-    """Gets a specific cluster by its name."""
+    """
+    Gets a specific live cluster by its name.
+    """
     try:
         c = Cluster.objects.with_related().get(name=cluster_name, is_live=True)
     except Cluster.DoesNotExist:
@@ -124,7 +188,9 @@ def get_cluster_by_name(request: HttpRequest, cluster_name: str):
 )
 @require_permissions("api.params_api_read_cluster", "api.params_api_read_objects")
 def get_cluster_by_id(request: HttpRequest, cluster_id: uuid.UUID):
-    """Gets a specific cluster by its internal ID."""
+    """
+    Gets a specific live cluster by its stable Entity ID (UUID).
+    """
     try:
         c = Cluster.objects.with_related().get(shared_entity_id=cluster_id, is_live=True)
     except Cluster.DoesNotExist:
@@ -141,8 +207,11 @@ def get_cluster_by_id(request: HttpRequest, cluster_id: uuid.UUID):
 )
 @require_permissions("api.params_api_read_cluster", "api.params_api_read_objects")
 def get_clusters(request: HttpRequest, limit=250, offset=0):
-    """This API endpoint provides view-only cluster objects and their associated metadata,
-    including cluster group, fleet label, custom data, cluster intent.
+    """
+    Retrieves a paginated list of live clusters.
+
+    Returns view-only cluster objects and their associated metadata, including
+    cluster group, fleet label, custom data, and cluster intent.
     """
     qs = Cluster.objects.with_related().filter(is_live=True)
     clusters = paginate(qs, limit, offset)
@@ -159,7 +228,12 @@ def get_clusters(request: HttpRequest, limit=250, offset=0):
 )
 @require_permissions("api.params_api_create_cluster", "api.params_api_create_objects")
 def create_cluster(request: HttpRequest, payload: ClusterCreateRequest):
-    """Creates a new Cluster. Validates that the provided ChangeSet exists and is a draft."""
+    """
+    Creates a new Cluster draft.
+
+    Validates that the provided `changeset_id` exists and is in DRAFT status.
+    The new cluster will be created as a draft associated with that ChangeSet.
+    """
     try:
         changeset = ChangeSet.objects.get(id=payload.changeset_id)
         if changeset.status != ChangeSet.Status.DRAFT:
@@ -192,7 +266,12 @@ def create_cluster(request: HttpRequest, payload: ClusterCreateRequest):
 )
 @require_permissions("api.params_api_update_cluster", "api.params_api_update_objects")
 def update_cluster_by_name(request: HttpRequest, cluster_name: str, payload: ClusterUpdateRequest):
-    """Updates a Cluster by name. If changeset_id is provided, validates it."""
+    """
+    Updates a Cluster by name within a ChangeSet.
+
+    If a draft already exists in the specified ChangeSet, it updates the draft.
+    If a live version exists, it creates a new draft (and locks the live version).
+    """
     cluster_obj = _get_cluster_or_404(cluster_name)
     if isinstance(cluster_obj, tuple) and payload.changeset_id:
         try:
@@ -213,7 +292,12 @@ def update_cluster_by_name(request: HttpRequest, cluster_name: str, payload: Clu
 )
 @require_permissions("api.params_api_update_cluster", "api.params_api_update_objects")
 def update_cluster_by_id(request: HttpRequest, cluster_id: uuid.UUID, payload: ClusterUpdateRequest):
-    """Updates a Cluster by ID. If changeset_id is provided, validates it."""
+    """
+    Updates a Cluster by its stable Entity ID (UUID) within a ChangeSet.
+
+    Prioritizes finding an existing draft for the ID. If none exists, falls back
+    to the live version to create a new draft.
+    """
     # Try to find a draft first
     try:
         cluster_obj = Cluster.objects.get(shared_entity_id=cluster_id, is_live=False, changeset_id__isnull=False)
@@ -228,6 +312,16 @@ def update_cluster_by_id(request: HttpRequest, cluster_id: uuid.UUID, payload: C
 
 
 def _update_cluster_logic(cluster_obj: Cluster, payload: ClusterUpdateRequest):
+    """
+    Encapsulates the core logic for updating a cluster (handling drafts and locking).
+
+    Args:
+        cluster_obj: The cluster object (live or draft) to update.
+        payload: The update payload containing new values and changeset_id.
+
+    Returns:
+        ClusterResponse or tuple: The updated cluster response or an error tuple.
+    """
     try:
         changeset = ChangeSet.objects.get(id=payload.changeset_id)
         if changeset.status != ChangeSet.Status.DRAFT:
@@ -280,7 +374,9 @@ def _update_cluster_logic(cluster_obj: Cluster, payload: ClusterUpdateRequest):
 )
 @require_permissions("api.params_api_delete_cluster", "api.params_api_delete_objects")
 def delete_cluster_by_name(request: HttpRequest, cluster_name: str, changeset_id: int):
-    """Stages a Cluster for deletion by name within a ChangeSet."""
+    """
+    Stages a Cluster for deletion by name within a ChangeSet.
+    """
     cluster_obj = _get_cluster_or_404(cluster_name)
     if isinstance(cluster_obj, tuple) and changeset_id:
         try:
@@ -301,7 +397,9 @@ def delete_cluster_by_name(request: HttpRequest, cluster_name: str, changeset_id
 )
 @require_permissions("api.params_api_delete_cluster", "api.params_api_delete_objects")
 def delete_cluster_by_id(request: HttpRequest, cluster_id: uuid.UUID, changeset_id: int):
-    """Stages a Cluster for deletion by ID within a ChangeSet."""
+    """
+    Stages a Cluster for deletion by its stable Entity ID (UUID) within a ChangeSet.
+    """
     # Try to find a draft first
     try:
         cluster_obj = Cluster.objects.get(shared_entity_id=cluster_id, is_live=False, changeset_id__isnull=False)
@@ -316,6 +414,16 @@ def delete_cluster_by_id(request: HttpRequest, cluster_id: uuid.UUID, changeset_
 
 
 def _delete_cluster_logic(cluster_obj: Cluster, changeset_id: int):
+    """
+    Encapsulates the core logic for staging a cluster for deletion.
+
+    Args:
+        cluster_obj: The cluster object (live or draft).
+        changeset_id: The ID of the changeset to use.
+
+    Returns:
+        tuple: (200, success_msg) or (error_code, error_dict).
+    """
     try:
         changeset = ChangeSet.objects.get(id=changeset_id)
         if changeset.status != ChangeSet.Status.DRAFT:

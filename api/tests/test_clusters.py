@@ -1,3 +1,26 @@
+###############################################################################
+# Copyright 2024 Google, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+###############################################################################
+"""
+Tests for the Parameter Store Cluster API.
+
+This module contains functional tests verifying CRUD operations, versioning,
+and ChangeSet integration for Clusters.
+"""
+
 import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
@@ -10,7 +33,15 @@ User = get_user_model()
 
 
 def setup_user_with_permission(permission_to_grant):
-    """Helper to create a user and grant them a specific API permission."""
+    """
+    Helper to create a user and grant them a specific API permission.
+
+    Args:
+        permission_to_grant: The full permission codename.
+
+    Returns:
+        User: The user instance.
+    """
     user, _ = User.objects.get_or_create(username="testuser", defaults={"password": "password"})
     if not user.check_password("password"):
         user.set_password("password")
@@ -38,7 +69,9 @@ def setup_user_with_permission(permission_to_grant):
     ["api.params_api_read_cluster", "api.params_api_read_objects"],
 )
 def test_get_cluster_by_name(permission_to_grant):
-    """Test retrieving a Cluster by its name."""
+    """
+    Test retrieving a Cluster by its name.
+    """
     user = setup_user_with_permission(permission_to_grant)
     group = Group.objects.create(name="test-group", is_live=True)
     Cluster.objects.create(name="test-cluster", group=group, is_live=True)
@@ -62,7 +95,9 @@ def test_get_cluster_by_name(permission_to_grant):
     ["api.params_api_read_cluster", "api.params_api_read_objects"],
 )
 def test_get_cluster_by_id(permission_to_grant):
-    """Test retrieving a Cluster by its ID."""
+    """
+    Test retrieving a Cluster by its stable Entity ID.
+    """
     user = setup_user_with_permission(permission_to_grant)
     group = Group.objects.create(name="test-group", is_live=True)
     c = Cluster.objects.create(name="test-cluster-id", group=group, is_live=True)
@@ -84,7 +119,9 @@ def test_get_cluster_by_id(permission_to_grant):
     ["api.params_api_read_cluster", "api.params_api_read_objects"],
 )
 def test_get_clusters_list(permission_to_grant):
-    """Test retrieving a list of Clusters."""
+    """
+    Test retrieving a list of Clusters.
+    """
     user = setup_user_with_permission(permission_to_grant)
     group = Group.objects.create(name="test-group", is_live=True)
     Cluster.objects.create(name="cluster1", group=group, is_live=True)
@@ -108,7 +145,9 @@ def test_get_clusters_list(permission_to_grant):
     ["api.params_api_create_cluster", "api.params_api_create_objects"],
 )
 def test_create_cluster_no_changeset(permission_to_grant):
-    """Test that creating a Cluster without a changeset ID fails."""
+    """
+    Test that creating a Cluster without a changeset ID fails with 422.
+    """
     user = setup_user_with_permission(permission_to_grant)
     # Use shorter unique name
     suffix = permission_to_grant.split(".")[-1][:10]
@@ -127,7 +166,9 @@ def test_create_cluster_no_changeset(permission_to_grant):
     ["api.params_api_update_cluster", "api.params_api_update_objects"],
 )
 def test_update_cluster_no_changeset(permission_to_grant):
-    """Test that updating a Cluster without a changeset ID fails."""
+    """
+    Test that updating a Cluster without a changeset ID fails with 422.
+    """
     user = setup_user_with_permission(permission_to_grant)
     # Use shorter unique names
     suffix = permission_to_grant.split(".")[-1][:10]
@@ -139,7 +180,6 @@ def test_update_cluster_no_changeset(permission_to_grant):
 
     payload = {"description": "Updated"}
     response = client.put("/api/v1/cluster/live-cluster", data=payload, content_type="application/json")
-    # This currently FAILS (returns 200) because the API logic allows it.
     assert response.status_code == 422
 
 
@@ -149,7 +189,9 @@ def test_update_cluster_no_changeset(permission_to_grant):
     ["api.params_api_create_cluster", "api.params_api_create_objects"],
 )
 def test_create_cluster_with_changeset(permission_to_grant):
-    """Test creating a new Cluster linked to a ChangeSet."""
+    """
+    Test creating a new Cluster draft linked to a ChangeSet.
+    """
     user = setup_user_with_permission(permission_to_grant)
     client = Client()
     client.force_login(user)
@@ -176,7 +218,9 @@ def test_create_cluster_with_changeset(permission_to_grant):
     ["api.params_api_update_cluster", "api.params_api_update_objects"],
 )
 def test_update_cluster(permission_to_grant):
-    """Test updating an existing Cluster."""
+    """
+    Test updating an existing Cluster.
+    """
     user = setup_user_with_permission(permission_to_grant)
     cs = ChangeSet.objects.create(name="test-update-cs", created_by=user, status=ChangeSet.Status.DRAFT)
     group = Group.objects.create(name="test-group", is_live=True)
@@ -199,7 +243,9 @@ def test_update_cluster(permission_to_grant):
     ["api.params_api_update_cluster", "api.params_api_update_objects"],
 )
 def test_update_cluster_by_id(permission_to_grant):
-    """Test updating an existing Cluster by ID."""
+    """
+    Test updating an existing Cluster by stable Entity ID.
+    """
     user = setup_user_with_permission(permission_to_grant)
     cs = ChangeSet.objects.create(name="test-update-id-cs", created_by=user, status=ChangeSet.Status.DRAFT)
     group = Group.objects.create(name="test-group", is_live=True)
@@ -222,7 +268,9 @@ def test_update_cluster_by_id(permission_to_grant):
     ["api.params_api_delete_cluster", "api.params_api_delete_objects"],
 )
 def test_delete_cluster_api(permission_to_grant):
-    """Test staging a Cluster for deletion via DELETE."""
+    """
+    Test staging a Cluster for deletion via DELETE by name.
+    """
     user = setup_user_with_permission(permission_to_grant)
     cs = ChangeSet.objects.create(name="delete-cs", created_by=user, status=ChangeSet.Status.DRAFT)
     group = Group.objects.create(name="test-group", is_live=True)
@@ -248,7 +296,9 @@ def test_delete_cluster_api(permission_to_grant):
     ["api.params_api_delete_cluster", "api.params_api_delete_objects"],
 )
 def test_delete_cluster_by_id_api(permission_to_grant):
-    """Test staging a Cluster for deletion by ID."""
+    """
+    Test staging a Cluster for deletion via stable Entity ID.
+    """
     user = setup_user_with_permission(permission_to_grant)
     cs = ChangeSet.objects.create(name="delete-id-cs", created_by=user, status=ChangeSet.Status.DRAFT)
     group = Group.objects.create(name="test-group", is_live=True)

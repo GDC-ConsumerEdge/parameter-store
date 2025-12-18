@@ -1,3 +1,26 @@
+###############################################################################
+# Copyright 2024 Google, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+###############################################################################
+"""
+Tests for the Parameter Store Group API.
+
+This module contains functional tests verifying CRUD operations, versioning,
+and ChangeSet integration for Groups.
+"""
+
 import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
@@ -10,13 +33,21 @@ User = get_user_model()
 
 
 def setup_user_with_permission(permission_to_grant):
-    """Helper to create a user and grant them a specific API permission."""
+    """
+    Helper to create a user and grant them a specific API permission.
+
+    Args:
+        permission_to_grant: The full permission codename.
+
+    Returns:
+        User: The user instance.
+    """
     user, _ = User.objects.get_or_create(username="testuser", defaults={"password": "password"})
     if not user.check_password("password"):
         user.set_password("password")
         user.save()
 
-    user.user_permissions.clear()  # Ensure clean state
+    user.user_permissions.clear()
 
     # Get the ContentType for our custom API permissions
     api_content_type, _ = ContentType.objects.get_or_create(app_label="api", model="customapipermissions")
@@ -38,7 +69,9 @@ def setup_user_with_permission(permission_to_grant):
     ["api.params_api_read_group", "api.params_api_read_objects"],
 )
 def test_get_group_by_name(permission_to_grant):
-    """Test retrieving a Group by its name."""
+    """
+    Test retrieving a Group by its name.
+    """
     user = setup_user_with_permission(permission_to_grant)
     Group.objects.create(name="test-group", description="A test group", is_live=True)
 
@@ -52,7 +85,6 @@ def test_get_group_by_name(permission_to_grant):
     assert data["description"] == "A test group"
     assert "id" in data
     assert "record_id" in data
-    # Basic check that ID is not the int record ID
     assert str(data["id"]) != str(data["record_id"])
 
 
@@ -62,7 +94,9 @@ def test_get_group_by_name(permission_to_grant):
     ["api.params_api_read_group", "api.params_api_read_objects"],
 )
 def test_get_group_by_id(permission_to_grant):
-    """Test retrieving a Group by its ID."""
+    """
+    Test retrieving a Group by its stable Entity ID.
+    """
     user = setup_user_with_permission(permission_to_grant)
     g = Group.objects.create(name="test-group-id", description="A test group by ID", is_live=True)
 
@@ -84,7 +118,9 @@ def test_get_group_by_id(permission_to_grant):
     ["api.params_api_read_group", "api.params_api_read_objects"],
 )
 def test_get_groups_list(permission_to_grant):
-    """Test retrieving a list of Groups."""
+    """
+    Test retrieving a list of Groups.
+    """
     user = setup_user_with_permission(permission_to_grant)
     Group.objects.create(name="group1", is_live=True)
     Group.objects.create(name="group2", is_live=True)
@@ -107,7 +143,9 @@ def test_get_groups_list(permission_to_grant):
     ["api.params_api_create_group", "api.params_api_create_objects"],
 )
 def test_create_group_no_changeset(permission_to_grant):
-    """Test that creating a Group without a changeset ID fails."""
+    """
+    Test that creating a Group without a changeset ID fails with 422.
+    """
     user = setup_user_with_permission(permission_to_grant)
     client = Client()
     client.force_login(user)
@@ -123,7 +161,9 @@ def test_create_group_no_changeset(permission_to_grant):
     ["api.params_api_update_group", "api.params_api_update_objects"],
 )
 def test_update_group_no_changeset(permission_to_grant):
-    """Test that updating a Group without a changeset ID fails."""
+    """
+    Test that updating a Group without a changeset ID fails with 422.
+    """
     user = setup_user_with_permission(permission_to_grant)
     # Use shorter unique name
     suffix = permission_to_grant.split(".")[-1][:10]
@@ -134,7 +174,6 @@ def test_update_group_no_changeset(permission_to_grant):
 
     payload = {"description": "Updated"}
     response = client.put(f"/api/v1/group/lg-no-cs-{suffix}", data=payload, content_type="application/json")
-    # This currently FAILS (returns 200) because the API logic allows it.
     assert response.status_code == 422
 
 
@@ -144,7 +183,9 @@ def test_update_group_no_changeset(permission_to_grant):
     ["api.params_api_create_group", "api.params_api_create_objects"],
 )
 def test_create_group_with_changeset(permission_to_grant):
-    """Test creating a new Group linked to a ChangeSet."""
+    """
+    Test creating a new Group draft linked to a ChangeSet.
+    """
     user = setup_user_with_permission(permission_to_grant)
     client = Client()
     client.force_login(user)
@@ -165,12 +206,11 @@ def test_create_group_with_changeset(permission_to_grant):
     ["api.params_api_update_group", "api.params_api_update_objects"],
 )
 def test_update_group(permission_to_grant):
-    """Test updating an existing Group."""
+    """
+    Test updating an existing Group.
+    """
     user = setup_user_with_permission(permission_to_grant)
     cs = ChangeSet.objects.create(name="test-update-cs", created_by=user, status=ChangeSet.Status.DRAFT)
-    # The API logic prefers finding a draft if changeset_id is passed, but if not found, it looks for live.
-    # To test pure update via name, we should probably have a live group or matching draft.
-    # Here we create a draft and update it.
     Group.objects.create(name="update-group", description="Original description", is_live=False, changeset_id=cs)
 
     client = Client()
@@ -190,7 +230,9 @@ def test_update_group(permission_to_grant):
     ["api.params_api_update_group", "api.params_api_update_objects"],
 )
 def test_update_group_by_id(permission_to_grant):
-    """Test updating an existing Group by ID."""
+    """
+    Test updating an existing Group by stable Entity ID.
+    """
     user = setup_user_with_permission(permission_to_grant)
     cs = ChangeSet.objects.create(name="test-update-id-cs", created_by=user, status=ChangeSet.Status.DRAFT)
     g = Group.objects.create(name="update-group-id", description="Original description", is_live=True)
@@ -214,14 +256,15 @@ def test_update_group_by_id(permission_to_grant):
     ["api.params_api_create_group", "api.params_api_create_objects"],
 )
 def test_create_group_validation_error(permission_to_grant):
-    """Test creating a new Group with invalid data triggers a validation error."""
+    """
+    Test creating a new Group with invalid data triggers a validation error.
+    """
     user = setup_user_with_permission(permission_to_grant)
     client = Client()
     client.force_login(user)
 
     cs = ChangeSet.objects.create(name="test-validation-cs", created_by=user, status=ChangeSet.Status.DRAFT)
 
-    # Attempt to create a group with a name exceeding max_length=30
     payload = {
         "name": "a-very-very-long-group-name-that-exceeds-thirty-characters",
         "description": "Invalid group",
@@ -232,7 +275,6 @@ def test_create_group_validation_error(permission_to_grant):
     assert response.status_code == 422
     data = response.json()
     assert "name" in data["message"]
-    # The message might vary slightly depending on Django version/locale, but should mention max characters
     assert "ensure this value has at most 30 characters" in str(data["message"]["name"][0]).lower()
 
 
@@ -242,7 +284,9 @@ def test_create_group_validation_error(permission_to_grant):
     ["api.params_api_update_group", "api.params_api_update_objects"],
 )
 def test_update_group_validation_error(permission_to_grant):
-    """Test updating a Group with invalid data triggers a validation error."""
+    """
+    Test updating a Group with invalid data triggers a validation error.
+    """
     user = setup_user_with_permission(permission_to_grant)
     cs = ChangeSet.objects.create(name="test-update-validation-cs", created_by=user, status=ChangeSet.Status.DRAFT)
     Group.objects.create(name="valid-name", description="Original", is_live=False, changeset_id=cs)
@@ -250,8 +294,7 @@ def test_update_group_validation_error(permission_to_grant):
     client = Client()
     client.force_login(user)
 
-    # Attempt to update a group with a description exceeding max_length=255
-    long_description = "a" * 256  # 256 characters long
+    long_description = "a" * 256
     payload = {"description": long_description, "changeset_id": cs.id}
     response = client.put("/api/v1/group/valid-name", data=payload, content_type="application/json")
 
@@ -267,7 +310,9 @@ def test_update_group_validation_error(permission_to_grant):
     ["api.params_api_delete_group", "api.params_api_delete_objects"],
 )
 def test_delete_group_api(permission_to_grant):
-    """Test staging a Group for deletion via DELETE with specific and global permissions."""
+    """
+    Test staging a Group for deletion via name-based DELETE.
+    """
     user = setup_user_with_permission(permission_to_grant)
     cs = ChangeSet.objects.create(name="delete-cs", created_by=user, status=ChangeSet.Status.DRAFT)
     group = Group.objects.create(name="group-to-delete", is_live=True)
@@ -292,7 +337,9 @@ def test_delete_group_api(permission_to_grant):
     ["api.params_api_delete_group", "api.params_api_delete_objects"],
 )
 def test_delete_group_by_id_api(permission_to_grant):
-    """Test staging a Group for deletion by ID."""
+    """
+    Test staging a Group for deletion via stable Entity ID.
+    """
     user = setup_user_with_permission(permission_to_grant)
     cs = ChangeSet.objects.create(name="delete-id-cs", created_by=user, status=ChangeSet.Status.DRAFT)
     group = Group.objects.create(name="group-to-delete-id", is_live=True)

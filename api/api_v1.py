@@ -14,6 +14,13 @@
 # limitations under the License.
 #
 ###############################################################################
+"""
+Main Entry point for the Parameter Store API v1.
+
+This module initializes the NinjaAPI instance and registers the routers for
+Clusters, Groups, and ChangeSets.
+"""
+
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.exceptions import ValidationError
 from django.db import connection, connections
@@ -50,9 +57,8 @@ api_v1.exception_handler(ValidationError)(validation_errors)
 
 @api_v1.get("/ping", response=PingResponse, summary="Basic health check")
 def ping(request: HttpRequest):
-    """This health check is very basic, providing only a basic alive check of the API
-    application and Django server.  No database checks are performed.  If you receive an HTTP 200
-    status with a response body, the server is alive.
+    """
+    A lightweight connectivity check to verify the API service is reachable and the Django server is running.
     """
     return {"status": "ok"}
 
@@ -60,7 +66,9 @@ def ping(request: HttpRequest):
 @api_v1.get("/status", response=HealthResponse, summary="Deep health check with database status")
 @api_v1.get("/healthz", response=HealthResponse, summary="Deep health check with database status")
 def health(request: HttpRequest):
-    """Health check endpoint that verifies database connectivity and migrations status."""
+    """
+    A comprehensive health check that verifies database connectivity and ensures all migrations have been applied.
+    """
     health_status = {
         "status": "ok",
         "database": {
@@ -113,7 +121,7 @@ def health(request: HttpRequest):
 @ninja_paginate(LimitOffsetPagination)
 @require_permissions("api.params_api_read_tag", "api.params_api_read_objects")
 def tags(request):
-    """Clusters may have tags associated with them. Tags are simple string values. This endpoint
-    returns all available tags which may be associated with a cluster.
+    """
+    Returns a list of all unique tags that have been defined in the system for use with clusters.
     """
     return Tag.objects.all()

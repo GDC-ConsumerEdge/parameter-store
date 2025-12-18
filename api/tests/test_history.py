@@ -1,3 +1,26 @@
+###############################################################################
+# Copyright 2024 Google, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+###############################################################################
+"""
+Tests for the Parameter Store History API.
+
+This module contains functional tests verifying the retrieval of historical
+versions for Clusters and Groups via the API.
+"""
+
 import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
@@ -10,7 +33,15 @@ User = get_user_model()
 
 
 def setup_user_with_permission(permission_to_grant):
-    """Helper to create a user and grant them a specific API permission."""
+    """
+    Helper to create a user and grant them a specific API permission.
+
+    Args:
+        permission_to_grant: The full permission codename (e.g. 'api.read_group').
+
+    Returns:
+        User: The created user instance with permissions granted.
+    """
     user, _ = User.objects.get_or_create(username="testuser", defaults={"password": "password"})
     if not user.check_password("password"):
         user.set_password("password")
@@ -38,7 +69,12 @@ def setup_user_with_permission(permission_to_grant):
     ["api.params_api_read_group", "api.params_api_read_objects"],
 )
 def test_group_history(permission_to_grant):
-    """Test retrieving history for a Group."""
+    """
+    Test retrieving history for a Group.
+
+    Verifies that multiple commits produce a correct historical trail accessible
+    via both name and Entity ID endpoints.
+    """
     user = setup_user_with_permission(permission_to_grant)
     client = Client()
     client.force_login(user)
@@ -77,11 +113,7 @@ def test_group_history(permission_to_grant):
     group_v3 = Group.objects.get(shared_entity_id=group.shared_entity_id, is_live=True)
     assert group_v3.description == "V3"
 
-    # 4. Query History by Name (Should show V2 and V1, ordered by obsoleted/created desc)
-    # The 'obsoleted' record effectively is the old live record.
-    # When V2 went live, V1 became historical (obsoleted by A).
-    # When V3 went live, V2 became historical (obsoleted by B).
-
+    # 4. Query History by Name
     response = client.get("/api/v1/group/history-group/history")
     assert response.status_code == 200, f"Failed: {response.content}"
     data = response.json()
@@ -109,7 +141,12 @@ def test_group_history(permission_to_grant):
     ["api.params_api_read_cluster", "api.params_api_read_objects"],
 )
 def test_cluster_history(permission_to_grant):
-    """Test retrieving history for a Cluster."""
+    """
+    Test retrieving history for a Cluster.
+
+    Verifies that multiple commits produce a correct historical trail accessible
+    via both name and Entity ID endpoints.
+    """
     user = setup_user_with_permission(permission_to_grant)
     client = Client()
     client.force_login(user)

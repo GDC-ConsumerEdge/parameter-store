@@ -154,9 +154,23 @@ class ChangeSet(models.Model):
         return f"{self.name or f'ChangeSet {self.id}'} ({self.get_status_display()})"
 
     def commit(self, user):
-        """Commits the changeset, making its changes live."""
+        """
+        Commits the ChangeSet, applying all staged changes to the live state.
+
+        This is an atomic operation that:
+        1. Identifies all staged (draft) entities in the ChangeSet.
+        2. Handles deletions by retiring live entities and cleanup.
+        3. Handles updates by demoting live entities to historical and promoting drafts to live.
+        4. Handles creations by promoting new drafts to live.
+        5. Updates the ChangeSet status and metadata.
+
+        Args:
+            user: The User instance performing the commit.
+
+        Raises:
+            ValueError: If the ChangeSet is not in DRAFT status.
+        """
         from django.db import transaction
-        from django.utils import timezone
 
         from .models import Cluster, ClusterData, ClusterFleetLabel, ClusterIntent, ClusterTag, Group, GroupData
 
@@ -356,14 +370,20 @@ class ChangeSetAwareTopLevelEntity(models.Model):
     )
 
     def create_draft(self, changeset, is_pending_deletion=False):
-        """Creates a draft copy of this entity within a changeset.
+        """
+        Creates a draft copy of this entity within the context of a changeset.
+
+        This method performs a deep copy of the current entity, creating a new
+        record with `is_live=False` and associating it with the provided changeset.
+        It also handles the deep copying of relevant child relationships.
 
         Args:
-            changeset: The changeset to associate with the new draft.
-            is_pending_deletion: If True, marks the draft for deletion.
+            changeset: The ChangeSet instance to associate the new draft with.
+            is_pending_deletion (bool): If True, marks the draft as pending deletion.
+                                        Defaults to False.
 
         Returns:
-            The newly created draft instance.
+            The newly created draft instance of the model.
         """
         # Create a new instance in memory
         draft_instance = self.__class__()

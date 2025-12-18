@@ -1,3 +1,29 @@
+###############################################################################
+# Copyright 2024 Google, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+###############################################################################
+"""
+API endpoints for managing Groups.
+
+This module provides the CRUD operations for Groups, including support for:
+- Retrieving live and historical group data.
+- Creating and updating groups within the context of a ChangeSet (drafts).
+- Staging groups for deletion.
+- Resolving groups by name or stable Entity ID (UUID).
+"""
+
 import uuid
 
 from django.db.models import Prefetch
@@ -24,6 +50,16 @@ groups_router = Router()
 
 
 def _get_group_or_404(group_name: str):
+    """
+    Retrieves a live Group by name or returns a 404 response.
+
+    Args:
+        group_name: The unique name of the group.
+
+    Returns:
+        Group: The live group object if found.
+        tuple: A (status_code, response_dict) tuple if not found.
+    """
     try:
         return Group.objects.get(name=group_name, is_live=True)
     except Group.DoesNotExist:
@@ -31,6 +67,17 @@ def _get_group_or_404(group_name: str):
 
 
 def _get_group_history_logic(shared_entity_id: uuid.UUID, limit: int, offset: int):
+    """
+    Core logic for retrieving the history of a group by its stable Entity ID.
+
+    Args:
+        shared_entity_id: The stable unique identifier (UUID) for the group entity.
+        limit: Pagination limit.
+        offset: Pagination offset.
+
+    Returns:
+        GroupHistoryResponse: A paginated list of historical group versions.
+    """
     qs = (
         Group.objects.filter(shared_entity_id=shared_entity_id, is_live=False, obsoleted_by_changeset__isnull=False)
         .select_related("obsoleted_by_changeset")
@@ -61,10 +108,17 @@ def _get_group_history_logic(shared_entity_id: uuid.UUID, limit: int, offset: in
     return GroupHistoryResponse(history=out, count=qs.count())
 
 
-# ... (existing _update_group_logic and _delete_group_logic) ...
-
-
 def _update_group_logic(group_obj: Group, payload: GroupUpdateRequest):
+    """
+    Encapsulates the core logic for updating a group (handling drafts and locking).
+
+    Args:
+        group_obj: The group object (live or draft) to update.
+        payload: The update payload containing new values and changeset_id.
+
+    Returns:
+        GroupResponse or tuple: The updated group response or an error tuple.
+    """
     try:
         changeset = ChangeSet.objects.get(id=payload.changeset_id)
         if changeset.status != ChangeSet.Status.DRAFT:
@@ -119,6 +173,16 @@ def _update_group_logic(group_obj: Group, payload: GroupUpdateRequest):
 
 
 def _delete_group_logic(group_obj: Group, changeset_id: int):
+    """
+    Encapsulates the core logic for staging a group for deletion.
+
+    Args:
+        group_obj: The group object (live or draft).
+        changeset_id: The ID of the changeset to use.
+
+    Returns:
+        tuple: (200, success_msg) or (error_code, error_dict).
+    """
     try:
         changeset = ChangeSet.objects.get(id=changeset_id)
         if changeset.status != ChangeSet.Status.DRAFT:
@@ -161,7 +225,9 @@ def _delete_group_logic(group_obj: Group, changeset_id: int):
 )
 @require_permissions("api.params_api_read_group", "api.params_api_read_objects")
 def get_group_by_name(request: HttpRequest, group_name: str):
-    """Gets a specific group by its name."""
+    """
+    Returns the current live version of a group identified by name.
+    """
     # Query the for the group, prefetch related data
     groups = Group.objects.prefetch_related(
         Prefetch("group_data", queryset=GroupData.objects.select_related("field"))
@@ -193,7 +259,11 @@ def get_group_by_name(request: HttpRequest, group_name: str):
 )
 @require_permissions("api.params_api_read_group", "api.params_api_read_objects")
 def get_group_history_by_name(request: HttpRequest, group_name: str, limit: int = 250, offset: int = 0):
-    """Gets the history of a specific group by its name (resolving via the current live entity)."""
+    """
+    Retrieves the version history of a group identified by name.
+
+    Resolves the name to the current live entity's stable Entity ID to fetch its full history trail.
+    """
     group_obj = _get_group_or_404(group_name)
     if isinstance(group_obj, tuple):
         return group_obj
@@ -204,11 +274,13 @@ def get_group_history_by_name(request: HttpRequest, group_name: str, limit: int 
     "/group/id/{group_id}/history",
     response={200: GroupHistoryResponse, codes_4xx: MessageResponse, codes_5xx: MessageResponse},
     auth=django_auth,
-    summary="Get history of a group by ID",
+    summary="Get history of a group by Entity ID",
 )
 @require_permissions("api.params_api_read_group", "api.params_api_read_objects")
 def get_group_history_by_id(request: HttpRequest, group_id: uuid.UUID, limit: int = 250, offset: int = 0):
-    """Gets the history of a specific group by its shared entity ID."""
+    """
+    Retrieves the version history of a group by its stable Entity ID (UUID).
+    """
     return _get_group_history_logic(group_id, limit, offset)
 
 
@@ -216,11 +288,13 @@ def get_group_history_by_id(request: HttpRequest, group_id: uuid.UUID, limit: in
     "/group/id/{group_id}",
     response={200: GroupResponse, codes_4xx: MessageResponse, codes_5xx: MessageResponse},
     auth=django_auth,
-    summary="Get a single group by ID",
+    summary="Get a single group by Entity ID",
 )
 @require_permissions("api.params_api_read_group", "api.params_api_read_objects")
 def get_group_by_id(request: HttpRequest, group_id: uuid.UUID):
-    """Gets a specific group by its internal ID."""
+    """
+    Returns the current live version of a group identified by its stable Entity ID (UUID).
+    """
     try:
         g = Group.objects.prefetch_related(
             Prefetch("group_data", queryset=GroupData.objects.select_related("field"))
@@ -244,8 +318,8 @@ def get_group_by_id(request: HttpRequest, group_id: uuid.UUID):
 )
 @require_permissions("api.params_api_read_group", "api.params_api_read_objects")
 def get_groups(request: HttpRequest, limit: int = 250, offset: int = 0):
-    """Clusters belong to groups. This endpoint returns all available groups to which a cluster
-    may belong.
+    """
+    Retrieves a paginated list of all current live groups.
     """
     # Query the for the groups while prefetching related data
     data_prefetch = Prefetch("group_data", queryset=GroupData.objects.select_related("field"))
@@ -275,7 +349,11 @@ def get_groups(request: HttpRequest, limit: int = 250, offset: int = 0):
 )
 @require_permissions("api.params_api_create_group", "api.params_api_create_objects")
 def create_group(request: HttpRequest, payload: GroupCreateRequest):
-    """Creates a new Group. Validates that the provided ChangeSet exists and is a draft."""
+    """
+    Initializes a new Group entity within a ChangeSet.
+
+    The group is created in a DRAFT state and will not be live until the ChangeSet is committed.
+    """
     try:
         changeset = ChangeSet.objects.get(id=payload.changeset_id)
         if changeset.status != ChangeSet.Status.DRAFT:
@@ -310,7 +388,11 @@ def create_group(request: HttpRequest, payload: GroupCreateRequest):
 )
 @require_permissions("api.params_api_update_group", "api.params_api_update_objects")
 def update_group_by_name(request: HttpRequest, group_name: str, payload: GroupUpdateRequest):
-    """Updates a Group by name. If changeset_id is provided, validates it."""
+    """
+    Modifies a group identified by name within a ChangeSet.
+
+    Creates a draft version if one does not exist, or updates the existing draft in the specified ChangeSet.
+    """
     group_obj = _get_group_or_404(group_name)
 
     # Check if we are trying to update a draft directly
@@ -330,11 +412,13 @@ def update_group_by_name(request: HttpRequest, group_name: str, payload: GroupUp
     "/group/id/{group_id}",
     response={200: GroupResponse, codes_4xx: MessageResponse},
     auth=django_auth,
-    summary="Update a Group by ID",
+    summary="Update a Group by Entity ID",
 )
 @require_permissions("api.params_api_update_group", "api.params_api_update_objects")
 def update_group_by_id(request: HttpRequest, group_id: uuid.UUID, payload: GroupUpdateRequest):
-    """Updates a Group by ID. If changeset_id is provided, validates it."""
+    """
+    Modifies a group identified by its stable Entity ID (UUID) within a ChangeSet.
+    """
     # Try to find a draft first
     try:
         group_obj = Group.objects.get(shared_entity_id=group_id, is_live=False, changeset_id__isnull=False)
@@ -356,7 +440,9 @@ def update_group_by_id(request: HttpRequest, group_id: uuid.UUID, payload: Group
 )
 @require_permissions("api.params_api_delete_group", "api.params_api_delete_objects")
 def delete_group_by_name(request: HttpRequest, group_name: str, changeset_id: int):
-    """Stages a Group for deletion by name within a ChangeSet."""
+    """
+    Stages a group for deletion by name.
+    """
     group_obj = _get_group_or_404(group_name)
     if isinstance(group_obj, tuple):
         return group_obj
@@ -368,11 +454,13 @@ def delete_group_by_name(request: HttpRequest, group_name: str, changeset_id: in
     "/group/id/{group_id}",
     response={200: MessageResponse, codes_4xx: MessageResponse},
     auth=django_auth,
-    summary="Stage a Group for Deletion by ID",
+    summary="Stage a Group for Deletion by Entity ID",
 )
 @require_permissions("api.params_api_delete_group", "api.params_api_delete_objects")
 def delete_group_by_id(request: HttpRequest, group_id: uuid.UUID, changeset_id: int):
-    """Stages a Group for deletion by ID within a ChangeSet."""
+    """
+    Stages a group for deletion by its stable Entity ID (UUID).
+    """
     # Try to find a draft first
     try:
         group_obj = Group.objects.get(shared_entity_id=group_id, is_live=False, changeset_id__isnull=False)

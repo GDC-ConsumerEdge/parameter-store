@@ -1,3 +1,26 @@
+###############################################################################
+# Copyright 2024 Google, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+###############################################################################
+"""
+Tests for the Django Admin interception logic.
+
+This module contains functional tests verifying that the ChangeSetAwareAdminMixin
+correctly intercepts deletion requests to stage them as ChangeSet drafts.
+"""
+
 import pytest
 from django.contrib import admin
 from django.contrib.admin.sites import AdminSite
@@ -16,33 +39,41 @@ User = get_user_model()
 
 
 class MockGroupAdmin(ChangeSetAwareAdminMixin, admin.ModelAdmin):
+    """Mock Admin class for testing mixin behavior."""
+
     pass
 
 
 @pytest.fixture
 def admin_site():
+    """Fixture providing a Django AdminSite."""
     return AdminSite()
 
 
 @pytest.fixture
 def group_admin(admin_site):
+    """Fixture providing a MockGroupAdmin instance."""
     return MockGroupAdmin(Group, admin_site)
 
 
 @pytest.fixture
 def rf():
+    """Fixture providing a RequestFactory."""
     return RequestFactory()
 
 
 @pytest.fixture
 def user():
+    """Fixture providing a superuser."""
     return User.objects.create_superuser("admin", "admin@example.com", "password")
 
 
 def test_delete_view_intercepts_live_object(group_admin, rf, user):
     """
-    Test that delete_view intercepts POST requests for live objects,
-    stages them for deletion, and redirects without actual deletion.
+    Test that delete_view intercepts POST requests for live objects.
+
+    Verifies that deleting a live object stages it for deletion in the active
+    ChangeSet rather than deleting it immediately.
     """
     # Setup
     changeset = ChangeSet.objects.create(name="Test ChangeSet", created_by=user)
@@ -78,6 +109,9 @@ def test_delete_view_intercepts_live_object(group_admin, rf, user):
 def test_delete_view_allows_draft_deletion(group_admin, rf, user):
     """
     Test that delete_view allows standard deletion for draft objects.
+
+    Verifies that draft objects (which are not live) can be deleted normally
+    without being intercepted by the ChangeSet staging logic.
     """
     # Setup
     changeset = ChangeSet.objects.create(name="Test ChangeSet", created_by=user)
