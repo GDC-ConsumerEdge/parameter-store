@@ -242,9 +242,14 @@ def create_cluster(request: HttpRequest, payload: ClusterCreateRequest):
         return 404, {"message": f"ChangeSet {payload.changeset_id} not found."}
 
     try:
+        # Try to find a live group first
         group_obj = Group.objects.get(name=payload.group, is_live=True)
     except Group.DoesNotExist:
-        return 404, {"message": f"Group {payload.group} not found."}
+        # If not live, try to find a draft group in the same changeset
+        try:
+            group_obj = Group.objects.get(name=payload.group, changeset_id=changeset, is_live=False)
+        except Group.DoesNotExist:
+            return 404, {"message": f"Group {payload.group} not found."}
 
     cluster = Cluster(
         name=payload.name,
