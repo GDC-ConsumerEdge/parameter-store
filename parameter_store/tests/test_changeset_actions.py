@@ -1,5 +1,5 @@
 ###############################################################################
-# Copyright 2024 Google, LLC
+# Copyright 2026 Google, LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,6 +14,14 @@
 # limitations under the License.
 #
 ###############################################################################
+"""
+Tests for ChangeSet administrative actions.
+
+This module validates the functionality of custom Django Admin actions for
+ChangeSets, such as committing changes, abandoning drafts, and coalescing
+multiple changesets.
+"""
+
 import pytest
 from django.contrib import admin
 from django.contrib.auth.models import User
@@ -133,10 +141,14 @@ def test_discard_changeset(changeset_admin, user, rf):
     assert Group.objects.count() == 2
     assert ChangeSet.objects.count() == 1
 
-    changeset_admin.discard_changeset(request, ChangeSet.objects.filter(pk=changeset.pk))
+    changeset_admin.abandon_changeset(request, ChangeSet.objects.filter(pk=changeset.pk))
 
-    assert ChangeSet.objects.count() == 0
-    assert Group.objects.count() == 1
+    # The changeset should now be ABANDONED, not deleted.
+    changeset.refresh_from_db()
+    assert changeset.status == ChangeSet.Status.ABANDONED
+    assert ChangeSet.objects.count() == 1  # The changeset itself should still exist
+
+    assert Group.objects.count() == 1  # Only the live group should remain
     live_group.refresh_from_db()
     assert live_group.is_locked is False
     assert live_group.locked_by_changeset is None
