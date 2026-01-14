@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v2.0.0...v2.1.0) (2026-01-14)
+
+
+### Features
+
+* remove duplicate ChangeSet management button from site header ([19b09e9](https://github.com/GDC-ConsumerEdge/parameter-store/commit/19b09e9721542ff009b2530df7a06286e7353641))
+
 ## [2.0.0](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v1.2.1...v2.0.0) (2025-11-20)
 
 
