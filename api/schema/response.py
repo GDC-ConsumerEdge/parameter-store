@@ -41,6 +41,8 @@ class ClusterTagResponse(Schema):
 
 
 class NameDescResponse(Schema):
+    """Schema representing a name-description pair."""
+
     name: str = Field(..., description="A unique name.")
     description: str | None = Field(None, description="An optional description.")
 
@@ -59,64 +61,85 @@ class LogicalExpression(enum.StrEnum):
 
 
 class ClusterResponse(Schema):
-    id: uuid.UUID = Field(..., description="The stable, unique Entity ID for the logical cluster entity.")
-    record_id: int = Field(..., description="The unique database row ID for this specific version record.")
-    name: str = Field(..., description="The name of the cluster.")
-    description: str | None = Field(None, description="The cluster description.")
-    group: str = Field(..., description="The name of the primary group the cluster belongs to.")
-    secondary_groups: list[str] = Field(..., description="Names of secondary groups for the cluster.")
-    tags: list[str] = Field(..., description="List of tags assigned to the cluster.")
-    fleet_labels: list[FleetLabelResponse] = Field(..., description="Fleet-level labels for the cluster.")
-    data: dict[str, str | None] | None = Field(None, description="Custom parameter data for the cluster.")
-    intent: ClusterIntentResponse | None = Field(None, description="Configuration intent for the cluster.")
-    created_at: datetime | None = Field(None, description="Timestamp of when this version was created.")
-    updated_at: datetime | None = Field(None, description="Timestamp of the last update to this version.")
+    """Schema representing a Cluster entity."""
+
+    id: uuid.UUID = Field(
+        ...,
+        description="The immutable, unique UUID for the logical cluster entity. This ID remains constant across versions.",
+    )
+    record_id: int = Field(..., description="The unique integer ID for this specific version record in the database.")
+    name: str = Field(..., description="The unique name of the cluster.")
+    description: str | None = Field(None, description="An optional description of the cluster.")
+    group: str = Field(..., description="The name of the primary group associated with this cluster.")
+    secondary_groups: list[str] = Field(
+        ..., description="A list of names of secondary groups associated with this cluster."
+    )
+    tags: list[str] = Field(..., description="A list of tags applied to this cluster.")
+    fleet_labels: list[FleetLabelResponse] = Field(
+        ..., description="A list of fleet-level labels assigned to the cluster."
+    )
+    data: dict[str, str | None] | None = Field(
+        None, description="A dictionary of custom parameter data for the cluster."
+    )
+    intent: ClusterIntentResponse | None = Field(
+        None, description="The configuration intent (spec) for the cluster, if available."
+    )
+    created_at: datetime | None = Field(None, description="The timestamp when this specific version was created.")
+    updated_at: datetime | None = Field(None, description="The timestamp of the last update to this version.")
 
 
 class ClustersResponse(Schema):
-    clusters: list[ClusterResponse] = Field(..., description="The list of clusters.")
-    count: int = Field(..., description="Total count of clusters matching the query.")
+    clusters: list[ClusterResponse] = Field(..., description="The list of clusters matching the query.")
+    count: int = Field(..., description="The total number of clusters matching the query (for pagination).")
 
 
 class HealthResponse(Schema):
-    status: str = Field(..., description="Service health status.")
-    database: dict[str, Any] | None = Field(None, description="Database connection health details.")
+    status: str = Field(..., description="The overall health status of the service.")
+    database: dict[str, Any] | None = Field(None, description="Details about the database connection health.")
 
 
 class PingResponse(Schema):
-    status: str = Field("ok", description="Connectivity check status.")
+    status: str = Field("ok", description="The connectivity check status (always 'ok' if reachable).")
 
 
 class GroupResponse(Schema):
-    id: uuid.UUID = Field(..., description="The stable, unique Entity ID for the logical group entity.")
-    record_id: int = Field(..., description="The unique database row ID for this specific version record.")
-    name: str = Field(..., description="The name of the group.")
-    description: str | None = Field(None, description="The group description.")
-    data: dict[str, str | None] | None = Field(None, description="Custom parameter data for the group.")
-    created_at: datetime | None = Field(None, description="Timestamp of when this version was created.")
-    updated_at: datetime | None = Field(None, description="Timestamp of the last update to this version.")
+    """Schema representing a Group entity."""
+
+    id: uuid.UUID = Field(..., description="The immutable, unique UUID for the logical group entity.")
+    record_id: int = Field(..., description="The unique integer ID for this specific version record in the database.")
+    name: str = Field(..., description="The unique name of the group.")
+    description: str | None = Field(None, description="An optional description of the group.")
+    data: dict[str, str | None] | None = Field(None, description="A dictionary of custom parameter data for the group.")
+    created_at: datetime | None = Field(None, description="The timestamp when this specific version was created.")
+    updated_at: datetime | None = Field(None, description="The timestamp of the last update to this version.")
 
 
 class GroupsResponse(Schema):
-    groups: list[GroupResponse] = Field(..., description="The list of groups.")
-    count: int = Field(..., description="Total count of groups matching the query.")
+    groups: list[GroupResponse] = Field(..., description="The list of groups matching the query.")
+    count: int = Field(..., description="The total number of groups matching the query.")
 
 
 class ChangeSetResponse(Schema):
-    id: int = Field(..., description="The unique ID of the ChangeSet.")
+    """Schema representing a ChangeSet."""
+
+    id: int = Field(..., description="The unique database ID of the ChangeSet.")
     name: str = Field(..., description="The human-readable name of the ChangeSet.")
-    description: str | None = Field(None, description="Optional description of the ChangeSet's purpose.")
-    status: str = Field(..., description="The current status (DRAFT, COMMITTED, ABANDONED).")
-    created_by: str = Field(..., description="Username of the user who created the ChangeSet.")
-    committed_by: str | None = Field(None, description="Username of the user who committed the ChangeSet.")
-    created_at: datetime | None = Field(None, description="Creation timestamp.")
-    updated_at: datetime | None = Field(None, description="Last update timestamp.")
-    committed_at: datetime | None = Field(None, description="Timestamp of when the ChangeSet was committed.")
+    description: str | None = Field(None, description="A description of the ChangeSet's purpose.")
+    status: str = Field(
+        ..., description="The current status of the ChangeSet (e.g., 'draft', 'committed', 'abandoned')."
+    )
+    created_by: str = Field(..., description="The username of the user who created the ChangeSet.")
+    committed_by: str | None = Field(
+        None, description="The username of the user who committed the ChangeSet (if committed)."
+    )
+    created_at: datetime | None = Field(None, description="The timestamp when the ChangeSet was created.")
+    updated_at: datetime | None = Field(None, description="The timestamp when the ChangeSet was last updated.")
+    committed_at: datetime | None = Field(None, description="The timestamp when the ChangeSet was committed.")
 
 
 class ChangeSetsResponse(Schema):
-    changesets: list[ChangeSetResponse] = Field(..., description="The list of ChangeSets.")
-    count: int = Field(..., description="Total count of ChangeSets.")
+    changesets: list[ChangeSetResponse] = Field(..., description="The list of ChangeSets matching the query.")
+    count: int = Field(..., description="The total number of ChangeSets matching the query.")
 
 
 class ChangeAction(enum.StrEnum):
@@ -126,45 +149,51 @@ class ChangeAction(enum.StrEnum):
 
 
 class GroupChangeItem(Schema):
-    action: ChangeAction = Field(..., description="The type of change performed on the group.")
-    entity: GroupResponse = Field(..., description="The resulting state of the group entity.")
+    action: ChangeAction = Field(..., description="The type of change performed (create, update, delete).")
+    entity: GroupResponse = Field(..., description="The full state of the group entity resulting from the change.")
 
 
 class ClusterChangeItem(Schema):
-    action: ChangeAction = Field(..., description="The type of change performed on the cluster.")
-    entity: ClusterResponse = Field(..., description="The resulting state of the cluster entity.")
+    action: ChangeAction = Field(..., description="The type of change performed (create, update, delete).")
+    entity: ClusterResponse = Field(..., description="The full state of the cluster entity resulting from the change.")
 
 
 class ChangeSetChangesResponse(Schema):
-    groups: list[GroupChangeItem] = Field(..., description="List of group changes in this ChangeSet.")
-    clusters: list[ClusterChangeItem] = Field(..., description="List of cluster changes in this ChangeSet.")
+    groups: list[GroupChangeItem] = Field(..., description="A list of changes affecting groups in this ChangeSet.")
+    clusters: list[ClusterChangeItem] = Field(
+        ..., description="A list of changes affecting clusters in this ChangeSet."
+    )
 
 
 class HistoryMetadata(Schema):
-    obsoleted_at: datetime | None = Field(None, description="When this version was obsoleted by a newer live version.")
+    """Metadata for a historical version of an entity."""
+
+    obsoleted_at: datetime | None = Field(
+        None, description="The timestamp when this version was obsoleted by a newer version."
+    )
     obsoleted_by_changeset_id: int | None = Field(
-        None, description="The ID of the ChangeSet that obsoleted this version."
+        None, description="The ID of the ChangeSet that introduced the new version, obsoleting this one."
     )
     obsoleted_by_changeset_name: str | None = Field(
-        None, description="The name of the ChangeSet that obsoleted this version."
+        None, description="The name of the ChangeSet that introduced the new version, obsoleting this one."
     )
 
 
 class GroupHistoryItem(Schema):
-    metadata: HistoryMetadata = Field(..., description="Metadata about this historical version.")
-    entity: GroupResponse = Field(..., description="The state of the group in this version.")
+    metadata: HistoryMetadata = Field(..., description="Metadata describing the lifecycle of this historical version.")
+    entity: GroupResponse = Field(..., description="The state of the group in this specific historical version.")
 
 
 class ClusterHistoryItem(Schema):
-    metadata: HistoryMetadata = Field(..., description="Metadata about this historical version.")
-    entity: ClusterResponse = Field(..., description="The state of the cluster in this version.")
+    metadata: HistoryMetadata = Field(..., description="Metadata describing the lifecycle of this historical version.")
+    entity: ClusterResponse = Field(..., description="The state of the cluster in this specific historical version.")
 
 
 class GroupHistoryResponse(Schema):
-    history: list[GroupHistoryItem] = Field(..., description="The chronological history of the group.")
-    count: int = Field(..., description="Total number of historical versions.")
+    history: list[GroupHistoryItem] = Field(..., description="The chronological history of the group's versions.")
+    count: int = Field(..., description="The total number of historical versions returned.")
 
 
 class ClusterHistoryResponse(Schema):
-    history: list[ClusterHistoryItem] = Field(..., description="The chronological history of the cluster.")
-    count: int = Field(..., description="Total number of historical versions.")
+    history: list[ClusterHistoryItem] = Field(..., description="The chronological history of the cluster's versions.")
+    count: int = Field(..., description="The total number of historical versions returned.")

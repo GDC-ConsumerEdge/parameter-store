@@ -33,38 +33,59 @@ class ChangeSetStatus(enum.StrEnum):
 
 
 class ChangeSetCreateRequest(Schema):
-    name: str = Field(..., description="The unique human-readable name of the ChangeSet.")
-    description: str | None = Field(None, description="Optional description of the ChangeSet's purpose.")
+    """Schema for creating a new ChangeSet."""
+
+    name: str = Field(
+        ..., description="A unique, human-readable name for the ChangeSet. This name must be unique within the system."
+    )
+    description: str | None = Field(
+        None, description="A detailed description of the ChangeSet's purpose and the changes it contains."
+    )
 
 
 class ChangeSetUpdateRequest(Schema):
-    name: str | None = Field(None, description="Updated name for the ChangeSet.")
-    description: str | None = Field(None, description="Updated description for the ChangeSet.")
+    """Schema for updating an existing ChangeSet's metadata."""
+
+    name: str | None = Field(None, description="A new name for the ChangeSet. Must be unique if provided.")
+    description: str | None = Field(None, description="An updated description of the ChangeSet.")
 
 
 class ChangeSetCoalesceRequest(Schema):
-    target_changeset_id: int = Field(..., description="The ID of the target ChangeSet to merge into.")
+    """Schema for coalescing (merging) a ChangeSet into another."""
+
+    target_changeset_id: int = Field(
+        ...,
+        description="The unique ID of the target ChangeSet where changes will be merged. The target must be in DRAFT state.",
+    )
 
 
 class GroupCreateRequest(Schema):
-    name: str = Field(..., description="The unique name of the new group.")
-    description: str | None = Field(None, description="Optional group description.")
-    changeset_id: int = Field(..., description="The ID of the ChangeSet to record this creation in.")
+    """Schema for creating a new parameter group."""
+
+    name: str = Field(..., description="The unique name for the new group.")
+    description: str | None = Field(None, description="An optional description of the group's function or scope.")
+    changeset_id: int = Field(..., description="The ID of the active ChangeSet to associate with this creation.")
 
 
 class GroupUpdateRequest(Schema):
-    description: str | None = Field(None, description="Updated group description.")
-    changeset_id: int = Field(..., description="The ID of the ChangeSet to record this update in.")
+    """Schema for updating a parameter group."""
+
+    description: str | None = Field(None, description="The new description for the group.")
+    changeset_id: int = Field(..., description="The ID of the active ChangeSet to associate with this update.")
 
 
 class ClusterCreateRequest(Schema):
-    name: str = Field(..., description="The unique name of the new cluster.")
-    description: str | None = Field(None, description="Optional cluster description.")
-    group: str = Field(..., description="The name of the primary group this cluster belongs to.")
-    changeset_id: int = Field(..., description="The ID of the ChangeSet to record this creation in.")
+    """Schema for creating a new cluster."""
+
+    name: str = Field(..., description="The unique name for the new cluster.")
+    description: str | None = Field(None, description="An optional description of the cluster.")
+    group: str = Field(..., description="The name of the primary group this cluster will belong to.")
+    changeset_id: int = Field(..., description="The ID of the active ChangeSet to associate with this creation.")
 
 
 class ClusterUpdateRequest(Schema):
-    description: str | None = Field(None, description="Updated cluster description.")
-    group: str | None = Field(None, description="Updated primary group name for the cluster.")
-    changeset_id: int = Field(..., description="The ID of the ChangeSet to record this update in.")
+    """Schema for updating a cluster."""
+
+    description: str | None = Field(None, description="The new description for the cluster.")
+    group: str | None = Field(None, description="The name of a new primary group to move the cluster to.")
+    changeset_id: int = Field(..., description="The ID of the active ChangeSet to associate with this update.")
