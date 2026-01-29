@@ -55,7 +55,7 @@ api_v1.add_router("", clusters_router)
 api_v1.exception_handler(ValidationError)(validation_errors)
 
 
-@api_v1.get("/ping", response=PingResponse, summary="Basic health check")
+@api_v1.get("/ping", response=PingResponse, summary="Basic health check", tags=["General"])
 def ping(request: HttpRequest):
     """
     A lightweight connectivity check to verify the API service is reachable and the Django server is running.
@@ -63,8 +63,8 @@ def ping(request: HttpRequest):
     return {"status": "ok"}
 
 
-@api_v1.get("/status", response=HealthResponse, summary="Deep health check with database status")
-@api_v1.get("/healthz", response=HealthResponse, summary="Deep health check with database status")
+@api_v1.get("/status", response=HealthResponse, summary="Deep health check with database status", tags=["General"])
+@api_v1.get("/healthz", response=HealthResponse, summary="Deep health check with database status", tags=["General"])
 def health(request: HttpRequest):
     """
     A comprehensive health check that verifies database connectivity and ensures all migrations have been applied.
@@ -117,6 +117,7 @@ def health(request: HttpRequest):
     response={200: list[NameDescResponse], codes_4xx: MessageResponse},
     auth=django_auth,
     summary="Get cluster tags",
+    tags=["Tags"],
 )
 @ninja_paginate(LimitOffsetPagination)
 @require_permissions("api.params_api_read_tag", "api.params_api_read_objects")

@@ -46,7 +46,7 @@ from .schema.response import (
 )
 from .utils import paginate, require_permissions
 
-groups_router = Router()
+groups_router = Router(tags=["Groups"])
 
 
 def _get_group_or_404(group_name: str):

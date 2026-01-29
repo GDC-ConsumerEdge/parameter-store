@@ -46,7 +46,7 @@ from .schema.response import (
 )
 from .utils import paginate, require_permissions
 
-changesets_router = Router()
+changesets_router = Router(tags=["ChangeSets"])
 
 
 def _generate_group_response(group: Group) -> GroupResponse:

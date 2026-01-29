@@ -46,7 +46,7 @@ from parameter_store.models import ChangeSet, Cluster, Group
 
 from .utils import paginate, require_permissions
 
-clusters_router = Router()
+clusters_router = Router(tags=["Clusters"])
 
 
 def _get_cluster_or_404(cluster_name: str):
