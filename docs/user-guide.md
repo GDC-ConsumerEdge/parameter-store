@@ -36,9 +36,9 @@ When you add or edit a Group or Cluster, the system automatically handles the ve
 *   This Draft is placed into an **Active ChangeSet**. If you don't have one open, a new one is created for you.
 *   You are redirected to your new Draft. Look for the blue badge labeled **Draft in active ChangeSet**.
 
-<div style="background-color: #ffebee; border: 2px solid #ef5350; border-radius: 8px; padding: 16px; margin: 20px 0; text-align: center;">
-    <strong style="color: #c62828; font-size: 1.2em;">📸 MISSING SCREENSHOT: Draft Badge in Admin UI (Blue Badge)</strong>
-</div>
+
+* ![add.png](doc_assets/user_guide/add.png)
+
 
 #### Editing Clusters
 1.  Click **Clusters** on the left.
@@ -60,9 +60,9 @@ Deleting items is a safe, staged process.
 *   It will appear in your ChangeSet with a red **Pending Deletion** badge.
 *   If this was a mistake, you can simply delete the *draft*, and the original Live item remains untouched.
 
-<div style="background-color: #ffebee; border: 2px solid #ef5350; border-radius: 8px; padding: 16px; margin: 20px 0; text-align: center;">
-    <strong style="color: #c62828; font-size: 1.2em;">📸 MISSING SCREENSHOT: Pending Deletion Badge (Red Badge)</strong>
-</div>
+
+![delete.png](doc_assets/user_guide/delete.png)
+
 
 ### 4. Committing Changes
 Once you have reviewed your edits, creations, and deletions, you can apply them to the live system.
@@ -73,9 +73,9 @@ Once you have reviewed your edits, creations, and deletions, you can apply them 
 4.  In the "Actions" dropdown at the top, select **Commit selected ChangeSets**.
 5.  Click **Go**.
 
-<div style="background-color: #ffebee; border: 2px solid #ef5350; border-radius: 8px; padding: 16px; margin: 20px 0; text-align: center;">
-    <strong style="color: #c62828; font-size: 1.2em;">📸 MISSING SCREENSHOT: ChangeSet List View with "Commit" Action Selected</strong>
-</div>
+
+![commit.png](doc_assets/user_guide/commit.png)
+
 
 **Success!** All drafts in the ChangeSet are now Live. Previous versions are archived in the history.
 
@@ -133,6 +133,12 @@ Validators ensure data integrity by enforcing rules on field values.
 
 The API provides programmatic access to EPS functionality, suitable for scripts and automation.
 
+**Authentication Required**:
+*   **Production/Staging (IAP)**: Uses Google Service Accounts and OIDC tokens.
+*   **Local Development**: Uses your browser's session ID (cookie).
+
+For detailed authentication instructions and scripts, see the **[Programmatic Access Cheat Sheet](programmatic-access.md)**.
+
 ### Constraint: Live Data is Read-Only
 **You cannot modify Live data directly.**
 Every `POST` (create), `PUT` (update), or `DELETE` operation **MUST** include a `changeset_id` to ensure changes are tracked and versioned.
@@ -141,12 +147,18 @@ Every `POST` (create), `PUT` (update), or `DELETE` operation **MUST** include a 
 *   **`id` (UUID)**: This is the **Shared Entity ID**. It is a unique identifier (e.g., `a1b2c3d4...`) that persists across all versions (Live, Draft, History) of an object. **Use this ID for all API operations.**
 *   **`record_id` (Integer)**: This is the specific database row ID for a single version. It changes with every new draft and is primarily used for internal debugging.
 
-### Workflow Example
+### Workflow Example (Local Development)
+
+**Prerequisite**: [Obtain your session ID](programmatic-access.md#part-2-local-development-browser-session) from your browser cookies.
+```bash
+export SESSION_ID='your_session_id_here'
+```
 
 #### Step 1: Create a ChangeSet
 Create a new workspace for your changes.
 ```bash
 curl -X POST "http://localhost:8000/api/v1/changeset" \
+     --cookie "sessionid=${SESSION_ID}" \
      -H "Content-Type: application/json" \
      -d '{"name": "my-api-update", "description": "Updating clusters via script"}'
 ```
@@ -161,6 +173,7 @@ To update a cluster, use its UUID (`a1b2c3d4...`) and provide the `changeset_id`
 
 ```bash
 curl -X PUT "http://localhost:8000/api/v1/cluster/id/a1b2c3d4-..." \
+     --cookie "sessionid=${SESSION_ID}" \
      -H "Content-Type: application/json" \
      -d '{
            "description": "Updated via API",
@@ -173,7 +186,8 @@ This action creates a **Draft** of the cluster within ChangeSet 42.
 Retrieve a summary of all pending changes in the ChangeSet.
 
 ```bash
-curl -X GET "http://localhost:8000/api/v1/changeset/42/changes"
+curl -X GET "http://localhost:8000/api/v1/changeset/42/changes" \
+     --cookie "sessionid=${SESSION_ID}"
 ```
 **Response:**
 ```json
@@ -192,14 +206,16 @@ curl -X GET "http://localhost:8000/api/v1/changeset/42/changes"
 Apply the changes to the live environment.
 
 ```bash
-curl -X POST "http://localhost:8000/api/v1/changeset/42/commit"
+curl -X POST "http://localhost:8000/api/v1/changeset/42/commit" \
+     --cookie "sessionid=${SESSION_ID}"
 ```
 
 ### Viewing History
 Retrieve the version history of a cluster.
 
 ```bash
-curl -X GET "http://localhost:8000/api/v1/cluster/my-cluster/history"
+curl -X GET "http://localhost:8000/api/v1/cluster/my-cluster/history" \
+     --cookie "sessionid=${SESSION_ID}"
 ```
 This returns a chronological list of previous versions, including metadata on who made the changes and when.
 
