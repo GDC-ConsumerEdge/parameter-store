@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.0.0](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v2.0.0...v3.0.0) (2026-01-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* add changeset capabilites to API ([#104](https://github.com/GDC-ConsumerEdge/parameter-store/issues/104))
+
+### Features
+
+* add changeset capabilites to API ([#104](https://github.com/GDC-ConsumerEdge/parameter-store/issues/104)) ([0f29d2c](https://github.com/GDC-ConsumerEdge/parameter-store/commit/0f29d2ca3c3b218f207bc4b11409c87c16ea73f1))
+* **api:** add historical record visibility for a given entity within the API ([0f29d2c](https://github.com/GDC-ConsumerEdge/parameter-store/commit/0f29d2ca3c3b218f207bc4b11409c87c16ea73f1))
+* **api:** use entity UUID to uniquely idenfity a record within the API ([0f29d2c](https://github.com/GDC-ConsumerEdge/parameter-store/commit/0f29d2ca3c3b218f207bc4b11409c87c16ea73f1))
+* remove duplicate ChangeSet management button from site header ([19b09e9](https://github.com/GDC-ConsumerEdge/parameter-store/commit/19b09e9721542ff009b2530df7a06286e7353641))
+
 ## [2.0.0](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v1.2.1...v2.0.0) (2025-11-20)
 
 
