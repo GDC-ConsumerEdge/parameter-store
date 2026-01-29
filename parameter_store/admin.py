@@ -427,6 +427,7 @@ class ChangeSetAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
     list_filter = ["status", "created_by"]
     search_fields = ["name", "created_by__username"]
     readonly_fields = (
+        "status",
         "created_by",
         "created_at",
         "updated_at",
