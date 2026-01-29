@@ -1,5 +1,5 @@
 ###############################################################################
-# Copyright 2024 Google, LLC
+# Copyright 2026 Google, LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ from django.conf import settings  # Required for ForeignKey to User
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.query import Prefetch
+from django.utils import timezone
 
 from parameter_store.constraints import top_level_constraints
 from parameter_store.util import get_class_from_full_path, inspect_callable_signature
@@ -152,6 +153,180 @@ class ChangeSet(models.Model):
     def __str__(self):
         return f"{self.name or f'ChangeSet {self.id}'} ({self.get_status_display()})"
 
+    def commit(self, user):
+        """
+        Commits the ChangeSet, applying all staged changes to the live state.
+
+        This is an atomic operation that:
+        1. Identifies all staged (draft) entities in the ChangeSet.
+        2. Handles deletions by retiring live entities and cleanup.
+        3. Handles updates by demoting live entities to historical and promoting drafts to live.
+        4. Handles creations by promoting new drafts to live.
+        5. Updates the ChangeSet status and metadata.
+
+        Args:
+            user: The User instance performing the commit.
+
+        Raises:
+            ValueError: If the ChangeSet is not in DRAFT status.
+        """
+        from django.db import transaction
+
+        from .models import Cluster, ClusterData, ClusterFleetLabel, ClusterIntent, ClusterTag, Group, GroupData
+
+        if self.status != self.Status.DRAFT:
+            raise ValueError(f"ChangeSet '{self.name}' is not in draft state.")
+
+        top_level_models = [Group, Cluster]
+        child_models = [ClusterTag, ClusterIntent, ClusterFleetLabel, ClusterData, GroupData]
+
+        with transaction.atomic():
+            # Process top-level entities
+            for model in top_level_models:
+                draft_entities = model.objects.filter(changeset_id=self.id, is_live=False)
+                for draft_entity in draft_entities:
+                    live_entity = (
+                        model.objects.filter(shared_entity_id=draft_entity.shared_entity_id, is_live=True).first()
+                        if draft_entity.shared_entity_id
+                        else None
+                    )
+
+                    if draft_entity.is_pending_deletion:
+                        if live_entity:
+                            # "Retire" the live entity instead of deleting it
+                            live_entity.is_locked = False
+                            live_entity.locked_by_changeset = None
+                            live_entity.is_live = False
+                            live_entity.obsoleted_by_changeset = self
+                            live_entity.save()
+
+                            # Retire associated live child entities manually since we aren't deleting the parent
+                            for child_model in child_models:
+                                # Determine the ForeignKey name pointing to the parent model
+                                fk_name = model.__name__.lower()
+                                filter_kwargs = {fk_name: live_entity, "is_live": True}
+                                try:
+                                    child_model.objects.filter(**filter_kwargs).update(is_live=False)
+                                except Exception:
+                                    # Some child models might not link to this parent type (e.g. GroupData doesn't link to Cluster)
+                                    pass
+
+                        # Delete children of the draft entity to satisfy foreign key constraints (specifically DO_NOTHING on ClusterTag)
+                        for child_model in child_models:
+                            fk_name = model.__name__.lower()
+                            try:
+                                child_model.objects.filter(**{fk_name: draft_entity}).delete()
+                            except Exception:
+                                pass
+
+                        # The draft's purpose was just to signal deletion; it is now consumed.
+                        draft_entity.delete()
+                        continue
+
+                    if live_entity:
+                        # Demote old live
+                        live_entity.is_locked = False
+                        live_entity.locked_by_changeset = None
+                        live_entity.is_live = False
+                        live_entity.obsoleted_by_changeset = self
+                        live_entity.save()
+
+                        # Promote draft
+                        draft_entity.is_live = True
+                        draft_entity.changeset_id = None
+                        draft_entity.is_locked = False
+                        draft_entity.locked_by_changeset = None
+                        draft_entity.draft_of = None
+                        draft_entity.save()
+
+                        # Cascade updates
+                        if model == Group:
+                            Cluster.objects.filter(group=live_entity).update(group=draft_entity)
+                            clusters_with_secondary = Cluster.objects.filter(secondary_groups=live_entity)
+                            for cluster in clusters_with_secondary:
+                                cluster.secondary_groups.remove(live_entity)
+                                cluster.secondary_groups.add(draft_entity)
+                    else:
+                        # New entity
+                        draft_entity.is_live = True
+                        draft_entity.changeset_id = None
+                        draft_entity.is_locked = False
+                        draft_entity.locked_by_changeset = None
+                        draft_entity.draft_of = None
+                        draft_entity.save()
+
+            # Process child entities (that were drafted directly, e.g. edits to children)
+            for model in child_models:
+                draft_entities = model.objects.filter(changeset_id=self.id, is_live=False)
+                for draft_entity in draft_entities:
+                    draft_entity.is_live = True
+                    draft_entity.changeset_id = None
+                    draft_entity.save()
+
+            self.status = self.Status.COMMITTED
+            self.committed_at = timezone.now()
+            self.committed_by = user
+            self.save()
+
+    def abandon(self):
+        """Abandons the changeset, deleting drafts and unlocking parents."""
+        from django.db import transaction
+
+        from .models import Cluster, ClusterData, ClusterFleetLabel, ClusterIntent, ClusterTag, Group, GroupData
+
+        if self.status != self.Status.DRAFT:
+            raise ValueError(f"ChangeSet '{self.name}' is not in draft state.")
+
+        top_level_models = [Group, Cluster]
+        child_models = [ClusterTag, ClusterIntent, ClusterFleetLabel, ClusterData, GroupData]
+
+        with transaction.atomic():
+            # Unlock parent live entities
+            for model in top_level_models:
+                locked_live_entities = model.objects.filter(locked_by_changeset=self, is_live=True)
+                for entity in locked_live_entities:
+                    entity.is_locked = False
+                    entity.locked_by_changeset = None
+                    entity.save()
+
+            # Delete draft rows
+            for model in top_level_models:
+                model.objects.filter(changeset_id=self.id, is_live=False).delete()
+
+            for model in child_models:
+                model.objects.filter(changeset_id=self.id, is_live=False).delete()
+
+            self.status = self.Status.ABANDONED
+            self.save()
+
+    def coalesce(self, target_changeset):
+        """Merges this changeset into a target changeset and deletes self."""
+        from django.db import transaction
+
+        from .models import Cluster, ClusterData, ClusterFleetLabel, ClusterIntent, ClusterTag, Group, GroupData
+
+        if self.status != self.Status.DRAFT:
+            raise ValueError(f"Source ChangeSet '{self.name}' is not in draft state.")
+        if target_changeset.status != self.Status.DRAFT:
+            raise ValueError(f"Target ChangeSet '{target_changeset.name}' is not in draft state.")
+
+        top_level_models = [Group, Cluster]
+        child_models = [ClusterTag, ClusterIntent, ClusterFleetLabel, ClusterData, GroupData]
+
+        with transaction.atomic():
+            # Re-point locks
+            for model in top_level_models:
+                model.objects.filter(locked_by_changeset=self).update(locked_by_changeset=target_changeset)
+
+            # Move draft entities
+            for model in top_level_models:
+                model.objects.filter(changeset_id=self.id).update(changeset_id=target_changeset.id)
+
+            for model in child_models:
+                model.objects.filter(changeset_id=self.id).update(changeset_id=target_changeset.id)
+
+            self.delete()
+
     class Meta:
         verbose_name = "ChangeSet"
         verbose_name_plural = "ChangeSets"
@@ -171,18 +346,89 @@ class ChangeSetAwareTopLevelEntity(models.Model):
     is_live = models.BooleanField(editable=False, db_index=True, null=False, default=False)
     is_locked = models.BooleanField(editable=False, db_index=True, null=False, default=False)
     changeset_id = models.ForeignKey(
-        ChangeSet, on_delete=models.SET_NULL, null=True, verbose_name="ChangeSet ID", related_name="+"
+        ChangeSet, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="ChangeSet ID", related_name="+"
     )
     locked_by_changeset = models.ForeignKey(
-        ChangeSet, on_delete=models.SET_NULL, null=True, verbose_name="Locked by ChangeSet", related_name="+"
+        ChangeSet,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Locked by ChangeSet",
+        related_name="+",
     )
     obsoleted_by_changeset = models.ForeignKey(
-        ChangeSet, on_delete=models.SET_NULL, null=True, verbose_name="Obsoleted by ChangeSet", related_name="+"
+        ChangeSet,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Obsoleted by ChangeSet",
+        related_name="+",
     )
     draft_of = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="drafts")
     is_pending_deletion = models.BooleanField(
         default=False, editable=False, help_text="Marks a draft entity for deletion upon commit."
     )
+
+    def create_draft(self, changeset, is_pending_deletion=False):
+        """
+        Creates a draft copy of this entity within the context of a changeset.
+
+        This method performs a deep copy of the current entity, creating a new
+        record with `is_live=False` and associating it with the provided changeset.
+        It also handles the deep copying of relevant child relationships.
+
+        Args:
+            changeset: The ChangeSet instance to associate the new draft with.
+            is_pending_deletion (bool): If True, marks the draft as pending deletion.
+                                        Defaults to False.
+
+        Returns:
+            The newly created draft instance of the model.
+        """
+        # Create a new instance in memory
+        draft_instance = self.__class__()
+
+        # Copy attributes from the original instance
+        for field in self._meta.fields:
+            # Don't copy the primary key
+            if field.primary_key:
+                continue
+            setattr(draft_instance, field.name, getattr(self, field.name))
+
+        # Set the new state for the draft
+        draft_instance.shared_entity_id = self.shared_entity_id
+        draft_instance.is_live = False
+        draft_instance.is_locked = False
+        draft_instance.changeset_id = changeset
+        draft_instance.draft_of = self
+        draft_instance.is_pending_deletion = is_pending_deletion
+        draft_instance.save()
+
+        # Now that the draft has a PK, we can set M2M relationships
+        for field in self._meta.many_to_many:
+            getattr(draft_instance, field.name).set(getattr(self, field.name).all())
+
+        # Copy the child relations from the original to the new draft
+        self.copy_child_relations(draft_instance, changeset)
+
+        # If the model being copied is a Group, we need to check if there are any
+        # draft Clusters in the same changeset that need their group FK updated.
+        if self.__class__.__name__ == "Group":
+            # Avoid circular import
+            Cluster = self._meta.apps.get_model("parameter_store", "Cluster")
+            clusters_in_changeset = Cluster.objects.filter(changeset_id=changeset.id, is_live=False)
+            for cluster in clusters_in_changeset:
+                if cluster.group_id == self.pk:
+                    cluster.group = draft_instance
+                    cluster.save()
+
+        return draft_instance
+
+    def copy_child_relations(self, draft_instance, changeset):
+        """Handles the deep copying of child relationships for a new draft instance.
+        Must be implemented by subclasses.
+        """
+        raise NotImplementedError("Subclasses must implement copy_child_relations")
 
 
 class ChangeSetAwareChildEntity(models.Model):
@@ -212,6 +458,20 @@ class Group(ChangeSetAwareTopLevelEntity, DynamicValidatingModel):
 
     def __str__(self):
         return self.name
+
+    def copy_child_relations(self, draft_instance, changeset):
+        # Iterate over all custom data related to the original group.
+        for group_data in self.group_data.all():
+            # Setting pk and id to None ensures that a new object will be created.
+            group_data.pk = None
+            group_data.id = None
+            # Link the new child object to the draft group.
+            group_data.group = draft_instance
+            # Mark the new child object as a draft.
+            group_data.is_live = False
+            # Associate the new child object with the active changeset.
+            group_data.changeset_id = changeset
+            group_data.save()
 
 
 class Tag(DynamicValidatingModel):
@@ -282,6 +542,35 @@ class Cluster(ChangeSetAwareTopLevelEntity, DynamicValidatingModel):
 
     def __str__(self):
         return self.name
+
+    def copy_child_relations(self, draft_instance, changeset):
+        # Iterate over all custom data related to the original cluster.
+        for cluster_data in self.cluster_data.all():
+            cluster_data.pk = None
+            cluster_data.id = None
+            cluster_data.cluster = draft_instance
+            cluster_data.is_live = False
+            cluster_data.changeset_id = changeset
+            cluster_data.save()
+
+        # Iterate over all fleet labels related to the original cluster.
+        for fleet_label in self.fleet_labels.all():
+            fleet_label.pk = None
+            fleet_label.id = None
+            fleet_label.cluster = draft_instance
+            fleet_label.is_live = False
+            fleet_label.changeset_id = changeset
+            fleet_label.save()
+
+        # Check if the original cluster has an intent and copy it.
+        if hasattr(self, "intent"):
+            intent = self.intent
+            intent.pk = None
+            intent.id = None
+            intent.cluster = draft_instance
+            intent.is_live = False
+            intent.changeset_id = changeset
+            intent.save()
 
     @property
     def tags_list(self):

@@ -1,14 +1,16 @@
-# Programmatic Access to Parameter Store (EPS) with Google Service Accounts
+# Programmatic Access to Parameter Store (EPS)
 
-This document outlines how to programmatically access an EPS (Parameter Store) instance hosted on Google Cloud Platform (GCP) and protected by Identity-Aware Proxy (IAP). Access is achieved using a Google Service Account (GSA).
+This document outlines how to programmatically access the Parameter Store (EPS) API in two primary environments:
+1.  **IAP-Protected Environments (Production/Staging):** Using Google Service Accounts and OIDC tokens.
+2.  **Local Development:** Using a browser session ID (cookie).
 
-## Overview
+---
 
-EPS relies on IAP for authenticating users and service accounts. When IAP protects an application, it presents a JSON Web Token (JWT) to the application for authenticated entities. EPS uses this JWT to identify the GSA and log it in.
+## Part 1: IAP-Protected Environments (Google Service Accounts)
 
-Programmatic access involves your application or script, acting on behalf of a GSA, obtaining an OIDC (OpenID Connect) ID token. This token is then used as a bearer token in HTTP requests to the EPS API.
+EPS relies on Identity-Aware Proxy (IAP) for authenticating users and service accounts in cloud environments. Access is achieved using a Google Service Account (GSA). When IAP protects an application, it presents a JSON Web Token (JWT) to the application for authenticated entities. EPS uses this JWT to identify the GSA and log it in.
 
-## Prerequisites
+### Prerequisites
 
 Before your GSA can programmatically access EPS, ensure the following:
 
@@ -27,7 +29,7 @@ Before your GSA can programmatically access EPS, ensure the following:
 4. **IAP OAuth 2.0 Client ID**:
     * You need the OAuth 2.0 Client ID associated with the IAP configuration for your EPS application. This ID is used as the `audience` when generating the OIDC ID token. You can find this in the GCP console under "Security" > "Identity-Aware Proxy".
 
-## Programmatic Access Steps & Python Example
+### Programmatic Access Steps & Python Example
 
 The general flow for programmatic access is:
 
@@ -35,7 +37,7 @@ The general flow for programmatic access is:
 2. The `audience` for this ID token request must be the IAP OAuth 2.0 Client ID.
 3. The obtained ID token is then included in the `Authorization` header as a `Bearer` token for all HTTP requests to the EPS API.
 
-### Python Example
+#### Python Example
 
 To run the following Python example, you'll need to install the necessary Google Cloud client libraries:
 
@@ -52,7 +54,8 @@ from google.cloud import iam_credentials_v1 as iam
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import AuthorizedSession
 
-# --- Configuration ---
+# ---
+Configuration ---
 # Replace with your GSA email
 gsa_email = 'your-service-account@your-project-id.iam.gserviceaccount.com'
 # Replace with your EPS instance API URL and desired endpoint
@@ -124,6 +127,7 @@ While the example above is in Python, the underlying mechanism is standard OAuth
     `Authorization: Bearer <OIDC_ID_TOKEN>`
 
 Consult the Google Cloud client libraries for your specific language for details on authenticating and generating OIDC ID tokens. The core principle is to generate an ID token for the service account, with the audience set to your IAP's client ID.
+
 ### cURL Example
 
 For quick testing or scripting in shell environments, `curl` combined with the `gcloud` CLI can be used.
@@ -172,3 +176,66 @@ curl -v -H "Authorization: Bearer ${ID_TOKEN}" "${EPS_API_URL}"
 * **GSA Naming**: As mentioned in prerequisites, ensure your GSA names (the part before `@your-project.iam.gserviceaccount.com`) do not clash with human usernames if they are meant to be distinct entities within EPS.
 * **EPS Permissions**: Remember that authenticating through IAP does not grant permissions *within* EPS. The GSA must be explicitly granted roles/permissions in the EPS admin interface.
 * **Token Caching and Expiration**: ID tokens have an expiration time (typically 1 hour). For long-running applications, implement logic to refresh the token before it expires. The `google-auth` library in Python handles some of this automatically when using `AuthorizedSession`.
+
+---
+
+## Part 2: Local Development (Browser Session)
+
+When running EPS locally (e.g., `localhost:8000`), IAP is not involved. Instead, authentication relies on the standard Django session cookie (`sessionid`). You must log in via a browser to establish a session, then use that session ID for your scripts.
+
+### Step 1: Obtain Session ID
+
+1.  Open your local EPS instance (e.g., `http://localhost:8000`) in a browser (Chrome/Firefox).
+2.  **Log in** with your superuser or test account.
+3.  Open **Developer Tools** (F12 or Right Click -> Inspect).
+4.  Go to the **Application** tab (Chrome) or **Storage** tab (Firefox).
+5.  Expand **Cookies** and select `http://localhost:8000`.
+6.  Find the cookie named `sessionid` and copy its **Value** (a long alphanumeric string).
+
+### Python Example (Local)
+
+```python
+import requests
+
+# ---
+Configuration ---
+api_url = 'http://localhost:8000/api/v1/clusters'
+session_id = 'YOUR_COPIED_SESSION_ID_VALUE'  # e.g., 'z541...'
+
+# 1. Create Session with Cookie
+session = requests.Session()
+session.cookies.set('sessionid', session_id)
+
+# 2. Call API
+response = session.get(api_url)
+
+if response.status_code == 200:
+    print(response.json())
+else:
+    print(f"Error {response.status_code}: {response.text}")
+    # If 403/401, your session ID might be expired or invalid.
+```
+
+### cURL Example (Local)
+
+Use the `--cookie` (or `-b`) flag to pass the session ID.
+
+```bash
+export SESSION_ID='YOUR_COPIED_SESSION_ID_VALUE'
+export URL='http://localhost:8000/api/v1/clusters'
+
+curl --cookie "sessionid=${SESSION_ID}" "${URL}"
+```
+
+### Important Notes for Local Dev
+*   **Expiration**: Session cookies expire (usually after 2 weeks). If your script starts failing with 401/403 errors, refresh your browser page to ensure you are still logged in, and check if the `sessionid` has changed.
+*   **CSRF**: For `GET` requests, the session cookie is sufficient. For `POST`/`PUT`/`DELETE` requests, Django requires a CSRF token.
+    *   **Quickest Fix**: The API is configured to exempt certain programmatic clients or you can disable CSRF middleware *locally only* for testing.
+    *   **Proper Fix**: Grab the `csrftoken` cookie value from the browser as well, and include it in both the `Cookie` header AND the `X-CSRFToken` header.
+
+    ```bash
+    curl -X POST "${URL}" \
+         --cookie "sessionid=${SESSION_ID}; csrftoken=${CSRF_TOKEN}" \
+         -H "X-CSRFToken: ${CSRF_TOKEN}" \
+         -d '{...}'
+    ```

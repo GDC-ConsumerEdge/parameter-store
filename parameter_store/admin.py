@@ -1,5 +1,5 @@
 ###############################################################################
-# Copyright 2024 Google, LLC
+# Copyright 2026 Google, LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -422,17 +422,24 @@ class ClusterDataFieldValidatorAssignmentAdmin(uadmin.ModelAdmin):
 
 @admin.register(ChangeSet, site=param_admin_site)
 class ChangeSetAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
-    actions = ["commit_changeset", "discard_changeset", "coalesce_changesets"]
+    actions = ["commit_changeset", "abandon_changeset", "coalesce_changesets"]
     list_display = ["name", "status", "created_by", "created_at"]
     list_filter = ["status", "created_by"]
     search_fields = ["name", "created_by__username"]
     readonly_fields = (
+        "status",
         "created_by",
         "created_at",
         "updated_at",
         "committed_at",
         "committed_by",
     )
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        if "delete_selected" in actions:
+            del actions["delete_selected"]
+        return actions
 
     def get_queryset(self, request):
         """Optimizes the queryset by pre-fetching related user objects."""
@@ -448,182 +455,73 @@ class ChangeSetAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
 
         This action commits the selected changesets, making the changes live. Only changesets in the DRAFT state can be
         committed.
-
-        Args:
-            request: The HttpRequest object.
-            queryset: The queryset of selected ChangeSet objects.
         """
         from django.db import transaction
-        from django.utils import timezone
 
-        from .models import Cluster, ClusterData, ClusterFleetLabel, ClusterIntent, ClusterTag, Group, GroupData
-
-        top_level_models = [Group, Cluster]
-        child_models = [ClusterTag, ClusterIntent, ClusterFleetLabel, ClusterData, GroupData]
-
+        success_count = 0
         with transaction.atomic():
             for changeset in queryset:
-                if changeset.status != ChangeSet.Status.DRAFT:
-                    self.message_user(request, f"ChangeSet '{changeset}' is not in draft state.", level="warning")
-                    continue
+                try:
+                    changeset.commit(request.user)
+                    success_count += 1
+                except ValueError as e:
+                    self.message_user(request, str(e), level="warning")
 
-                # Process top-level entities
-                for model in top_level_models:
-                    draft_entities = model.objects.filter(changeset_id=changeset.id, is_live=False)
-                    for draft_entity in draft_entities:
-                        live_entity = (
-                            model.objects.filter(shared_entity_id=draft_entity.shared_entity_id, is_live=True).first()
-                            if draft_entity.shared_entity_id
-                            else None
-                        )
-
-                        if draft_entity.is_pending_deletion:
-                            if live_entity:
-                                live_entity.delete()  # Delete the original live entity
-                            draft_entity.delete()  # Delete the deletion draft
-                            continue
-
-                        if live_entity:
-                            # Demote the old live entity to historical.
-                            live_entity.is_locked = False
-                            live_entity.locked_by_changeset = None
-                            live_entity.is_live = False
-                            live_entity.obsoleted_by_changeset = changeset
-                            live_entity.save()
-
-                            # Promote the draft entity to live.
-                            draft_entity.is_live = True
-                            draft_entity.changeset_id = None
-                            draft_entity.is_locked = False
-                            draft_entity.locked_by_changeset = None
-                            draft_entity.draft_of = None
-                            draft_entity.save()
-
-                            # Cascade updates for relationships pointing to the old live entity.
-                            if model == Group:
-                                # Update primary group FK on Clusters.
-                                Cluster.objects.filter(group=live_entity).update(group=draft_entity)
-                                # Update secondary group M2M on Clusters.
-                                clusters_with_secondary = Cluster.objects.filter(secondary_groups=live_entity)
-                                for cluster in clusters_with_secondary:
-                                    cluster.secondary_groups.remove(live_entity)
-                                    cluster.secondary_groups.add(draft_entity)
-                        else:
-                            # This is a new entity, just promote it to live.
-                            draft_entity.is_live = True
-                            draft_entity.changeset_id = None
-                            draft_entity.is_locked = False
-                            draft_entity.locked_by_changeset = None
-                            draft_entity.draft_of = None
-                            draft_entity.save()
-
-                # Process child entities
-                for model in child_models:
-                    draft_entities = model.objects.filter(changeset_id=changeset.id, is_live=False)
-                    for draft_entity in draft_entities:
-                        # Child entities don't have shared_entity_id, they are linked to the parent
-                        # The logic to find the old live entity is more complex and depends on the parent.
-                        # For now, we just activate the draft entities.
-                        draft_entity.is_live = True
-                        draft_entity.changeset_id = None
-                        draft_entity.save()
-
-                changeset.status = ChangeSet.Status.COMMITTED
-                changeset.committed_at = timezone.now()
-                changeset.committed_by = request.user
-                changeset.save()
-                self.message_user(request, f"ChangeSet '{changeset}' has been committed.")
+        if success_count > 0:
+            self.message_user(request, f"{success_count} ChangeSet(s) successfully committed.")
 
     commit_changeset.short_description = "Commit selected ChangeSets"
 
-    def discard_changeset(self, request, queryset):
-        """Discards the selected changesets.
+    def abandon_changeset(self, request, queryset):
+        """Abandons the selected changesets.
 
-        This action discards the selected changesets, deleting all associated draft data. Only changesets in the DRAFT
-        state can be discarded.
-
-        Args:
-            request: The HttpRequest object.
-            queryset: The queryset of selected ChangeSet objects.
+        This action abandons the selected changesets, deleting all associated draft data. Only changesets in the DRAFT
+        state can be abandoned.
         """
         from django.db import transaction
 
-        from .models import Cluster, ClusterData, ClusterFleetLabel, ClusterIntent, ClusterTag, Group, GroupData
-
-        top_level_models = [Group, Cluster]
-        child_models = [ClusterTag, ClusterIntent, ClusterFleetLabel, ClusterData, GroupData]
-
+        success_count = 0
         with transaction.atomic():
             for changeset in queryset:
-                if changeset.status != ChangeSet.Status.DRAFT:
-                    self.message_user(request, f"ChangeSet '{changeset}' is not in draft state.", level="warning")
-                    continue
+                try:
+                    changeset.abandon()
+                    success_count += 1
+                except ValueError as e:
+                    self.message_user(request, str(e), level="warning")
 
-                # Unlock parent live entities
-                for model in top_level_models:
-                    # Find live entities locked by this changeset
-                    locked_live_entities = model.objects.filter(locked_by_changeset=changeset, is_live=True)
-                    for entity in locked_live_entities:
-                        entity.is_locked = False
-                        entity.locked_by_changeset = None
-                        entity.save()
+        if success_count > 0:
+            self.message_user(request, f"{success_count} ChangeSet(s) successfully abandoned.")
 
-                # Delete draft rows
-                for model in top_level_models:
-                    model.objects.filter(changeset_id=changeset.id, is_live=False).delete()
-
-                for model in child_models:
-                    model.objects.filter(changeset_id=changeset.id, is_live=False).delete()
-
-                changeset.delete()
-                self.message_user(request, f"ChangeSet '{changeset}' has been discarded.")
-
-    discard_changeset.short_description = "Discard selected ChangeSets"
+    abandon_changeset.short_description = "Abandon selected ChangeSets"
 
     def coalesce_changesets(self, request, queryset):
         """Coalesces multiple changesets into a single one.
 
         This action merges multiple changesets into a single target changeset. The target changeset is the first one
         selected. All other selected changesets will be merged into the target changeset and then deleted.
-
-        Args:
-            request: The HttpRequest object.
-            queryset: The queryset of selected ChangeSet objects.
         """
         from django.db import transaction
-
-        from .models import Cluster, ClusterData, ClusterFleetLabel, ClusterIntent, ClusterTag, Group, GroupData
 
         if queryset.count() < 2:
             self.message_user(request, "Please select at least two ChangeSets to coalesce.", level="warning")
             return
 
         with transaction.atomic():
-            target_changeset = queryset.first()
-            source_changesets = queryset.exclude(pk=target_changeset.pk)
+            # Ensure consistent ordering
+            sorted_qs = queryset.order_by("pk")
+            target_changeset = sorted_qs.first()
+            source_changesets = sorted_qs.exclude(pk=target_changeset.pk)
 
-            top_level_models = [Group, Cluster]
-            child_models = [ClusterTag, ClusterIntent, ClusterFleetLabel, ClusterData, GroupData]
-
+            success_count = 0
             for changeset in source_changesets:
-                if changeset.status != ChangeSet.Status.DRAFT:
-                    self.message_user(request, f"ChangeSet '{changeset}' is not in draft state.", level="warning")
-                    continue
+                try:
+                    changeset.coalesce(target_changeset)
+                    success_count += 1
+                except ValueError as e:
+                    self.message_user(request, str(e), level="warning")
 
-                # Re-point the locks on live entities from the source to the target changeset.
-                for model in top_level_models:
-                    model.objects.filter(locked_by_changeset=changeset).update(locked_by_changeset=target_changeset)
-
-                # Move draft entities from the source to the target changeset.
-                for model in top_level_models:
-                    model.objects.filter(changeset_id=changeset.id).update(changeset_id=target_changeset.id)
-
-                for model in child_models:
-                    model.objects.filter(changeset_id=changeset.id).update(changeset_id=target_changeset.id)
-
-                changeset.delete()
-
-            self.message_user(request, f"Coalesced ChangeSets into '{target_changeset}'.")
+            if success_count > 0:
+                self.message_user(request, f"Coalesced {success_count} ChangeSets into '{target_changeset}'.")
 
     coalesce_changesets.short_description = "Coalesce selected ChangeSets"
 

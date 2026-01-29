@@ -1,5 +1,5 @@
 ###############################################################################
-# Copyright 2024 Google, LLC
+# Copyright 2026 Google, LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -82,6 +82,7 @@ MIDDLEWARE += [
     "django.contrib.sessions.middleware.SessionMiddleware",
     "parameter_store.middleware.changeset_middleware",
     "django.middleware.common.CommonMiddleware",
+    "api.middleware.DisableCsrfForApiMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",

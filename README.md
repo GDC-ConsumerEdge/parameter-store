@@ -47,13 +47,15 @@ of a broader suite of solutions. This tool conveys the following immediate benef
     * Supporting integration
       with [cluster provisioner](https://github.com/GDC-ConsumerEdge/automated-cluster-provisioner)
     * Supporting integration with [hydrator](https://github.com/GDC-ConsumerEdge/hydrator)
-* Integrates with Google [IAP](https://cloud.google.com/security/products/iap?hl=en) for authentication and
+*   Integrates with Google [IAP](https://cloud.google.com/security/products/iap?hl=en) for authentication and
   authorization
-* Supports granular role-based access controls
-* Provides a REST API
-* Supports data validation workflows
+*   Supports granular role-based access controls
+*   Provides a REST API utilizing stable Entity IDs (UUIDs)
+*   Supports ChangeSet-based atomic updates and data versioning
+*   Supports data validation workflows
 
 ## Getting Started
+
 
 Go through all of the steps below to get started
 
@@ -390,6 +392,15 @@ files from `/workspace` into it, and then commits and pushes these files to a ne
     * Alternatively, the superuser may prepopulate users based on user identity information. Please refer
       to [users-and-permissions.md](docs/users-and-permissions.md) for more information.
 
+### ChangeSet Workflow
+
+Parameter Store uses a **ChangeSet** system for all data modifications.
+- **Staging**: Every create, update, or delete is first staged as a "Draft" in a ChangeSet.
+- **Atomicity**: Multiple changes can be grouped and committed to the "Live" environment at once.
+- **Versioning**: Committing a change promotes the draft to live and preserves the previous version in the history trail.
+
+For a detailed walkthrough, see the [User Guide](docs/user-guide.md).
+
 ## Data Loading
 
 EPS can support data loading while running in Cloud SQL. Terraform sets up EPS infrastructure to deploy Cloud SQL with
@@ -597,6 +608,8 @@ uv run pytest -vv -k "test_commit_changeset"
 
 Please see [docs](./docs) for more documentation:
 
+* [User Guide (ChangeSets)](docs/user-guide.md)
+* [Verification Walkthrough (API)](docs/verification-walkthrough.md)
 * [Users and Permissions](docs/users-and-permissions.md)
 * [Programmatic Access with Google Service Accounts via IAP](docs/iap-programmatic-access.md)
 
