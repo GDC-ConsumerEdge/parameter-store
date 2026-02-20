@@ -1,67 +1,111 @@
-# Parameter Store
+# Edge Parameter Store (EPS)
+
+**Parameter Store (EPS)** is a centralized management system designed to hold, version, and validate configuration parameters for large-scale deployments of Google Distributed Cloud (GDC) Connected clusters.
+
+Optimized for retail edge environments, EPS scales to support tens of thousands of clusters, serving as the source of truth for downstream automation tools like the [Cluster Provisioner](https://github.com/GDC-ConsumerEdge/automated-cluster-provisioner) and [Hydrator](https://github.com/GDC-ConsumerEdge/hydrator).
+
+---
 
 <!-- TOC -->
-
-* [Parameter Store](#parameter-store)
-    * [Description](#description)
-    * [Getting Started](#getting-started)
-        * [Preparation](#preparation)
-            * [Install required tools](#install-required-tools)
-            * [Configure GCP OAuth Consent Screen](#configure-gcp-oauth-consent-screen)
-            * [Parameter Store Domain Name](#parameter-store-domain-name)
-            * [Prepare fully-qualified domain name of Parameter Store app](#prepare-fully-qualified-domain-name-of-parameter-store-app)
-            * [TLS Certificate](#tls-certificate)
-        * [Build Image](#build-image)
-        * [Deploy to GCP](#deploy-to-gcp)
-            * [System Diagram](#system-diagram)
-            * [Initialize Terraform](#initialize-terraform)
-            * [Terraform Configuration Variables](#terraform-configuration-variables)
-            * [Deploy Parameter Store App](#deploy-parameter-store-app)
-            * [Rerun Terraform After First Apply](#rerun-terraform-after-first-apply)
-            * [Teardown](#teardown)
-    * [Cloudbuild Pipeline](#cloudbuild-pipeline)
-    * [Operate Parameter Store](#operate-parameter-store)
-    * [Data Loading](#data-loading)
-        * [Terraform](#terraform)
-        * [How Does Data Loading Work?](#how-does-data-loading-work)
-    * [Local Dev](#local-dev)
-        * [Postgres Setup](#postgres-setup)
-        * [Python Setup](#python-setup)
-        * [Django Setup](#django-setup)
-    * [Additional Documentation](#additional-documentation)
-    * [Appendix](#appendix)
-        * [Possible Errors](#possible-errors)
-        * [Dev Hacks](#dev-hacks)
-    * [Disclaimer](#disclaimer)
-
+* [Edge Parameter Store (EPS)](#edge-parameter-store-eps)
+  * [What is Parameter Store?](#what-is-parameter-store)
+  * [Core Concepts](#core-concepts)
+    * [ChangeSets: Safe, Versioned Updates](#changesets-safe-versioned-updates)
+    * [Clusters & Groups: Flexible Organization](#clusters--groups-flexible-organization)
+    * [Custom Data: User-Defined Extensibility](#custom-data-user-defined-extensibility)
+    * [GDC Connected: Prescriptive Intent](#gdc-connected-prescriptive-intent)
+    * [Fleet Labels & Tags](#fleet-labels--tags)
+    * [Data Validation](#data-validation)
+  * [Key Benefits](#key-benefits)
+  * [Getting Started](#getting-started)
+    * [Preparation](#preparation)
+      * [Install required tools](#install-required-tools)
+      * [Bootstrap the EPS GCP Project](#bootstrap-the-eps-gcp-project)
+      * [Configure GCP OAuth Consent Screen](#configure-gcp-oauth-consent-screen)
+      * [Identify a domain name](#identify-a-domain-name)
+      * [TLS Certificate](#tls-certificate)
+    * [Build Image](#build-image)
+    * [Deploy GCP Infrastructure](#deploy-gcp-infrastructure)
+      * [System Diagram](#system-diagram)
+      * [Initialize Terraform](#initialize-terraform)
+      * [Terraform Configuration Variables](#terraform-configuration-variables)
+      * [Deploy Parameter Store App](#deploy-parameter-store-app)
+      * [Rerun Terraform After First Apply](#rerun-terraform-after-first-apply)
+      * [Teardown](#teardown)
+  * [Cloudbuild Pipeline](#cloudbuild-pipeline)
+  * [Operate Parameter Store](#operate-parameter-store)
+    * [ChangeSet Workflow](#changeset-workflow)
+  * [Data Loading](#data-loading)
+    * [Terraform](#terraform)
+    * [How Does Data Loading Work?](#how-does-data-loading-work)
+  * [Local Dev](#local-dev)
+    * [Postgres Setup](#postgres-setup)
+    * [Python Setup](#python-setup)
+    * [Django Setup](#django-setup)
+  * [Testing](#testing)
+    * [Running Tests](#running-tests)
+  * [Additional Documentation](#additional-documentation)
+  * [Appendix](#appendix)
+    * [Possible Errors](#possible-errors)
+    * [Dev Hacks](#dev-hacks)
+  * [Disclaimer](#disclaimer)
 <!-- TOC -->
 
-## Description
+## What is Parameter Store?
 
-This repository contains the Parameter Store, a Django application that is built to hold parameter data for
-deployments of Google Distributed Cloud Connected clusters where the number of clusters may scale to tens of
-thousands. It is meant to be deployed in support of other solutions and tools (in this Github organization) and as part
-of a broader suite of solutions. This tool conveys the following immediate benefits:
+Think of EPS as a **library** for your cluster configurations.
 
-* Stores cluster parameters specifically matching a retail edge use case
-    * Supporting integration
-      with [cluster provisioner](https://github.com/GDC-ConsumerEdge/automated-cluster-provisioner)
-    * Supporting integration with [hydrator](https://github.com/GDC-ConsumerEdge/hydrator)
-*   Integrates with Google [IAP](https://cloud.google.com/security/products/iap?hl=en) for authentication and
-  authorization
-*   Supports granular role-based access controls
-*   Provides a REST API utilizing stable Entity IDs (UUIDs)
-*   Supports ChangeSet-based atomic updates and data versioning
-*   Supports data validation workflows
+*   **Live Data**: These are the active configurations currently "on the shelves," accessible by your automation and tools.
+*   **ChangeSets**: This is your personal workspace. When you need to add or modify data, you do it here first, away from the live environment.
+*   **Commits**: When your work is ready, you "commit" it, publishing your changes to the live environment for everyone to see.
+
+EPS isn't just a database; it's a collaborative environment that ensures data integrity and provides a full audit trail for every configuration change across your fleet.
+
+## Core Concepts
+
+### ChangeSets: Safe, Versioned Updates
+The ChangeSet system is the heart of EPS. It allows you to group related modifications—edits, creations, and deletions—into a single unit of work.
+*   **Drafting**: Changes are staged as "Drafts" first. The original "Live" data remains unchanged until you decide to commit.
+*   **Atomicity**: Update multiple clusters or groups simultaneously in a single transaction.
+*   **Versioning**: Every commit promotes the draft to live and preserves the previous version in a history trail.
+
+### Clusters & Groups: Flexible Organization
+EPS organizes your fleet using a flexible hierarchical model.
+*   **Groups**: Logical collections of clusters (e.g., `Region: West`, `Store Type: Flagship`).
+*   **Clusters**: Individual GDC Connected units. Each cluster belongs to a primary **Group** and can be associated with multiple **Secondary Groups**, allowing for complex, overlapping organizational structures.
+
+### Custom Data: User-Defined Extensibility
+While EPS provides a prescriptive core, it is highly extensible to meet unique business needs. This custom data is often the primary focus for tools like the [Hydrator](https://github.com/GDC-ConsumerEdge/hydrator), which consumes both prescriptive and user-defined parameters to configure cluster workloads.
+*   **Custom Data Fields**: Define your own fields (e.g., `back-office-ip`, `local-manager-name`) via the Admin UI.
+*   **Entity Association**: Attach these custom fields to either **Clusters** or **Groups**. Group-level custom data is particularly powerful for defining parameters shared by all clusters within that group.
+
+### GDC Connected: Prescriptive Intent
+EPS is designed specifically for the **Google Distributed Cloud (GDC) Connected** retail use case.
+*   **Cluster Intent**: This provides the prescriptive technical parameters required by the [Cluster Provisioner](https://github.com/GDC-ConsumerEdge/automated-cluster-provisioner) to bootstrap new clusters.
+*   **Direct Mapping**: Fields like `unique_zone_id`, `cluster_ipv4_cidr`, and `sync_repo` map directly to GDC Connected requirements, ensuring that the data you manage in EPS is ready for downstream automation without translation.
+
+### Fleet Labels & Tags
+Organize your clusters at scale.
+*   **Fleet Labels**: Key/value pairs (e.g., `region: northeast`) that allow you to group clusters for specific operations.
+*   **Tags**: String-based identifiers used for advanced filtering via the REST API.
+
+### Data Validation
+Never deploy a bad config again. EPS uses **Validators** to enforce rules on field values. Whether it's a simple enum or complex logic, EPS ensures your data conforms to your requirements before it ever hits production.
+
+## Key Benefits
+
+*   **Retail Edge Scale**: Built to handle tens of thousands of GDC Connected clusters.
+*   **Secure Access**: Integrates with [Google IAP](https://cloud.google.com/security/products/iap) for robust authentication and granular RBAC.
+*   **Stable Identity**: Provides a REST API using persistent UUIDs (Shared Entity IDs) that stay the same even as the configuration version changes.
+*   **Full Audit Trail**: Track who changed what, and when, with built-in version history.
 
 ## Getting Started
 
+To get the Parameter Store up and running, follow these steps in order:
 
-Go through all of the steps below to get started
-
-- Preparation
-- Build Image
-- Deploy to GCP
+1.  **Preparation**: Install tools and configure GCP.
+2.  **Build Image**: Containerize the Django application.
+3.  **Deploy GCP Infrastructure**: Use Terraform to provision resources.
 
 ### Preparation
 
@@ -76,7 +120,7 @@ This section outlines steps that the user must perform
 * [psql client](https://docs.timescale.com/use-timescale/latest/integrations/query-admin/psql/)
   or [pgadmin](https://www.pgadmin.org/download/)
 
-### Bootstrap the EPS GCP Project
+#### Bootstrap the EPS GCP Project
 
 The Terraform [README](examples/terraform/README.md) document details the GCP Service Accounts (GSA) that are required
 for this project. Please ensure you have created a service account for Terraform with the required roles.
@@ -100,7 +144,7 @@ terraform apply
    Configure the OAuth consent screen as External and set the publishing status to In Production.
    ![oauth_consent.gif](./docs/doc_assets/oauth_consent.gif)
 
-#### Identify a domain name for the Parameter Store application
+#### Identify a domain name
 
 Choose a fully qualified domain name for your application. The Terraform provides an opinionated configuration for
 the utilization of your FQDN, creating a managed zone in the deployment project. This assumes you will create a
