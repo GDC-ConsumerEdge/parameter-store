@@ -398,6 +398,7 @@ Parameter Store uses a **ChangeSet** system for all data modifications.
 - **Staging**: Every create, update, or delete is first staged as a "Draft" in a ChangeSet.
 - **Atomicity**: Multiple changes can be grouped and committed to the "Live" environment at once.
 - **Versioning**: Committing a change promotes the draft to live and preserves the previous version in the history trail.
+- **Error Handling**: During commit, if a database constraint is violated (e.g., a unique constraint), the system returns a detailed `422 Unprocessable Entity` response. Error keys are enriched to pinpoint the specific entity and field causing the issue, formatted as: `EntityClass 'EntityName' (field_name)`.
 
 For a detailed walkthrough, see the [User Guide](docs/user-guide.md).
 

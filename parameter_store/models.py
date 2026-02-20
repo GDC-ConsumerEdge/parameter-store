@@ -25,7 +25,11 @@ from django.db.models.query import Prefetch
 from django.utils import timezone
 
 from parameter_store.constraints import top_level_constraints
-from parameter_store.util import get_class_from_full_path, inspect_callable_signature
+from parameter_store.util import (
+    capture_db_errors,
+    get_class_from_full_path,
+    inspect_callable_signature,
+)
 from parameter_store.validation import BaseValidator
 
 logger = logging.getLogger(__name__)
@@ -177,6 +181,52 @@ class ChangeSet(models.Model):
         if self.status != self.Status.DRAFT:
             raise ValueError(f"ChangeSet '{self.name}' is not in draft state.")
 
+        def _save_with_context(entity, model_cls):
+            """
+            Helper to save an entity within a database error capturing context.
+
+            This wraps the save operation with `capture_db_errors` to catch integrity
+            violations and transform them into descriptive `ValidationError`s that
+            include context about the root entity (Cluster or Group) being affected.
+
+            Args:
+                entity: The model instance to save.
+                model_cls: The Django model class of the entity.
+
+            Raises:
+                ValidationError: If a database integrity error occurs, enriched with entity context.
+            """
+            try:
+                with transaction.atomic():
+                    with capture_db_errors(model_class=model_cls):
+                        entity.save()
+            except ValidationError as e:
+                # Determine the root entity (Cluster or Group) to provide better context in the error message.
+                root = entity
+                if hasattr(entity, "cluster"):
+                    root = entity.cluster
+                elif hasattr(entity, "group"):
+                    root = entity.group
+
+                # Use the string representation of the root entity for the description.
+                root_desc = str(root)
+
+                # Enrich the ValidationError with more descriptive keys.
+                new_errors = {}
+                if hasattr(e, "message_dict"):
+                    for field, errs in e.message_dict.items():
+                        # Key format: "EntityClass 'EntityName' (field_name)"
+                        # This makes the error key unique per entity and highly descriptive for the user.
+                        new_key = f"{root.__class__.__name__} '{root_desc}' ({field})"
+                        new_errors[new_key] = errs
+                else:
+                    # Fallback if there is no message_dict (non-field errors).
+                    new_key = f"{root.__class__.__name__} '{root_desc}'"
+                    new_errors[new_key] = e.messages
+
+                # Re-raise as a new ValidationError, chaining from the original.
+                raise ValidationError(new_errors) from e
+
         top_level_models = [Group, Cluster]
         child_models = [ClusterTag, ClusterIntent, ClusterFleetLabel, ClusterData, GroupData]
 
@@ -237,7 +287,7 @@ class ChangeSet(models.Model):
                         draft_entity.is_locked = False
                         draft_entity.locked_by_changeset = None
                         draft_entity.draft_of = None
-                        draft_entity.save()
+                        _save_with_context(draft_entity, model)
 
                         # Cascade updates
                         if model == Group:
@@ -253,7 +303,7 @@ class ChangeSet(models.Model):
                         draft_entity.is_locked = False
                         draft_entity.locked_by_changeset = None
                         draft_entity.draft_of = None
-                        draft_entity.save()
+                        _save_with_context(draft_entity, model)
 
             # Process child entities (that were drafted directly, e.g. edits to children)
             for model in child_models:
@@ -261,7 +311,7 @@ class ChangeSet(models.Model):
                 for draft_entity in draft_entities:
                     draft_entity.is_live = True
                     draft_entity.changeset_id = None
-                    draft_entity.save()
+                    _save_with_context(draft_entity, model)
 
             self.status = self.Status.COMMITTED
             self.committed_at = timezone.now()
@@ -605,11 +655,19 @@ class ClusterIntent(ChangeSetAwareChildEntity, DynamicValidatingModel):
         verbose_name = "Cluster Intent"
         verbose_name_plural = "Cluster Intent"
         constraints = [
+            # Ensures that each live cluster has a unique zone ID globally.
             models.UniqueConstraint(
                 fields=["unique_zone_id"],
                 condition=models.Q(is_live=True),
                 name="unique_live_clusterintent_zone_id",
-            )
+            ),
+            # Prevents multiple drafts in the same changeset from claiming the same zone ID.
+            # Effect: Users cannot create two "New Cluster" drafts both claiming 'us00097' in one changeset.
+            models.UniqueConstraint(
+                fields=["unique_zone_id", "changeset_id"],
+                condition=models.Q(is_live=False, changeset_id__isnull=False),
+                name="unique_draft_clusterintent_zone_id",
+            ),
         ]
 
     cluster = models.OneToOneField(Cluster, on_delete=models.CASCADE, related_name="intent")
@@ -735,7 +793,18 @@ class ClusterFleetLabel(ChangeSetAwareChildEntity, DynamicValidatingModel):
     class Meta:
         verbose_name = "Cluster Fleet Label"
         verbose_name_plural = "Cluster Fleet Labels"
-        constraints = [models.UniqueConstraint(fields=["cluster", "key"], name="unique_cluster_key")]
+        constraints = [
+            # Prevents duplicate fleet label keys for the same live cluster.
+            models.UniqueConstraint(
+                fields=["cluster", "key"], condition=models.Q(is_live=True), name="unique_cluster_key"
+            ),
+            # Prevents duplicate fleet label keys for the same cluster within a single changeset.
+            models.UniqueConstraint(
+                fields=["cluster", "key", "changeset_id"],
+                condition=models.Q(is_live=False, changeset_id__isnull=False),
+                name="unique_draft_cluster_key",
+            ),
+        ]
 
     cluster = models.ForeignKey(Cluster, on_delete=models.CASCADE, related_name="fleet_labels")
     key = models.CharField(max_length=63, blank=False, null=False)
@@ -811,7 +880,18 @@ class ClusterData(ChangeSetAwareChildEntity, CustomDataValidatingModel):
     class Meta:
         verbose_name = "Cluster Custom Data"
         verbose_name_plural = "Cluster Custom Data"
-        constraints = [models.UniqueConstraint(fields=["cluster", "field"], name="unique_cluster_field")]
+        constraints = [
+            # Prevents duplicate live custom data fields for the same cluster.
+            models.UniqueConstraint(
+                fields=["cluster", "field"], condition=models.Q(is_live=True), name="unique_cluster_field"
+            ),
+            # Prevents duplicate custom data fields for the same cluster within a single changeset.
+            models.UniqueConstraint(
+                fields=["cluster", "field", "changeset_id"],
+                condition=models.Q(is_live=False, changeset_id__isnull=False),
+                name="unique_draft_cluster_field",
+            ),
+        ]
 
     cluster = models.ForeignKey(Cluster, on_delete=models.CASCADE, related_name="cluster_data")
     field = models.ForeignKey(CustomDataField, on_delete=models.CASCADE)
@@ -827,7 +907,18 @@ class GroupData(ChangeSetAwareChildEntity, CustomDataValidatingModel):
     class Meta:
         verbose_name = "Group Custom Data"
         verbose_name_plural = "Group Custom Data"
-        constraints = [models.UniqueConstraint(fields=["group", "field"], name="unique_group_field")]
+        constraints = [
+            # Prevents duplicate live custom data fields for the same group.
+            models.UniqueConstraint(
+                fields=["group", "field"], condition=models.Q(is_live=True), name="unique_group_field"
+            ),
+            # Prevents duplicate custom data fields for the same group within a single changeset.
+            models.UniqueConstraint(
+                fields=["group", "field", "changeset_id"],
+                condition=models.Q(is_live=False, changeset_id__isnull=False),
+                name="unique_draft_group_field",
+            ),
+        ]
 
     group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="group_data")
     field = models.ForeignKey(CustomDataField, on_delete=models.CASCADE)

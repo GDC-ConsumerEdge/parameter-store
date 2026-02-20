@@ -17,16 +17,94 @@
 import importlib
 import inspect
 import typing
+from contextlib import contextmanager
 from typing import Callable
 
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.utils.safestring import mark_safe
 
 if typing.TYPE_CHECKING:
+    from django.db import models
     from django.http import HttpRequest
 
     from .models import ChangeSet
 
 from django.conf import settings
+
+
+@contextmanager
+def capture_db_errors(model_class: typing.Type["models.Model"] | None = None):
+    """
+    Context manager to capture database integrity errors and raise them as ValidationErrors.
+
+    This is useful for bubbling up database constraints (like unique constraints) to the UI/API layer
+    as user-friendly errors. It attempts to parse the database error message and map it back to
+    the specific fields on the model if possible.
+
+    Args:
+        model_class: The Django model class being operated on. If provided, the error message
+                     can be more specific about fields by looking up constraints in the model's Meta.
+
+    Raises:
+        ValidationError: If an IntegrityError is caught and can be parsed into a more user-friendly message.
+    """
+    try:
+        yield
+    except IntegrityError as e:
+        # The database error message often contains technical details we want to parse.
+        error_msg = str(e)
+        constraint_name = None
+
+        # Attempt to parse the constraint name from the error message.
+        # Postgres errors look like: ... violates unique constraint "constraint_name"
+        # or: ... violates check constraint "constraint_name"
+        if 'violates unique constraint "' in error_msg:
+            start = error_msg.find('violates unique constraint "') + len('violates unique constraint "')
+            end = error_msg.find('"', start)
+            constraint_name = error_msg[start:end]
+        elif 'violates check constraint "' in error_msg:
+            start = error_msg.find('violates check constraint "') + len('violates check constraint "')
+            end = error_msg.find('"', start)
+            constraint_name = error_msg[start:end]
+
+        field_messages = {}
+
+        # If we have both the model class and the constraint name, we can try to find
+        # the specific fields that caused the violation.
+        if model_class and constraint_name:
+            # Try to find the constraint in the model definition
+            for constraint in model_class._meta.constraints:
+                # We need to handle the case where %(class)s was used in the constraint name
+                # in the model's Meta class.
+                actual_name = constraint.name % {"class": model_class.__name__.lower()}
+                if actual_name == constraint_name:
+                    # Found the constraint!
+                    # For UniqueConstraint, we can point to the specific fields involved.
+                    if hasattr(constraint, "fields"):
+                        for field_name in constraint.fields:
+                            field_messages[field_name] = (
+                                f"This value violates the unique constraint '{constraint_name}'."
+                            )
+                    else:
+                        # For CheckConstraint or others, we might not have 'fields' defined.
+                        # Use the non-field errors key (__all__).
+                        field_messages["__all__"] = f"Database constraint violation: {constraint_name}"
+                    break
+
+        # If we successfully mapped the error to specific fields, raise a ValidationError with that map.
+        if field_messages:
+            raise ValidationError(field_messages)
+        else:
+            # Fallback to a generic message if we couldn't map it to a field.
+            # Check for "DETAIL: Key (...) already exists" in postgres errors, which is often
+            # the most useful part of the error message for the user.
+            detail_start = error_msg.find("DETAIL:  ")
+            if detail_start != -1:
+                detail_msg = error_msg[detail_start + len("DETAIL:  ") :]
+                raise ValidationError(f"Database integrity error: {detail_msg}")
+            # If no detail found, just use the raw error message.
+            raise ValidationError(f"Database integrity error: {error_msg}")
 
 
 def get_class_from_full_path(full_path):
