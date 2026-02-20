@@ -23,6 +23,7 @@ from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group as AuthGroupModel
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from guardian.admin import GuardedModelAdmin
 
 from .admin_inlines import (
@@ -230,6 +231,8 @@ class ClusterAdmin(ChangeSetAwareAdminMixin, GuardedModelAdmin, uadmin.ModelAdmi
             cluster_data.is_live = False
             # Associate the new child object with the active changeset.
             cluster_data.changeset_id = changeset
+            # Note: We pass the ChangeSet object here instead of just the ID to ensure
+            # correct object representation and potential use in model clean/save methods.
             cluster_data.save()
 
         # Iterate over all fleet labels related to the original cluster.
@@ -328,7 +331,9 @@ class GroupAdmin(ChangeSetAwareAdminMixin, GuardedModelAdmin, uadmin.ModelAdmin)
             # Mark the new child object as a draft.
             group_data.is_live = False
             # Associate the new child object with the active changeset.
-            group_data.changeset_id = changeset.id
+            group_data.changeset_id = changeset
+            # Note: We pass the ChangeSet object here instead of just the ID to ensure
+            # correct object representation and potential use in model clean/save methods.
             group_data.save()
 
 
@@ -466,6 +471,15 @@ class ChangeSetAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
                     success_count += 1
                 except ValueError as e:
                     self.message_user(request, str(e), level="warning")
+                except ValidationError as e:
+                    # Capture and display detailed validation errors (including database integrity
+                    # violations that were caught and transformed into ValidationErrors).
+                    self.message_user(
+                        request,
+                        f"Validation Error in {changeset.name}: "
+                        f"{e.message_dict if hasattr(e, 'message_dict') else e.messages}",
+                        level="error",
+                    )
 
         if success_count > 0:
             self.message_user(request, f"{success_count} ChangeSet(s) successfully committed.")
