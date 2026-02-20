@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from django.forms import ModelForm
 from django.urls import resolve
 from unfold import admin as uadmin
+from unfold.widgets import UnfoldAdminSelectWidget
 
 from parameter_store.models import (
     ClusterData,
@@ -66,7 +67,7 @@ def get_tag_choices():
 
 
 class ClusterTagInlineForm(forms.ModelForm):
-    tag = forms.ChoiceField(choices=get_tag_choices)
+    tag = forms.ChoiceField(choices=get_tag_choices, widget=UnfoldAdminSelectWidget)
 
     class Meta:
         model = ClusterTag
@@ -111,7 +112,7 @@ def get_data_field_choices():
 
 
 class DataInlineForm(ModelForm):
-    field = forms.ChoiceField(choices=get_data_field_choices)
+    field = forms.ChoiceField(choices=get_data_field_choices, widget=UnfoldAdminSelectWidget)
 
     def clean_field(self):
         field_id = self.cleaned_data.get("field")
