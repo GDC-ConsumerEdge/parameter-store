@@ -1,5 +1,33 @@
 # Changelog
 
+## [3.0.0](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v2.0.0...v3.0.0) (2026-02-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* add changeset capabilites to API ([#104](https://github.com/GDC-ConsumerEdge/parameter-store/issues/104))
+
+### Features
+
+* add changeset capabilites to API ([#104](https://github.com/GDC-ConsumerEdge/parameter-store/issues/104)) ([0f29d2c](https://github.com/GDC-ConsumerEdge/parameter-store/commit/0f29d2ca3c3b218f207bc4b11409c87c16ea73f1))
+* **api:** add historical record visibility for a given entity within the API ([0f29d2c](https://github.com/GDC-ConsumerEdge/parameter-store/commit/0f29d2ca3c3b218f207bc4b11409c87c16ea73f1))
+* **api:** use entity UUID to uniquely idenfity a record within the API ([0f29d2c](https://github.com/GDC-ConsumerEdge/parameter-store/commit/0f29d2ca3c3b218f207bc4b11409c87c16ea73f1))
+* **changesets:** improve commit error handling and data integrity (fixes [#109](https://github.com/GDC-ConsumerEdge/parameter-store/issues/109)) ([d4a0727](https://github.com/GDC-ConsumerEdge/parameter-store/commit/d4a0727c60a6d13f9b476fe87940d23db6b78443))
+* remove duplicate ChangeSet management button from site header ([19b09e9](https://github.com/GDC-ConsumerEdge/parameter-store/commit/19b09e9721542ff009b2530df7a06286e7353641))
+
+
+### Bug Fixes
+
+* custom data fields now correctly populate within changeset and show when in changeset ([15f9e00](https://github.com/GDC-ConsumerEdge/parameter-store/commit/15f9e00b11f9ea06fb0a30d5caae03917d18440d))
+* dropdown rendering works ([#121](https://github.com/GDC-ConsumerEdge/parameter-store/issues/121)) ([3c50885](https://github.com/GDC-ConsumerEdge/parameter-store/commit/3c50885c0b7fd1fa7acfb2b13164eaa97119927a))
+* Exact failure where child entity constraint violations caused TransactionManagementError during commit. ([d4a0727](https://github.com/GDC-ConsumerEdge/parameter-store/commit/d4a0727c60a6d13f9b476fe87940d23db6b78443))
+* userlinks menubarneeded to change after upgrading django unfold ([7c8b2b9](https://github.com/GDC-ConsumerEdge/parameter-store/commit/7c8b2b9e06adfb8c10b35c664e886453b7112ff8))
+
+
+### Documentation
+
+* update README ([59f8693](https://github.com/GDC-ConsumerEdge/parameter-store/commit/59f8693e0b2cda841d7980bbc304e1236771d0f6))
+
 ## [2.0.0](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v1.2.1...v2.0.0) (2025-11-20)
 
 
