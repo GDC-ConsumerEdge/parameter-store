@@ -19,7 +19,7 @@ import uuid
 from collections import defaultdict
 
 from django.conf import settings  # Required for ForeignKey to User
-from django.core.exceptions import ValidationError
+from django.core.exceptions import FieldError, ValidationError
 from django.db import models
 from django.db.models.query import Prefetch
 from django.utils import timezone
@@ -281,6 +281,18 @@ class ChangeSet(models.Model):
                         live_entity.obsoleted_by_changeset = self
                         live_entity.save()
 
+                        # Retire associated live child entities manually since we aren't deleting the parent
+                        for child_model in child_models:
+                            # Determine the ForeignKey name pointing to the parent model
+                            fk_name = model.__name__.lower()
+                            filter_kwargs = {fk_name: live_entity, "is_live": True}
+                            try:
+                                child_model.objects.filter(**filter_kwargs).update(is_live=False)
+                            except FieldError:
+                                # This can happen if the child model doesn't have a direct FK to the parent
+                                # (though in our case they all should)
+                                pass
+
                         # Promote draft
                         draft_entity.is_live = True
                         draft_entity.changeset_id = None
@@ -288,6 +300,15 @@ class ChangeSet(models.Model):
                         draft_entity.locked_by_changeset = None
                         draft_entity.draft_of = None
                         _save_with_context(draft_entity, model)
+
+                        # Promote all child entities of the newly live parent
+                        for child_model in child_models:
+                            fk_name = model.__name__.lower()
+                            filter_kwargs = {fk_name: draft_entity, "is_live": False}
+                            try:
+                                child_model.objects.filter(**filter_kwargs).update(is_live=True, changeset_id=None)
+                            except FieldError:
+                                pass
 
                         # Cascade updates
                         if model == Group:

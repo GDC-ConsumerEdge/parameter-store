@@ -29,7 +29,10 @@ class ChangeSetAwareInlineMixin(uadmin.InlineModelAdmin):
         """
         Filters the queryset for the inline based on the parent object's status (live or draft).
         """
-        qs = super().get_queryset(request)
+        # Start with all objects of this model. We use the default manager to ensure
+        # we aren't pre-filtered by any admin class or manager that might only
+        # show live items.
+        qs = self.model.objects.all()
         resolver_match = resolve(request.path_info)
         parent_id = resolver_match.kwargs.get("object_id")
 

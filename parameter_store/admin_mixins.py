@@ -179,6 +179,8 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
             super().save_model(request, obj, form, change)
         elif obj.is_live:
             # This is an existing, live object. Intercept the save to create a draft.
+            # We must use the original object from the DB because 'obj' already has
+            # the new values from the form applied to it by Django.
             original_instance = self.model.objects.get(pk=obj.pk)
 
             if original_instance.is_locked:
@@ -214,6 +216,9 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
 
                     # Store the new draft's pk in the request to redirect to it later.
                     request._draft_created_pk = draft_instance.pk
+                    # Also store the draft_instance itself for use in save_related
+                    request._draft_instance = draft_instance
+
                     self.message_user(
                         request,
                         f"A draft was created for {original_instance.name} and your changes were saved to it.",
@@ -225,6 +230,43 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
         else:
             # This is an existing draft, save it normally.
             super().save_model(request, obj, form, change)
+
+    def save_related(self, request, form, formsets, change):
+        """
+        Ensures that if a draft was created during save_model, any related
+        inline objects are saved to the new draft instead of the live object.
+        """
+        if hasattr(request, "_draft_instance"):
+            # A draft was created in save_model. We need to save the inlines to the draft.
+            for formset in formsets:
+                formset.instance = request._draft_instance
+        super().save_related(request, form, formsets, change)
+
+    def save_formset(self, request, form, formset, change):
+        """
+        Ensures that newly created inline objects are correctly associated
+        with the active changeset if they are part of a draft parent.
+        """
+        instances = formset.save(commit=False)
+        for instance in instances:
+            # If the parent is a draft, ensure the child is also a draft and linked to the changeset
+            if hasattr(instance, "is_live") and hasattr(instance, "changeset_id"):
+                if not formset.instance.is_live:
+                    instance.is_live = False
+                    if not instance.changeset_id:
+                        # Copy changeset from parent
+                        instance.changeset_id = formset.instance.changeset_id
+                        # Fallback to session if parent doesn't have it
+                        if not instance.changeset_id:
+                            active_changeset_id = request.session.get("active_changeset_id")
+                            if active_changeset_id:
+                                instance.changeset_id_id = active_changeset_id
+            instance.save()
+        formset.save_m2m()
+
+        # Handle deletions
+        for obj in formset.deleted_objects:
+            obj.delete()
 
     def response_change(self, request, obj):
         """
