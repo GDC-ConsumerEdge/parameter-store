@@ -56,7 +56,7 @@ Project dependencies use uv.
 
 * Whenever applicable, always recommend a change to the `pyproject.toml`
 
-## Agent Instructions for NYP AI Middleware Project
+## Agent Instructions
 
 In this project, you will ALWAYS adhere to the following guidelines:
 
