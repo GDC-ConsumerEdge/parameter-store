@@ -342,12 +342,12 @@ UNFOLD = {
                         "link": reverse_lazy("admin:parameter_store_clusterfleetlabel_changelist"),
                     },
                     {
-                        "title": "Cluster Custom Data Fields",
+                        "title": "Custom Data Fields",
                         "icon": "people",
                         "link": reverse_lazy("admin:parameter_store_customdatafield_changelist"),
                     },
                     {
-                        "title": "Cluster Custom Data",
+                        "title": "Custom Data",
                         "icon": "people",
                         "link": reverse_lazy("admin:parameter_store_clusterdata_changelist"),
                     },
@@ -369,7 +369,7 @@ UNFOLD = {
                         "link": reverse_lazy("admin:parameter_store_validatorassignment_changelist"),
                     },
                     {
-                        "title": "Cluster Custom Data Validator Assignments",
+                        "title": "Custom Data Validator Assignments",
                         "icon": "edit_attributes",
                         "link": reverse_lazy("admin:parameter_store_customdatafieldvalidatorassignment_changelist"),
                     },

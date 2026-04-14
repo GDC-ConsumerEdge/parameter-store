@@ -912,8 +912,8 @@ class CustomDataValidatingModel(models.Model):
 
 class ClusterData(ChangeSetAwareChildEntity, CustomDataValidatingModel):
     class Meta:
-        verbose_name = "Cluster Custom Data"
-        verbose_name_plural = "Cluster Custom Data"
+        verbose_name = "Custom Data"
+        verbose_name_plural = "Custom Data"
         constraints = [
             # Prevents duplicate live custom data fields for the same cluster.
             models.UniqueConstraint(
