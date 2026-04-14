@@ -178,59 +178,68 @@ def update_tag(request: HttpRequest, tag_name: str, payload: TagUpdateRequest):
 
 
 @api_v1.get(
-    "/custom-data-fields",
+    "/data-fields",
     response={200: list[NameDescResponse], codes_4xx: MessageResponse},
     auth=django_auth,
-    summary="Get custom data fields",
-    tags=["Custom Data Fields"],
+    summary="Get data fields",
+    tags=["Data Fields"],
 )
 @ninja_paginate(LimitOffsetPagination)
 @require_permissions("api.params_api_read_customdatafield", "api.params_api_read_objects")
 def custom_data_fields(request):
     """
-    Returns a list of all custom data fields that have been defined in the system.
+    Returns a list of all data fields that have been defined in the system.
     """
     return CustomDataField.objects.all()
 
 
 @api_v1.post(
-    "/custom-data-fields",
+    "/data-fields",
     response={200: NameDescResponse, codes_4xx: MessageResponse},
     auth=django_auth,
-    summary="Create a new custom data field",
-    tags=["Custom Data Fields"],
+    summary="Create a new data field",
+    tags=["Data Fields"],
 )
 @require_permissions("api.params_api_create_customdatafield", "api.params_api_create_objects")
 def create_custom_data_field(request: HttpRequest, payload: CustomDataFieldCreateRequest):
     """
-    Creates a new custom data field.
+    Creates a new data field.
     """
     if CustomDataField.objects.filter(name=payload.name).exists():
-        return 409, {"message": f"Custom data field '{payload.name}' already exists."}
+        return 409, {"message": f"Data field '{payload.name}' already exists."}
 
     field = CustomDataField.objects.create(name=payload.name, description=payload.description)
     return 200, field
 
 
 @api_v1.put(
-    "/custom-data-fields/{field_name}",
+    "/data-fields/{field_name}",
     response={200: NameDescResponse, codes_4xx: MessageResponse},
     auth=django_auth,
-    summary="Update a custom data field",
-    tags=["Custom Data Fields"],
+    summary="Update a data field",
+    tags=["Data Fields"],
 )
 @require_permissions("api.params_api_update_customdatafield", "api.params_api_update_objects")
 def update_custom_data_field(request: HttpRequest, field_name: str, payload: CustomDataFieldUpdateRequest):
     """
-    Updates the description of an existing custom data field.
+    Updates the name or description of an existing data field.
     """
     try:
         field = CustomDataField.objects.get(name=field_name)
     except CustomDataField.DoesNotExist:
-        return 404, {"message": f"Custom data field '{field_name}' not found."}
+        return 404, {"message": f"Data field '{field_name}' not found."}
+
+    update_fields = ["updated_at"]
+    if payload.name is not None and payload.name != field.name:
+        if CustomDataField.objects.filter(name=payload.name).exists():
+            return 409, {"message": f"Data field '{payload.name}' already exists."}
+        field.name = payload.name
+        update_fields.append("name")
 
     if payload.description is not None:
         field.description = payload.description
-        field.save(update_fields=["description", "updated_at"])
+        update_fields.append("description")
+
+    field.save(update_fields=update_fields)
 
     return 200, field

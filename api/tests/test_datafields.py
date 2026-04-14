@@ -60,7 +60,7 @@ def test_get_custom_data_fields(permission_to_grant):
     CustomDataField.objects.create(name="field1", description="First field")
     CustomDataField.objects.create(name="field2", description="Second field")
 
-    response = client.get("/api/v1/custom-data-fields")
+    response = client.get("/api/v1/data-fields")
     assert response.status_code == 200
     data = response.json()
     assert data["count"] >= 2  # Could be more if other tests created some
@@ -82,7 +82,7 @@ def test_create_custom_data_field(permission_to_grant):
     client.force_login(user)
 
     payload = {"name": "new-field", "description": "A newly created field"}
-    response = client.post("/api/v1/custom-data-fields", data=payload, content_type="application/json")
+    response = client.post("/api/v1/data-fields", data=payload, content_type="application/json")
 
     assert response.status_code == 200, response.content
     data = response.json()
@@ -106,7 +106,7 @@ def test_create_custom_data_field_duplicate(permission_to_grant):
     CustomDataField.objects.create(name="existing-field", description="Already exists")
 
     payload = {"name": "existing-field", "description": "Duplicate attempt"}
-    response = client.post("/api/v1/custom-data-fields", data=payload, content_type="application/json")
+    response = client.post("/api/v1/data-fields", data=payload, content_type="application/json")
 
     assert response.status_code == 409
     assert "already exists" in response.json()["message"]
@@ -126,7 +126,7 @@ def test_update_custom_data_field(permission_to_grant):
     field = CustomDataField.objects.create(name="updatable-field", description="Old description")
 
     payload = {"description": "New description"}
-    response = client.put(f"/api/v1/custom-data-fields/{field.name}", data=payload, content_type="application/json")
+    response = client.put(f"/api/v1/data-fields/{field.name}", data=payload, content_type="application/json")
 
     assert response.status_code == 200
     data = response.json()
@@ -142,6 +142,32 @@ def test_update_custom_data_field(permission_to_grant):
     "permission_to_grant",
     ["api.params_api_update_customdatafield", "api.params_api_update_objects"],
 )
+def test_rename_data_field(permission_to_grant):
+    """Test renaming a data field."""
+    user = setup_user_with_permission(permission_to_grant)
+    client = Client()
+    client.force_login(user)
+
+    field = CustomDataField.objects.create(name="old-name", description="Old desc")
+
+    payload = {"name": "new-name", "description": "New desc"}
+    response = client.put(f"/api/v1/data-fields/{field.name}", data=payload, content_type="application/json")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["name"] == "new-name"
+    assert data["description"] == "New desc"
+
+    field.refresh_from_db()
+    assert field.name == "new-name"
+    assert field.description == "New desc"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "permission_to_grant",
+    ["api.params_api_update_customdatafield", "api.params_api_update_objects"],
+)
 def test_update_custom_data_field_not_found(permission_to_grant):
     """Test updating a non-existent custom data field returns 404."""
     user = setup_user_with_permission(permission_to_grant)
@@ -149,9 +175,7 @@ def test_update_custom_data_field_not_found(permission_to_grant):
     client.force_login(user)
 
     payload = {"description": "Should fail"}
-    response = client.put(
-        "/api/v1/custom-data-fields/non-existent-field", data=payload, content_type="application/json"
-    )
+    response = client.put("/api/v1/data-fields/non-existent-field", data=payload, content_type="application/json")
 
     assert response.status_code == 404
     assert "not found" in response.json()["message"]

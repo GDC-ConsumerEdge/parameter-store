@@ -852,8 +852,8 @@ class ClusterFleetLabel(ChangeSetAwareChildEntity, DynamicValidatingModel):
 
 class CustomDataField(models.Model):
     class Meta:
-        verbose_name = "Custom Data Field"
-        verbose_name_plural = "Custom Data Fields"
+        verbose_name = "Data Field"
+        verbose_name_plural = "Data Fields"
 
     name = models.CharField(max_length=64, blank=False, unique=True, null=False)
     description = models.CharField(max_length=255, null=True, blank=True)
@@ -912,8 +912,8 @@ class CustomDataValidatingModel(models.Model):
 
 class ClusterData(ChangeSetAwareChildEntity, CustomDataValidatingModel):
     class Meta:
-        verbose_name = "Custom Data"
-        verbose_name_plural = "Custom Data"
+        verbose_name = "Data"
+        verbose_name_plural = "Data"
         constraints = [
             # Prevents duplicate live custom data fields for the same cluster.
             models.UniqueConstraint(
@@ -939,8 +939,8 @@ class ClusterData(ChangeSetAwareChildEntity, CustomDataValidatingModel):
 
 class GroupData(ChangeSetAwareChildEntity, CustomDataValidatingModel):
     class Meta:
-        verbose_name = "Group Custom Data"
-        verbose_name_plural = "Group Custom Data"
+        verbose_name = "Data"
+        verbose_name_plural = "Data"
         constraints = [
             # Prevents duplicate live custom data fields for the same group.
             models.UniqueConstraint(
@@ -1073,8 +1073,8 @@ class ValidatorAssignment(models.Model):
 
 class CustomDataFieldValidatorAssignment(models.Model):
     class Meta:
-        verbose_name = "Custom Data Validator Assignment"
-        verbose_name_plural = "Custom Data Validator Assignments"
+        verbose_name = "Data Validator Assignment"
+        verbose_name_plural = "Data Validator Assignments"
         constraints = [models.UniqueConstraint(fields=["field", "validator"], name="unique_field_validator")]
 
     field = models.ForeignKey(CustomDataField, on_delete=models.DO_NOTHING)
