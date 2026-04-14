@@ -475,9 +475,13 @@ class ChangeSetAwareTopLevelEntity(models.Model):
         draft_instance.is_pending_deletion = is_pending_deletion
         draft_instance.save()
 
-        # Now that the draft has a PK, we can set M2M relationships
+        # Now that the draft has a PK, we can set M2M relationships.
+        # We only do this for standard M2M relationships that do NOT use a
+        # ChangeSetAwareChildEntity as a through model. Versioned M2M
+        # relationships (like Cluster.tags) must be handled in copy_child_relations.
         for field in self._meta.many_to_many:
-            getattr(draft_instance, field.name).set(getattr(self, field.name).all())
+            if not issubclass(field.remote_field.through, ChangeSetAwareChildEntity):
+                getattr(draft_instance, field.name).set(getattr(self, field.name).all())
 
         # Copy the child relations from the original to the new draft
         self.copy_child_relations(draft_instance, changeset)
@@ -632,6 +636,15 @@ class Cluster(ChangeSetAwareTopLevelEntity, DynamicValidatingModel):
             fleet_label.is_live = False
             fleet_label.changeset_id = changeset
             fleet_label.save()
+
+        # Iterate over all tags (ClusterTag)
+        for cluster_tag in self.clustertag_set.all():
+            cluster_tag.pk = None
+            cluster_tag.id = None
+            cluster_tag.cluster = draft_instance
+            cluster_tag.is_live = False
+            cluster_tag.changeset_id = changeset
+            cluster_tag.save()
 
         # Check if the original cluster has an intent and copy it.
         if hasattr(self, "intent"):

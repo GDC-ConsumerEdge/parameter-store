@@ -280,6 +280,21 @@ UNFOLD = {
             "important-dark": "var(--color-base-100)",  # text-base-100
         },
     },
+    # "SITE_DROPDOWN": [
+    #     {
+    #         "icon": "diamond",
+    #         "title": "Parameter Store",
+    #         "link": "https://example.com",
+    #         "attrs": {
+    #             "target": "_blank",
+    #         },
+    #     },
+    #     {
+    #         "icon": "diamond",
+    #         "title": _("My site"),
+    #         "link": reverse_lazy("admin:index"),
+    #     },
+    # ]
     "SIDEBAR": {
         "show_search": False,  # Search in applications and models names
         "command_search": False,  # Replace the sidebar search with the command search

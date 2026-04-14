@@ -42,10 +42,20 @@ def related_object_saved(sender, *, instance, **kwargs):
     Updates the Cluster or Group's updated_at timestamp.
     """
     this = None
-    if hasattr(instance, "cluster") and instance.cluster:
-        this = instance.cluster
-    elif hasattr(instance, "group") and instance.group:
-        this = instance.group
+    try:
+        if hasattr(instance, "cluster") and instance.cluster:
+            this = instance.cluster
+    except Cluster.DoesNotExist:
+        pass
+
+    try:
+        if hasattr(instance, "group") and instance.group:
+            this = instance.group
+    except Group.DoesNotExist:
+        pass
+
+    if not this:
+        return
 
     upd_at = timezone.now() if kwargs.get("signal") else instance.updated_at
 
