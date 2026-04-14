@@ -63,6 +63,7 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
 
     def get_queryset(self, request):
         """Filters the queryset to show all live and draft entities for the current user."""
+        self.request = request
         qs = super().get_queryset(request)
         return qs.filter(
             models.Q(is_live=True) | models.Q(changeset_id__created_by=request.user, is_live=False)

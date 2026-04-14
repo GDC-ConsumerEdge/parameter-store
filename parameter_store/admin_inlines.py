@@ -17,7 +17,7 @@ from parameter_store.models import (
 )
 
 
-class ChangeSetAwareInlineMixin(uadmin.InlineModelAdmin):
+class ChangeSetAwareInlineMixin:
     """A mixin for admin inlines to make them aware of the parent's changeset status.
 
     This mixin ensures that when viewing a parent object's change page in the

@@ -44,3 +44,8 @@
 [tool.pytest.ini_options]
   DJANGO_SETTINGS_MODULE = "parameter_store.settings"
   pythonpath             = ["."]
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true
