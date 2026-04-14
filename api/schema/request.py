@@ -89,3 +89,16 @@ class ClusterUpdateRequest(Schema):
     description: str | None = Field(None, description="The new description for the cluster.")
     group: str | None = Field(None, description="The name of a new primary group to move the cluster to.")
     changeset_id: int = Field(..., description="The ID of the active ChangeSet to associate with this update.")
+
+
+class TagCreateRequest(Schema):
+    """Schema for creating a new tag."""
+
+    name: str = Field(..., description="The unique name for the new tag.")
+    description: str | None = Field(None, description="An optional description of the tag.")
+
+
+class TagUpdateRequest(Schema):
+    """Schema for updating an existing tag."""
+
+    description: str | None = Field(None, description="The new description for the tag.")

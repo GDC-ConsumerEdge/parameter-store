@@ -33,6 +33,7 @@ from pathlib import Path
 
 from django.templatetags.static import static
 from django.urls import reverse_lazy
+from django.utils.translation import gettext_lazy as _
 
 from parameter_store.customerconfig import img_path, primary_color_hex
 from parameter_store.util import str_to_bool
@@ -115,6 +116,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "parameter_store.wsgi.application"
+
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
@@ -280,21 +282,16 @@ UNFOLD = {
             "important-dark": "var(--color-base-100)",  # text-base-100
         },
     },
-    # "SITE_DROPDOWN": [
-    #     {
-    #         "icon": "diamond",
-    #         "title": "Parameter Store",
-    #         "link": "https://example.com",
-    #         "attrs": {
-    #             "target": "_blank",
-    #         },
-    #     },
-    #     {
-    #         "icon": "diamond",
-    #         "title": _("My site"),
-    #         "link": reverse_lazy("admin:index"),
-    #     },
-    # ]
+    "SITE_DROPDOWN": [
+        {"icon": "api", "title": _("Open API Docs"), "link": "/api/v1/docs", "attrs": {"target": "_new"}},
+        {
+            "icon": "code_blocks",
+            "title": _("View on Github"),
+            "link": "https://github.com/GDC-ConsumerEdge/parameter-store",
+            "attrs": {"target": "_new"},
+        },
+        # ...
+    ],
     "SIDEBAR": {
         "show_search": False,  # Search in applications and models names
         "command_search": False,  # Replace the sidebar search with the command search

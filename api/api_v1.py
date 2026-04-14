@@ -38,6 +38,7 @@ from .api_changesets import changesets_router
 from .api_clusters import clusters_router
 from .api_groups import groups_router
 from .exc import validation_errors
+from .schema.request import TagCreateRequest, TagUpdateRequest
 from .schema.response import (
     HealthResponse,
     MessageResponse,
@@ -126,3 +127,46 @@ def tags(request):
     Returns a list of all unique tags that have been defined in the system for use with clusters.
     """
     return Tag.objects.all()
+
+
+@api_v1.post(
+    "/tags",
+    response={200: NameDescResponse, codes_4xx: MessageResponse},
+    auth=django_auth,
+    summary="Create a new cluster tag",
+    tags=["Tags"],
+)
+@require_permissions("api.params_api_create_tag", "api.params_api_create_objects")
+def create_tag(request: HttpRequest, payload: TagCreateRequest):
+    """
+    Creates a new tag that can be applied to clusters.
+    """
+    if Tag.objects.filter(name=payload.name).exists():
+        return 409, {"message": f"Tag '{payload.name}' already exists."}
+
+    tag = Tag.objects.create(name=payload.name, description=payload.description)
+    return 200, tag
+
+
+@api_v1.put(
+    "/tags/{tag_name}",
+    response={200: NameDescResponse, codes_4xx: MessageResponse},
+    auth=django_auth,
+    summary="Update a cluster tag",
+    tags=["Tags"],
+)
+@require_permissions("api.params_api_update_tag", "api.params_api_update_objects")
+def update_tag(request: HttpRequest, tag_name: str, payload: TagUpdateRequest):
+    """
+    Updates the description of an existing tag.
+    """
+    try:
+        tag = Tag.objects.get(name=tag_name)
+    except Tag.DoesNotExist:
+        return 404, {"message": f"Tag '{tag_name}' not found."}
+
+    if payload.description is not None:
+        tag.description = payload.description
+        tag.save(update_fields=["description", "updated_at"])
+
+    return 200, tag
