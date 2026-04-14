@@ -102,3 +102,16 @@ class TagUpdateRequest(Schema):
     """Schema for updating an existing tag."""
 
     description: str | None = Field(None, description="The new description for the tag.")
+
+
+class CustomDataFieldCreateRequest(Schema):
+    """Schema for creating a new custom data field."""
+
+    name: str = Field(..., description="The unique name for the new custom data field.")
+    description: str | None = Field(None, description="An optional description of the custom data field.")
+
+
+class CustomDataFieldUpdateRequest(Schema):
+    """Schema for updating an existing custom data field."""
+
+    description: str | None = Field(None, description="The new description for the custom data field.")

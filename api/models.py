@@ -60,4 +60,9 @@ class CustomAPIPermissions(models.Model):
             ("params_api_read_tag", "Can read Tag via API"),
             ("params_api_update_tag", "Can update Tag via API"),
             ("params_api_delete_tag", "Can delete Tag via API"),
+            # Custom Data Field Permissions
+            ("params_api_create_customdatafield", "Can create CustomDataField via API"),
+            ("params_api_read_customdatafield", "Can read CustomDataField via API"),
+            ("params_api_update_customdatafield", "Can update CustomDataField via API"),
+            ("params_api_delete_customdatafield", "Can delete CustomDataField via API"),
         ]
