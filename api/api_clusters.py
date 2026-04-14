@@ -104,11 +104,13 @@ def _get_cluster_history_logic(shared_entity_id: uuid.UUID, limit: int, offset: 
     Returns:
         ClusterHistoryResponse: A paginated list of historical cluster versions.
     """
+    from django.db.models import Q
+
     qs = (
         Cluster.objects.with_related()
-        .filter(shared_entity_id=shared_entity_id, is_live=False, obsoleted_by_changeset__isnull=False)
+        .filter(Q(shared_entity_id=shared_entity_id) & (Q(is_live=True) | Q(obsoleted_by_changeset__isnull=False)))
         .select_related("obsoleted_by_changeset")
-        .order_by("-created_at")
+        .order_by("-is_live", "-created_at")
     )
 
     history_page = paginate(qs, limit, offset)
@@ -116,6 +118,8 @@ def _get_cluster_history_logic(shared_entity_id: uuid.UUID, limit: int, offset: 
     out = []
     for c in history_page:
         metadata = HistoryMetadata(
+            is_live=c.is_live,
+            is_pending_deletion=c.is_pending_deletion,
             obsoleted_at=c.obsoleted_by_changeset.committed_at if c.obsoleted_by_changeset else None,
             obsoleted_by_changeset_id=c.obsoleted_by_changeset.id if c.obsoleted_by_changeset else None,
             obsoleted_by_changeset_name=c.obsoleted_by_changeset.name if c.obsoleted_by_changeset else None,

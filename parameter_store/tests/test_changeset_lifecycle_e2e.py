@@ -89,16 +89,25 @@ class ChangeSetLifecycleE2ETest(TestCase):
         self.assertEqual(response.status_code, 200)
         history_data = response.json()
 
-        self.assertEqual(len(history_data["history"]), 2)
+        # We expect 3 items now: V3 (Live), V2 (Historical), and V1 (Historical)
+        self.assertEqual(len(history_data["history"]), 3)
 
-        v2_hist = history_data["history"][0]
+        # Check V3 (Live)
+        v3_hist = history_data["history"][0]
+        self.assertEqual(v3_hist["entity"]["description"], "V3 description")
+        self.assertTrue(v3_hist["metadata"]["is_live"])
+        self.assertIsNone(v3_hist["metadata"]["obsoleted_at"])
+
+        # Check V2 (Historical)
+        v2_hist = history_data["history"][1]
         self.assertEqual(v2_hist["entity"]["description"], "V2 description")
-        self.assertEqual(v2_hist["entity"]["intent"]["location"], "loc2")
+        self.assertFalse(v2_hist["metadata"]["is_live"])
         self.assertEqual(v2_hist["metadata"]["obsoleted_by_changeset_name"], "CS3")
 
-        v1_hist = history_data["history"][1]
+        # Check V1 (Historical)
+        v1_hist = history_data["history"][2]
         self.assertIsNone(v1_hist["entity"]["description"])
-        self.assertEqual(v1_hist["entity"]["intent"]["location"], "loc1")
+        self.assertFalse(v1_hist["metadata"]["is_live"])
         self.assertEqual(v1_hist["metadata"]["obsoleted_by_changeset_name"], "CS2")
 
     def test_tag_preservation_in_draft(self):
@@ -195,5 +204,8 @@ class ChangeSetLifecycleE2ETest(TestCase):
         response = self.client.get(f"/api/v1/group/id/{shared_id}/history")
         self.assertEqual(response.status_code, 200)
         history_data = response.json()
-        self.assertEqual(len(history_data["history"]), 1)
-        self.assertEqual(history_data["history"][0]["entity"]["data"]["group_field"], "gval1")
+        # Expect 2: V2 (Live) and V1 (Historical)
+        self.assertEqual(len(history_data["history"]), 2)
+        self.assertTrue(history_data["history"][0]["metadata"]["is_live"])
+        self.assertFalse(history_data["history"][1]["metadata"]["is_live"])
+        self.assertEqual(history_data["history"][1]["entity"]["data"]["group_field"], "gval1")

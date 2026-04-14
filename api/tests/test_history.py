@@ -118,21 +118,27 @@ def test_group_history(permission_to_grant):
     assert response.status_code == 200, f"Failed: {response.content}"
     data = response.json()
 
-    assert data["count"] == 2
+    assert data["count"] == 3
     history = data["history"]
 
-    # Most recent history first (V2)
-    assert history[0]["entity"]["description"] == "V2"
-    assert history[0]["metadata"]["obsoleted_by_changeset_name"] == "changeset-B"
+    # Current Live (V3)
+    assert history[0]["entity"]["description"] == "V3"
+    assert history[0]["metadata"]["is_live"] is True
+
+    # Most recent history (V2)
+    assert history[1]["entity"]["description"] == "V2"
+    assert history[1]["metadata"]["is_live"] is False
+    assert history[1]["metadata"]["obsoleted_by_changeset_name"] == "changeset-B"
 
     # Older history (V1)
-    assert history[1]["entity"]["description"] == "V1"
-    assert history[1]["metadata"]["obsoleted_by_changeset_name"] == "changeset-A"
+    assert history[2]["entity"]["description"] == "V1"
+    assert history[2]["metadata"]["is_live"] is False
+    assert history[2]["metadata"]["obsoleted_by_changeset_name"] == "changeset-A"
 
     # 5. Query History by ID
     response = client.get(f"/api/v1/group/id/{group_v3.shared_entity_id}/history")
     assert response.status_code == 200
-    assert response.json()["count"] == 2
+    assert response.json()["count"] == 3
 
 
 @pytest.mark.django_db
@@ -179,16 +185,24 @@ def test_cluster_history(permission_to_grant):
     assert response.status_code == 200, f"Failed: {response.content}"
     data = response.json()
 
-    assert data["count"] == 2
+    assert data["count"] == 3
     history = data["history"]
 
-    assert history[0]["entity"]["description"] == "V2"
-    assert history[0]["metadata"]["obsoleted_by_changeset_name"] == "cs-B"
+    # Current Live (V3)
+    assert history[0]["entity"]["description"] == "V3"
+    assert history[0]["metadata"]["is_live"] is True
 
-    assert history[1]["entity"]["description"] == "V1"
-    assert history[1]["metadata"]["obsoleted_by_changeset_name"] == "cs-A"
+    # Most recent history (V2)
+    assert history[1]["entity"]["description"] == "V2"
+    assert history[1]["metadata"]["is_live"] is False
+    assert history[1]["metadata"]["obsoleted_by_changeset_name"] == "cs-B"
+
+    # Older history (V1)
+    assert history[2]["entity"]["description"] == "V1"
+    assert history[2]["metadata"]["is_live"] is False
+    assert history[2]["metadata"]["obsoleted_by_changeset_name"] == "cs-A"
 
     # 5. Query History by ID
     response = client.get(f"/api/v1/cluster/id/{cluster_v3.shared_entity_id}/history")
     assert response.status_code == 200
-    assert response.json()["count"] == 2
+    assert response.json()["count"] == 3

@@ -78,11 +78,15 @@ def _get_group_history_logic(shared_entity_id: uuid.UUID, limit: int, offset: in
     Returns:
         GroupHistoryResponse: A paginated list of historical group versions.
     """
+    from django.db.models import Q
+
     qs = (
-        Group.objects.filter(shared_entity_id=shared_entity_id, is_live=False, obsoleted_by_changeset__isnull=False)
+        Group.objects.filter(
+            Q(shared_entity_id=shared_entity_id) & (Q(is_live=True) | Q(obsoleted_by_changeset__isnull=False))
+        )
         .select_related("obsoleted_by_changeset")
         .prefetch_related(Prefetch("group_data", queryset=GroupData.objects.select_related("field")))
-        .order_by("-created_at")
+        .order_by("-is_live", "-created_at")
     )
 
     history_page = paginate(qs, limit, offset)
@@ -90,6 +94,8 @@ def _get_group_history_logic(shared_entity_id: uuid.UUID, limit: int, offset: in
     out = []
     for g in history_page:
         metadata = HistoryMetadata(
+            is_live=g.is_live,
+            is_pending_deletion=g.is_pending_deletion,
             obsoleted_at=g.obsoleted_by_changeset.committed_at if g.obsoleted_by_changeset else None,
             obsoleted_by_changeset_id=g.obsoleted_by_changeset.id if g.obsoleted_by_changeset else None,
             obsoleted_by_changeset_name=g.obsoleted_by_changeset.name if g.obsoleted_by_changeset else None,

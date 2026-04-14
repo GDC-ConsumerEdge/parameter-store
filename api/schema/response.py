@@ -168,6 +168,8 @@ class ChangeSetChangesResponse(Schema):
 class HistoryMetadata(Schema):
     """Metadata for a historical version of an entity."""
 
+    is_live: bool = Field(False, description="Whether this version is the current live version.")
+    is_pending_deletion: bool = Field(False, description="Whether this version is staged for deletion.")
     obsoleted_at: datetime | None = Field(
         None, description="The timestamp when this version was obsoleted by a newer version."
     )
