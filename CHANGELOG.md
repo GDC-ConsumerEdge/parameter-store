@@ -1,5 +1,37 @@
 # Changelog
 
+## [4.0.1](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v3.0.0...v4.0.1) (2026-04-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove autoapi"
+
+### Features
+
+* **api:** add endpoints for custom data fields ([9607d0d](https://github.com/GDC-ConsumerEdge/parameter-store/commit/9607d0d650bf1b22b81da8e9393f12f701f030f5))
+* **api:** add POST and PUT endpoints for tags ([960bedd](https://github.com/GDC-ConsumerEdge/parameter-store/commit/960bedd800dd73d24f071d41b4fad2420ea8ffa3))
+* **api:** include live version in entity history timeline ([5f4975e](https://github.com/GDC-ConsumerEdge/parameter-store/commit/5f4975e7e0be2463d9c57965b78ef13d2f6bef80))
+* **api:** rename 'Custom Data Field' to 'Data Field' and add rename support ([046a55f](https://github.com/GDC-ConsumerEdge/parameter-store/commit/046a55fec86561fcb2fd5f2e798038127a108253))
+
+
+### Bug Fixes
+
+* **models:** ensure ClusterTag is preserved in drafts and history ([f231a28](https://github.com/GDC-ConsumerEdge/parameter-store/commit/f231a2894884c288abded22d344c3b5d9178a78a))
+* remove autoapi" ([6258f00](https://github.com/GDC-ConsumerEdge/parameter-store/commit/6258f005416c04b447feefbec5507787e2c4ed3f))
+* update menu names in UI ([7771176](https://github.com/GDC-ConsumerEdge/parameter-store/commit/7771176e1b2c7ac219a7991c79adc39538eea4ba))
+
+
+### Documentation
+
+* format tf example in README ([#124](https://github.com/GDC-ConsumerEdge/parameter-store/issues/124)) ([bf71896](https://github.com/GDC-ConsumerEdge/parameter-store/commit/bf7189620bab712d8e332b349e79045bf9eae93c))
+* Update GEMINI.md ([3f16cf6](https://github.com/GDC-ConsumerEdge/parameter-store/commit/3f16cf6122d07949c6c72644e0553b4dda1893c2))
+
+
+### Miscellaneous Chores
+
+* **deps:** pin to PyPI as primary package index ([59cc646](https://github.com/GDC-ConsumerEdge/parameter-store/commit/59cc646ea2b9fe36accf7be7468eb5fa7be01e6b))
+
 ## [3.0.0](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v2.0.0...v3.0.0) (2026-02-20)
 
 
