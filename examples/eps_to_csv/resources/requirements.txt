@@ -195,9 +195,9 @@ grpcio-status==1.72.0rc1 \
     --hash=sha256:20b9cabe989824eeb5d8322189fdc084dfc69bb9fff7cb165cd28340cdbc73e1 \
     --hash=sha256:bc7e5f0a1229e9ab129c3c8d8944043ee4b63371947a4bd41a4bc6008bfeb8ac
     # via google-api-core
-idna==3.10 \
-    --hash=sha256:12f65c9b470abda6dc35cf8e63cc574b1c52b11df2c86030af0ac09b01b13ea9 \
-    --hash=sha256:946d195a0d259cbba61165e88e65941f16e9b36ea6ddb97f00452bae8b1287d3
+idna==3.15 \
+    --hash=sha256:048adeaf8c2d788c40fee287673ccaa74c24ffd8dcf09ffa555a2fbb59f10ac8 \
+    --hash=sha256:ca962446ea538f7092a95e057da437618e886f4d349216d2b1e294abfdb65fdc
     # via requests
 numpy==2.2.5 \
     --hash=sha256:0255732338c4fdd00996c0421884ea8a3651eea555c3a56b84892b66f696eb70 \
