@@ -64,6 +64,9 @@ class GroupCreateRequest(Schema):
 
     name: str = Field(..., description="The unique name for the new group.")
     description: str | None = Field(None, description="An optional description of the group's function or scope.")
+    data: dict[str, str | None] | None = Field(
+        None, description="An optional dictionary of data field values (field name to value) for the group."
+    )
     changeset_id: int = Field(..., description="The ID of the active ChangeSet to associate with this creation.")
 
 
@@ -71,6 +74,9 @@ class GroupUpdateRequest(Schema):
     """Schema for updating a parameter group."""
 
     description: str | None = Field(None, description="The new description for the group.")
+    data: dict[str, str | None] | None = Field(
+        None, description="An optional dictionary of data field values (field name to value) to update on the group."
+    )
     changeset_id: int = Field(..., description="The ID of the active ChangeSet to associate with this update.")
 
 

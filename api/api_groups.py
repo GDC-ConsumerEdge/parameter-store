@@ -26,6 +26,7 @@ This module provides the CRUD operations for Groups, including support for:
 
 import uuid
 
+from django.db import transaction
 from django.db.models import Prefetch
 from django.http import HttpRequest
 from ninja import Router
@@ -33,7 +34,7 @@ from ninja.errors import HttpError
 from ninja.responses import codes_4xx, codes_5xx
 from ninja.security import django_auth
 
-from parameter_store.models import ChangeSet, Group, GroupData
+from parameter_store.models import ChangeSet, CustomDataField, Group, GroupData
 
 from .schema.request import GroupCreateRequest, GroupUpdateRequest
 from .schema.response import (
@@ -114,6 +115,66 @@ def _get_group_history_logic(shared_entity_id: uuid.UUID, limit: int, offset: in
     return GroupHistoryResponse(history=out, count=qs.count())
 
 
+def _resolve_data_fields(
+    data: dict[str, str | None] | None,
+) -> dict[str, CustomDataField] | tuple[int, dict[str, str]]:
+    """Resolves a mapping of data field names to CustomDataField instances.
+
+    Args:
+        data: Optional dictionary mapping data field names to string values.
+
+    Returns:
+        Dictionary of field name to CustomDataField instance, or a 404 error tuple.
+    """
+    if not data:
+        return {}
+    resolved: dict[str, CustomDataField] = {}
+    for field_name in data:
+        try:
+            resolved[field_name] = CustomDataField.objects.get(name=field_name)
+        except CustomDataField.DoesNotExist:
+            return 404, {"message": f"Data field '{field_name}' not found."}
+    return resolved
+
+
+def _apply_group_data(
+    group_obj: Group,
+    changeset: ChangeSet,
+    data: dict[str, str | None],
+    resolved_fields: dict[str, CustomDataField],
+) -> None:
+    """Applies custom data field values to a draft Group within a ChangeSet.
+
+    Args:
+        group_obj: The draft Group instance being created or updated.
+        changeset: The active DRAFT ChangeSet.
+        data: Dictionary mapping data field names to values.
+        resolved_fields: Pre-resolved CustomDataField objects keyed by field name.
+    """
+    for field_name, value in data.items():
+        field_obj = resolved_fields[field_name]
+        existing = GroupData.objects.filter(
+            group=group_obj,
+            field=field_obj,
+            changeset_id=changeset,
+            is_live=False,
+        ).first()
+        if existing is not None:
+            existing.value = value
+            existing.full_clean()
+            existing.save()
+        else:
+            group_data = GroupData(
+                group=group_obj,
+                field=field_obj,
+                value=value,
+                is_live=False,
+                changeset_id=changeset,
+            )
+            group_data.full_clean()
+            group_data.save()
+
+
 def _update_group_logic(group_obj: Group, payload: GroupUpdateRequest):
     """
     Encapsulates the core logic for updating a group (handling drafts and locking).
@@ -132,40 +193,48 @@ def _update_group_logic(group_obj: Group, payload: GroupUpdateRequest):
     except ChangeSet.DoesNotExist:
         return 404, {"message": f"ChangeSet {payload.changeset_id} not found."}
 
-    # If group_obj is already a draft in this changeset, we are good to go.
-    if group_obj.changeset_id == changeset:
-        pass
-    # If group_obj is LIVE, we need to handle draft creation/locking
-    elif group_obj.is_live:
-        if group_obj.is_locked:
-            # Check if locked by THIS changeset - if so, we can update the draft (conceptually)
-            # If locked by another changeset -> 409
-            if group_obj.locked_by_changeset != changeset:
-                return 409, {"message": f"Group is locked by another ChangeSet: {group_obj.locked_by_changeset.id}"}
+    resolved_fields = _resolve_data_fields(payload.data)
+    if isinstance(resolved_fields, tuple):
+        return resolved_fields
 
-            try:
-                draft_group = Group.objects.get(draft_of=group_obj, changeset_id=changeset)
-                group_obj = draft_group  # Operate on the draft
-            except Group.DoesNotExist:
-                # Should not happen if locked by this changeset, but safeguard
-                return 500, {"message": "Inconsistent state: Locked by changeset but draft not found."}
+    with transaction.atomic():
+        # If group_obj is already a draft in this changeset, we are good to go.
+        if group_obj.changeset_id == changeset:
+            pass
+        # If group_obj is LIVE, we need to handle draft creation/locking
+        elif group_obj.is_live:
+            if group_obj.is_locked:
+                # Check if locked by THIS changeset - if so, we can update the draft (conceptually)
+                # If locked by another changeset -> 409
+                if group_obj.locked_by_changeset != changeset:
+                    return 409, {"message": f"Group is locked by another ChangeSet: {group_obj.locked_by_changeset.id}"}
+
+                try:
+                    draft_group = Group.objects.get(draft_of=group_obj, changeset_id=changeset)
+                    group_obj = draft_group  # Operate on the draft
+                except Group.DoesNotExist:
+                    # Should not happen if locked by this changeset, but safeguard
+                    return 500, {"message": "Inconsistent state: Locked by changeset but draft not found."}
+            else:
+                # Not locked, create new draft
+                group_obj = group_obj.create_draft(changeset)
+                live_group = group_obj.draft_of
+                live_group.is_locked = True
+                live_group.locked_by_changeset = changeset
+                live_group.save()
         else:
-            # Not locked, create new draft
-            group_obj = group_obj.create_draft(changeset)
-            live_group = group_obj.draft_of
-            live_group.is_locked = True
-            live_group.locked_by_changeset = changeset
-            live_group.save()
-    else:
-        # Case: group_obj is a draft but NOT in the requested changeset (e.g. name collision or wrong ID passed)
-        # This will now fail because we require the changeset_id in the payload to match.
-        return 409, {"message": f"Group '{group_obj.name}' is already a draft in another ChangeSet."}
+            # Case: group_obj is a draft but NOT in the requested changeset (e.g. name collision or wrong ID passed)
+            # This will now fail because we require the changeset_id in the payload to match.
+            return 409, {"message": f"Group '{group_obj.name}' is already a draft in another ChangeSet."}
 
-    if payload.description is not None:
-        group_obj.description = payload.description
+        if payload.description is not None:
+            group_obj.description = payload.description
 
-    group_obj.full_clean()
-    group_obj.save()
+        group_obj.full_clean()
+        group_obj.save()
+
+        if payload.data is not None:
+            _apply_group_data(group_obj, changeset, payload.data, resolved_fields)
 
     return GroupResponse(
         id=group_obj.shared_entity_id,
@@ -367,20 +436,28 @@ def create_group(request: HttpRequest, payload: GroupCreateRequest):
     except ChangeSet.DoesNotExist:
         return 404, {"message": f"ChangeSet {payload.changeset_id} not found."}
 
-    group = Group(
-        name=payload.name,
-        description=payload.description,
-        changeset_id=changeset,
-    )
-    group.full_clean()
-    group.save()
+    resolved_fields = _resolve_data_fields(payload.data)
+    if isinstance(resolved_fields, tuple):
+        return resolved_fields
+
+    with transaction.atomic():
+        group = Group(
+            name=payload.name,
+            description=payload.description,
+            changeset_id=changeset,
+        )
+        group.full_clean()
+        group.save()
+
+        if payload.data is not None:
+            _apply_group_data(group, changeset, payload.data, resolved_fields)
 
     return GroupResponse(
         id=group.shared_entity_id,
         record_id=group.id,
         name=group.name,
         description=group.description,
-        data=None,
+        data={d.field.name: d.value for d in group.group_data.all()} if group.group_data.exists() else None,
         created_at=group.created_at,
         updated_at=group.updated_at,
     )

@@ -27,7 +27,7 @@ from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 from django.test import Client
 
-from parameter_store.models import ChangeSet, Group
+from parameter_store.models import ChangeSet, CustomDataField, Group, GroupData
 
 User = get_user_model()
 
@@ -356,3 +356,112 @@ def test_delete_group_by_id_api(permission_to_grant):
 
     draft = Group.objects.get(changeset_id=cs, draft_of=group)
     assert draft.is_pending_deletion is True
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "permission_to_grant",
+    ["api.params_api_create_group", "api.params_api_create_objects"],
+)
+def test_create_group_with_data(permission_to_grant):
+    """Test creating a new Group draft with custom data fields."""
+    user = setup_user_with_permission(permission_to_grant)
+    client = Client()
+    client.force_login(user)
+
+    cs = ChangeSet.objects.create(name="create-grp-data-cs", created_by=user, status=ChangeSet.Status.DRAFT)
+    CustomDataField.objects.create(name="manifest_version")
+    CustomDataField.objects.create(name="config_folder")
+
+    payload = {
+        "name": "data-group",
+        "description": "Group with data",
+        "data": {
+            "manifest_version": "v1.0.0",
+            "config_folder": "configs/region-a",
+        },
+        "changeset_id": cs.id,
+    }
+    response = client.post("/api/v1/group", data=payload, content_type="application/json")
+    assert response.status_code == 200, f"Failed with permission {permission_to_grant}: {response.content}"
+    resp_data = response.json()
+    assert resp_data["name"] == "data-group"
+    assert resp_data["data"] == {
+        "manifest_version": "v1.0.0",
+        "config_folder": "configs/region-a",
+    }
+
+    cs.commit(user)
+    live_group = Group.objects.get(name="data-group", is_live=True)
+    assert {d.field.name: d.value for d in live_group.group_data.filter(is_live=True)} == {
+        "manifest_version": "v1.0.0",
+        "config_folder": "configs/region-a",
+    }
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "permission_to_grant",
+    ["api.params_api_create_group", "api.params_api_create_objects"],
+)
+def test_create_group_with_unknown_data_field(permission_to_grant):
+    """Test creating a Group with an unregistered data field returns 404."""
+    user = setup_user_with_permission(permission_to_grant)
+    client = Client()
+    client.force_login(user)
+
+    cs = ChangeSet.objects.create(name="create-grp-bad-df-cs", created_by=user, status=ChangeSet.Status.DRAFT)
+
+    payload = {
+        "name": "bad-data-group",
+        "data": {"non_existent_field": "val"},
+        "changeset_id": cs.id,
+    }
+    response = client.post("/api/v1/group", data=payload, content_type="application/json")
+    assert response.status_code == 404
+    assert response.json()["message"] == "Data field 'non_existent_field' not found."
+    assert not Group.objects.filter(name="bad-data-group").exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "permission_to_grant",
+    ["api.params_api_update_group", "api.params_api_update_objects"],
+)
+def test_update_group_with_data(permission_to_grant):
+    """Test updating a Group's custom data fields and committing the ChangeSet."""
+    user = setup_user_with_permission(permission_to_grant)
+    client = Client()
+    client.force_login(user)
+
+    field_ver = CustomDataField.objects.create(name="manifest_version")
+    CustomDataField.objects.create(name="support_contact")
+
+    live_group = Group.objects.create(name="upd-data-group", description="Initial", is_live=True)
+    GroupData.objects.create(group=live_group, field=field_ver, value="v1.0.0", is_live=True)
+
+    cs = ChangeSet.objects.create(name="upd-grp-data-cs", created_by=user, status=ChangeSet.Status.DRAFT)
+
+    payload = {
+        "description": "Updated with data",
+        "data": {
+            "manifest_version": "v2.0.0",
+            "support_contact": "ops-team@example.com",
+        },
+        "changeset_id": cs.id,
+    }
+    response = client.put("/api/v1/group/upd-data-group", data=payload, content_type="application/json")
+    assert response.status_code == 200, f"Failed with permission {permission_to_grant}: {response.content}"
+    resp_data = response.json()
+    assert resp_data["description"] == "Updated with data"
+    assert resp_data["data"] == {
+        "manifest_version": "v2.0.0",
+        "support_contact": "ops-team@example.com",
+    }
+
+    cs.commit(user)
+    promoted_group = Group.objects.get(name="upd-data-group", is_live=True)
+    assert {d.field.name: d.value for d in promoted_group.group_data.filter(is_live=True)} == {
+        "manifest_version": "v2.0.0",
+        "support_contact": "ops-team@example.com",
+    }
