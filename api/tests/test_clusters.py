@@ -27,7 +27,7 @@ from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 from django.test import Client
 
-from parameter_store.models import ChangeSet, Cluster, Group
+from parameter_store.models import ChangeSet, Cluster, ClusterData, CustomDataField, Group, Tag
 
 User = get_user_model()
 
@@ -316,3 +316,168 @@ def test_delete_cluster_by_id_api(permission_to_grant):
 
     draft = Cluster.objects.get(changeset_id=cs, draft_of=cluster)
     assert draft.is_pending_deletion is True
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "permission_to_grant",
+    ["api.params_api_create_cluster", "api.params_api_create_objects"],
+)
+def test_create_cluster_with_relations_and_data(permission_to_grant):
+    """Test creating a Cluster draft with secondary groups, tags, fleet labels, data, and intent."""
+    user = setup_user_with_permission(permission_to_grant)
+    client = Client()
+    client.force_login(user)
+
+    cs = ChangeSet.objects.create(name="create-cls-rel-cs", created_by=user, status=ChangeSet.Status.DRAFT)
+    Group.objects.create(name="primary-group", is_live=True)
+    Group.objects.create(name="secondary-group", is_live=True)
+    Tag.objects.create(name="edge-tag")
+    CustomDataField.objects.create(name="manifest_version")
+    CustomDataField.objects.create(name="config_folder")
+    CustomDataField.objects.create(name="support_contact")
+
+    payload = {
+        "name": "edge-cluster-01",
+        "description": "Edge cluster 01",
+        "group": "primary-group",
+        "secondary_groups": ["secondary-group"],
+        "tags": ["edge-tag"],
+        "fleet_labels": {"environment": "dev"},
+        "data": {
+            "manifest_version": "v1.0.0",
+            "config_folder": "configs/region-a",
+            "support_contact": "ops-team@example.com",
+        },
+        "intent": {
+            "unique_zone_id": "site-00001",
+            "location": "us-central1",
+            "machine_project_id": "example-machine-proj",
+            "fleet_project_id": "example-fleet-proj",
+            "secrets_project_id": "example-secrets-proj",
+            "node_count": 3,
+            "cluster_ipv4_cidr": "172.16.0.0/17",
+            "services_ipv4_cidr": "192.168.30.0/23",
+            "external_load_balancer_ipv4_address_pools": "10.10.10.244/30",
+            "sync_repo": "https://github.com/example/repo.git",
+            "sync_branch": "main",
+            "sync_dir": "hydrated/clusters/",
+            "git_token_secrets_manager_name": "git-token",
+            "cluster_version": "1.11.0",
+            "subnet_vlans": "410",
+            "recreate_on_delete": False,
+        },
+        "changeset_id": cs.id,
+    }
+    response = client.post("/api/v1/cluster", data=payload, content_type="application/json")
+    assert response.status_code == 200, f"Failed with permission {permission_to_grant}: {response.content}"
+    resp_data = response.json()
+    assert resp_data["name"] == "edge-cluster-01"
+    assert resp_data["secondary_groups"] == ["secondary-group"]
+    assert resp_data["tags"] == ["edge-tag"]
+    assert resp_data["fleet_labels"] == [{"key": "environment", "value": "dev"}]
+    assert resp_data["data"] == {
+        "manifest_version": "v1.0.0",
+        "config_folder": "configs/region-a",
+        "support_contact": "ops-team@example.com",
+    }
+    assert resp_data["intent"]["unique_zone_id"] == "site-00001"
+
+    cs.commit(user)
+    live_cluster = Cluster.objects.with_related().get(name="edge-cluster-01", is_live=True)
+    assert [t.name for t in live_cluster.tags.all()] == ["edge-tag"]
+    assert {d.field.name: d.value for d in live_cluster.cluster_data.filter(is_live=True)} == {
+        "manifest_version": "v1.0.0",
+        "config_folder": "configs/region-a",
+        "support_contact": "ops-team@example.com",
+    }
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "permission_to_grant",
+    ["api.params_api_create_cluster", "api.params_api_create_objects"],
+)
+def test_create_cluster_missing_tag_or_data_field(permission_to_grant):
+    """Test creating a Cluster with an unregistered tag or data field returns 404."""
+    user = setup_user_with_permission(permission_to_grant)
+    client = Client()
+    client.force_login(user)
+
+    cs = ChangeSet.objects.create(name="create-cls-404-cs", created_by=user, status=ChangeSet.Status.DRAFT)
+    Group.objects.create(name="test-group", is_live=True)
+
+    bad_tag_payload = {
+        "name": "bad-tag-cluster",
+        "group": "test-group",
+        "tags": ["missing-tag"],
+        "changeset_id": cs.id,
+    }
+    resp_tag = client.post("/api/v1/cluster", data=bad_tag_payload, content_type="application/json")
+    assert resp_tag.status_code == 404
+    assert resp_tag.json()["message"] == "Tag 'missing-tag' not found."
+    assert not Cluster.objects.filter(name="bad-tag-cluster").exists()
+
+    bad_df_payload = {
+        "name": "bad-df-cluster",
+        "group": "test-group",
+        "data": {"missing_field": "v1"},
+        "changeset_id": cs.id,
+    }
+    resp_df = client.post("/api/v1/cluster", data=bad_df_payload, content_type="application/json")
+    assert resp_df.status_code == 404
+    assert resp_df.json()["message"] == "Data field 'missing_field' not found."
+    assert not Cluster.objects.filter(name="bad-df-cluster").exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "permission_to_grant",
+    ["api.params_api_update_cluster", "api.params_api_update_objects"],
+)
+def test_update_cluster_with_relations_and_data(permission_to_grant):
+    """Test updating a live Cluster's data, tags, secondary groups, and fleet labels."""
+    user = setup_user_with_permission(permission_to_grant)
+    client = Client()
+    client.force_login(user)
+
+    group = Group.objects.create(name="primary-group", is_live=True)
+    sec_group = Group.objects.create(name="secondary-group", is_live=True)
+    Tag.objects.create(name="updated-tag")
+    field_ver = CustomDataField.objects.create(name="manifest_version")
+    CustomDataField.objects.create(name="config_folder")
+
+    live_cluster = Cluster.objects.create(name="edge-cluster-02", group=group, is_live=True)
+    ClusterData.objects.create(cluster=live_cluster, field=field_ver, value="v1.0.0", is_live=True)
+
+    cs = ChangeSet.objects.create(name="upd-cls-rel-cs", created_by=user, status=ChangeSet.Status.DRAFT)
+
+    payload = {
+        "description": "Updated edge cluster",
+        "secondary_groups": [sec_group.name],
+        "tags": ["updated-tag"],
+        "fleet_labels": [{"key": "env", "value": "dev"}],
+        "data": {
+            "manifest_version": "v2.0.0",
+            "config_folder": "configs/region-b",
+        },
+        "changeset_id": cs.id,
+    }
+    response = client.put("/api/v1/cluster/edge-cluster-02", data=payload, content_type="application/json")
+    assert response.status_code == 200, f"Failed with permission {permission_to_grant}: {response.content}"
+    resp_data = response.json()
+    assert resp_data["description"] == "Updated edge cluster"
+    assert resp_data["secondary_groups"] == ["secondary-group"]
+    assert resp_data["tags"] == ["updated-tag"]
+    assert resp_data["fleet_labels"] == [{"key": "env", "value": "dev"}]
+    assert resp_data["data"] == {
+        "manifest_version": "v2.0.0",
+        "config_folder": "configs/region-b",
+    }
+
+    cs.commit(user)
+    promoted = Cluster.objects.with_related().get(name="edge-cluster-02", is_live=True)
+    assert {d.field.name: d.value for d in promoted.cluster_data.filter(is_live=True)} == {
+        "manifest_version": "v2.0.0",
+        "config_folder": "configs/region-b",
+    }

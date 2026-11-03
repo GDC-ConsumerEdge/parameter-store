@@ -26,6 +26,7 @@ This module provides the CRUD operations for Clusters, including support for:
 
 import uuid
 
+from django.db import transaction
 from django.http import HttpRequest
 from ninja import Router
 from ninja.errors import HttpError
@@ -42,7 +43,17 @@ from api.schema.response import (
     HistoryMetadata,
     MessageResponse,
 )
-from parameter_store.models import ChangeSet, Cluster, Group
+from parameter_store.models import (
+    ChangeSet,
+    Cluster,
+    ClusterData,
+    ClusterFleetLabel,
+    ClusterIntent,
+    ClusterTag,
+    CustomDataField,
+    Group,
+    Tag,
+)
 
 from .utils import paginate, require_permissions
 
@@ -224,6 +235,179 @@ def get_clusters(request: HttpRequest, limit=250, offset=0):
     return {"clusters": out, "count": clusters.count()}
 
 
+def _resolve_group_in_changeset(group_name: str, changeset: ChangeSet) -> Group | tuple[int, dict[str, str]]:
+    """Resolves a Group by name from live groups or drafts in the same ChangeSet.
+
+    Args:
+        group_name: The unique name of the group to resolve.
+        changeset: The active DRAFT ChangeSet.
+
+    Returns:
+        The resolved Group instance, or a 404 error tuple if not found.
+    """
+    try:
+        return Group.objects.get(name=group_name, is_live=True)
+    except Group.DoesNotExist:
+        try:
+            return Group.objects.get(name=group_name, changeset_id=changeset, is_live=False)
+        except Group.DoesNotExist:
+            return 404, {"message": f"Group {group_name} not found."}
+
+
+def _resolve_cluster_relations(
+    payload: ClusterCreateRequest | ClusterUpdateRequest,
+    changeset: ChangeSet,
+) -> tuple[list[Group], list[Tag], dict[str, CustomDataField]] | tuple[int, dict[str, str]]:
+    """Pre-resolves secondary groups, tags, and custom data fields referenced in a payload.
+
+    Args:
+        payload: The incoming cluster create or update request payload.
+        changeset: The active DRAFT ChangeSet.
+
+    Returns:
+        A tuple of (secondary_groups, tags, data_fields), or a 404 error tuple.
+    """
+    secondary_groups: list[Group] = []
+    if payload.secondary_groups is not None:
+        seen_groups: set[str] = set()
+        for group_name in payload.secondary_groups:
+            if group_name in seen_groups:
+                continue
+            seen_groups.add(group_name)
+            resolved_group = _resolve_group_in_changeset(group_name, changeset)
+            if isinstance(resolved_group, tuple):
+                return resolved_group
+            secondary_groups.append(resolved_group)
+
+    tags: list[Tag] = []
+    if payload.tags is not None:
+        seen_tags: set[str] = set()
+        for tag_name in payload.tags:
+            if tag_name in seen_tags:
+                continue
+            seen_tags.add(tag_name)
+            try:
+                tags.append(Tag.objects.get(name=tag_name))
+            except Tag.DoesNotExist:
+                return 404, {"message": f"Tag '{tag_name}' not found."}
+
+    data_fields: dict[str, CustomDataField] = {}
+    if payload.data is not None:
+        for field_name in payload.data:
+            try:
+                data_fields[field_name] = CustomDataField.objects.get(name=field_name)
+            except CustomDataField.DoesNotExist:
+                return 404, {"message": f"Data field '{field_name}' not found."}
+
+    return secondary_groups, tags, data_fields
+
+
+def _apply_cluster_relations(
+    cluster: Cluster,
+    payload: ClusterCreateRequest | ClusterUpdateRequest,
+    changeset: ChangeSet,
+    secondary_groups: list[Group],
+    tags: list[Tag],
+    data_fields: dict[str, CustomDataField],
+) -> None:
+    """Applies secondary groups, tags, fleet labels, data, and intent to a draft Cluster.
+
+    Args:
+        cluster: The draft Cluster instance being created or updated.
+        payload: The incoming cluster create or update request payload.
+        changeset: The active DRAFT ChangeSet.
+        secondary_groups: Pre-resolved secondary Group instances.
+        tags: Pre-resolved Tag instances.
+        data_fields: Pre-resolved CustomDataField instances keyed by field name.
+    """
+    if payload.secondary_groups is not None:
+        cluster.secondary_groups.set(secondary_groups)
+
+    if payload.tags is not None:
+        ClusterTag.objects.filter(cluster=cluster, changeset_id=changeset, is_live=False).delete()
+        for tag_obj in tags:
+            cluster_tag = ClusterTag(
+                cluster=cluster,
+                tag=tag_obj,
+                is_live=False,
+                changeset_id=changeset,
+            )
+            cluster_tag.full_clean()
+            cluster_tag.save()
+
+    if payload.fleet_labels is not None:
+        label_items = (
+            payload.fleet_labels.items()
+            if isinstance(payload.fleet_labels, dict)
+            else [(item.key, item.value) for item in payload.fleet_labels]
+        )
+        for key, value in label_items:
+            existing_label = ClusterFleetLabel.objects.filter(
+                cluster=cluster,
+                key=key,
+                changeset_id=changeset,
+                is_live=False,
+            ).first()
+            if existing_label is not None:
+                existing_label.value = value
+                existing_label.full_clean()
+                existing_label.save()
+            else:
+                fleet_label = ClusterFleetLabel(
+                    cluster=cluster,
+                    key=key,
+                    value=value,
+                    is_live=False,
+                    changeset_id=changeset,
+                )
+                fleet_label.full_clean()
+                fleet_label.save()
+
+    if payload.data is not None:
+        for field_name, value in payload.data.items():
+            field_obj = data_fields[field_name]
+            existing_data = ClusterData.objects.filter(
+                cluster=cluster,
+                field=field_obj,
+                changeset_id=changeset,
+                is_live=False,
+            ).first()
+            if existing_data is not None:
+                existing_data.value = value
+                existing_data.full_clean()
+                existing_data.save()
+            else:
+                cluster_data = ClusterData(
+                    cluster=cluster,
+                    field=field_obj,
+                    value=value,
+                    is_live=False,
+                    changeset_id=changeset,
+                )
+                cluster_data.full_clean()
+                cluster_data.save()
+
+    if payload.intent is not None:
+        intent_values = payload.intent.model_dump(exclude_unset=True)
+        existing_intent = ClusterIntent.objects.filter(cluster=cluster).first()
+        if existing_intent is not None:
+            for attr, val in intent_values.items():
+                setattr(existing_intent, attr, val)
+            existing_intent.is_live = False
+            existing_intent.changeset_id = changeset
+            existing_intent.full_clean()
+            existing_intent.save()
+        else:
+            intent_obj = ClusterIntent(
+                cluster=cluster,
+                is_live=False,
+                changeset_id=changeset,
+                **intent_values,
+            )
+            intent_obj.full_clean()
+            intent_obj.save()
+
+
 @clusters_router.post(
     "/cluster",
     response={200: ClusterResponse, codes_4xx: MessageResponse},
@@ -245,25 +429,28 @@ def create_cluster(request: HttpRequest, payload: ClusterCreateRequest):
     except ChangeSet.DoesNotExist:
         return 404, {"message": f"ChangeSet {payload.changeset_id} not found."}
 
-    try:
-        # Try to find a live group first
-        group_obj = Group.objects.get(name=payload.group, is_live=True)
-    except Group.DoesNotExist:
-        # If not live, try to find a draft group in the same changeset
-        try:
-            group_obj = Group.objects.get(name=payload.group, changeset_id=changeset, is_live=False)
-        except Group.DoesNotExist:
-            return 404, {"message": f"Group {payload.group} not found."}
+    group_obj = _resolve_group_in_changeset(payload.group, changeset)
+    if isinstance(group_obj, tuple):
+        return group_obj
 
-    cluster = Cluster(
-        name=payload.name,
-        description=payload.description,
-        group=group_obj,
-        changeset_id=changeset,
-    )
-    cluster.full_clean()
-    cluster.save()
+    resolved_relations = _resolve_cluster_relations(payload, changeset)
+    if len(resolved_relations) == 2:
+        return resolved_relations
+    secondary_groups, tags, data_fields = resolved_relations
 
+    with transaction.atomic():
+        cluster = Cluster(
+            name=payload.name,
+            description=payload.description,
+            group=group_obj,
+            changeset_id=changeset,
+        )
+        cluster.full_clean()
+        cluster.save()
+
+        _apply_cluster_relations(cluster, payload, changeset, secondary_groups, tags, data_fields)
+
+    cluster = Cluster.objects.with_related().get(pk=cluster.pk)
     return _generate_cluster_response(cluster)
 
 
@@ -338,6 +525,7 @@ def _update_cluster_logic(cluster_obj: Cluster, payload: ClusterUpdateRequest):
     except ChangeSet.DoesNotExist:
         return 404, {"message": f"ChangeSet {payload.changeset_id} not found."}
 
+    needs_new_draft = False
     if cluster_obj.changeset_id == changeset:
         pass
     elif cluster_obj.is_live:
@@ -351,27 +539,42 @@ def _update_cluster_logic(cluster_obj: Cluster, payload: ClusterUpdateRequest):
                 except Cluster.DoesNotExist:
                     return 500, {"message": "Inconsistent state: Locked by changeset but draft not found."}
         else:
+            needs_new_draft = True
+    else:
+        # Case: cluster_obj is a draft but NOT in the requested changeset
+        return 409, {"message": f"Cluster '{cluster_obj.name}' is already a draft in another ChangeSet."}
+
+    new_group_obj: Group | None = None
+    if payload.group is not None:
+        resolved_group = _resolve_group_in_changeset(payload.group, changeset)
+        if isinstance(resolved_group, tuple):
+            return resolved_group
+        new_group_obj = resolved_group
+
+    resolved_relations = _resolve_cluster_relations(payload, changeset)
+    if len(resolved_relations) == 2:
+        return resolved_relations
+    secondary_groups, tags, data_fields = resolved_relations
+
+    with transaction.atomic():
+        if needs_new_draft:
             cluster_obj = cluster_obj.create_draft(changeset)
             live_cluster = cluster_obj.draft_of
             live_cluster.is_locked = True
             live_cluster.locked_by_changeset = changeset
             live_cluster.save()
-    else:
-        # Case: cluster_obj is a draft but NOT in the requested changeset
-        return 409, {"message": f"Cluster '{cluster_obj.name}' is already a draft in another ChangeSet."}
 
-    if payload.description is not None:
-        cluster_obj.description = payload.description
-    if payload.group is not None:
-        try:
-            group_obj = Group.objects.get(name=payload.group, is_live=True)
-            cluster_obj.group = group_obj
-        except Group.DoesNotExist:
-            return 404, {"message": f"Group {payload.group} not found."}
+        if payload.description is not None:
+            cluster_obj.description = payload.description
+        if new_group_obj is not None:
+            cluster_obj.group = new_group_obj
 
-    cluster_obj.full_clean()
-    cluster_obj.save()
+        cluster_obj.full_clean()
+        cluster_obj.save()
 
+        _apply_cluster_relations(cluster_obj, payload, changeset, secondary_groups, tags, data_fields)
+
+    cluster_obj = Cluster.objects.with_related().get(pk=cluster_obj.pk)
     return _generate_cluster_response(cluster_obj)
 
 

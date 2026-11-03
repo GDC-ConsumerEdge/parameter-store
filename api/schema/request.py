@@ -24,6 +24,30 @@ JSON payloads for creating and updating Clusters, Groups, and ChangeSets.
 import enum
 
 from ninja import Field, Schema
+from ninja.orm import create_schema
+
+from parameter_store.models import ClusterIntent
+
+
+class FleetLabelRequest(Schema):
+    """Schema representing a fleet-level label key-value pair."""
+
+    key: str = Field(..., description="The label key.")
+    value: str = Field(..., description="The label value.")
+
+
+ClusterIntentRequest: Schema = create_schema(
+    ClusterIntent,
+    name="ClusterIntentRequest",
+    exclude=("id", "cluster", "is_live", "changeset_id", "created_at", "updated_at"),
+)
+
+ClusterIntentUpdateRequest: Schema = create_schema(
+    ClusterIntent,
+    name="ClusterIntentUpdateRequest",
+    exclude=("id", "cluster", "is_live", "changeset_id", "created_at", "updated_at"),
+    optional_fields="__all__",
+)
 
 
 class ChangeSetStatus(enum.StrEnum):
@@ -86,6 +110,19 @@ class ClusterCreateRequest(Schema):
     name: str = Field(..., description="The unique name for the new cluster.")
     description: str | None = Field(None, description="An optional description of the cluster.")
     group: str = Field(..., description="The name of the primary group this cluster will belong to.")
+    secondary_groups: list[str] | None = Field(
+        None, description="An optional list of secondary group names associated with this cluster."
+    )
+    tags: list[str] | None = Field(None, description="An optional list of tag names to apply to this cluster.")
+    fleet_labels: list[FleetLabelRequest] | dict[str, str] | None = Field(
+        None, description="An optional list or dictionary of fleet-level labels assigned to the cluster."
+    )
+    data: dict[str, str | None] | None = Field(
+        None, description="An optional dictionary of data field values (field name to value) for the cluster."
+    )
+    intent: ClusterIntentRequest | None = Field(
+        None, description="An optional configuration intent (spec) for the cluster."
+    )
     changeset_id: int = Field(..., description="The ID of the active ChangeSet to associate with this creation.")
 
 
@@ -94,6 +131,19 @@ class ClusterUpdateRequest(Schema):
 
     description: str | None = Field(None, description="The new description for the cluster.")
     group: str | None = Field(None, description="The name of a new primary group to move the cluster to.")
+    secondary_groups: list[str] | None = Field(
+        None, description="An optional list of secondary group names to replace the cluster's secondary groups."
+    )
+    tags: list[str] | None = Field(None, description="An optional list of tag names to replace the cluster's tags.")
+    fleet_labels: list[FleetLabelRequest] | dict[str, str] | None = Field(
+        None, description="An optional list or dictionary of fleet-level labels to update on the cluster."
+    )
+    data: dict[str, str | None] | None = Field(
+        None, description="An optional dictionary of data field values (field name to value) to update on the cluster."
+    )
+    intent: ClusterIntentUpdateRequest | None = Field(
+        None, description="An optional configuration intent (spec) to create or update on the cluster."
+    )
     changeset_id: int = Field(..., description="The ID of the active ChangeSet to associate with this update.")
 
 
