@@ -178,3 +178,46 @@ def test_draft_cluster_remains_visible_after_group_update(client, live_objects, 
     queryset = cluster_admin.get_queryset(request)
     draft_cluster_pk = Cluster.objects.get(is_live=False).pk  # Re-fetch the pk
     assert queryset.filter(is_live=False, pk=draft_cluster_pk).exists()
+
+
+def test_draft_cluster_visibility_by_changeset_permission(live_objects, user):
+    """Tests that users with view_changeset/change_changeset can see other users' drafts."""
+    from django.contrib.auth.models import Permission
+    from django.test import RequestFactory
+
+    live_group, _ = live_objects
+    service_user = User.objects.create_user("svc-account", "svc@example.com", "password", is_staff=True)
+    regular_user = User.objects.create_user("regular", "regular@example.com", "password", is_staff=True)
+    reviewer_user = User.objects.create_user("reviewer", "reviewer@example.com", "password", is_staff=True)
+    view_cs_perm = Permission.objects.get(codename="view_changeset", content_type__app_label="parameter_store")
+    reviewer_user.user_permissions.add(view_cs_perm)
+
+    svc_changeset = ChangeSet.objects.create(name="svc-draft-cs", created_by=service_user)
+    svc_draft = Cluster.objects.create(
+        name="svc-draft-cluster",
+        group=live_group,
+        is_live=False,
+        changeset_id=svc_changeset,
+    )
+
+    site = admin.AdminSite()
+    cluster_admin = ClusterAdmin(Cluster, site)
+    rf = RequestFactory()
+
+    # Regular user without changeset permissions should not see svc_draft
+    req_regular = rf.get("/")
+    req_regular.user = regular_user
+    req_regular.session = {}
+    assert not cluster_admin.get_queryset(req_regular).filter(pk=svc_draft.pk).exists()
+
+    # Reviewer with view_changeset permission should see svc_draft
+    req_reviewer = rf.get("/")
+    req_reviewer.user = reviewer_user
+    req_reviewer.session = {}
+    assert cluster_admin.get_queryset(req_reviewer).filter(pk=svc_draft.pk).exists()
+
+    # Superuser should also see svc_draft
+    req_super = rf.get("/")
+    req_super.user = user
+    req_super.session = {}
+    assert cluster_admin.get_queryset(req_super).filter(pk=svc_draft.pk).exists()

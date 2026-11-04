@@ -64,9 +64,13 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
     def get_queryset(self, request):
         """Filters the queryset to show all live and draft entities for the current user."""
         qs = super().get_queryset(request)
-        return qs.filter(
-            models.Q(is_live=True) | models.Q(changeset_id__created_by=request.user, is_live=False)
-        ).select_related("changeset_id", "locked_by_changeset")
+        if request.user.has_perm("parameter_store.view_changeset") or request.user.has_perm(
+            "parameter_store.change_changeset"
+        ):
+            draft_q = models.Q(is_live=False, changeset_id__isnull=False)
+        else:
+            draft_q = models.Q(changeset_id__created_by=request.user, is_live=False)
+        return qs.filter(models.Q(is_live=True) | draft_q).select_related("changeset_id", "locked_by_changeset")
 
     @admin.display(description="ChangeSet Status")
     def changeset_status(self, obj):
