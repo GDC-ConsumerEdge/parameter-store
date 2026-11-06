@@ -11,6 +11,7 @@
     { name = "Janani Pandurangan", email = "jananip@google.com" },
     { name = "Jimit Rangras", email = "jimitrangras@google.com" },
     { name = "Kevin Liang", email = "kevinlia@google.com" },
+    { name = "Zach Quinn", email = "zachquinn@google.com" },
   ]
   license = "LicenseRef-My-Custom-License"
   readme = "README.md"
