@@ -168,8 +168,12 @@ curl -X POST "http://localhost:8000/api/v1/changeset" \
 ```
 Note the ChangeSet ID (`42`) for subsequent requests.
 
-#### Step 2: Create or Update a Cluster
-To update a cluster, use its UUID (`a1b2c3d4...`) and provide the `changeset_id`.
+#### Step 2: Create or Update a Group or Cluster
+When creating or updating Groups (`/api/v1/group`, `/api/v1/group/{name}`, `/api/v1/group/id/{uuid}`) and Clusters (`/api/v1/cluster`, `/api/v1/cluster/{name}`, `/api/v1/cluster/id/{uuid}`), you can manage associated parameters and relations directly in the request payload:
+
+- Custom data (`data` on Groups and Clusters) and fleet labels (`fleet_labels` on Clusters) follow consistent key-value update semantics: providing a key creates or updates that key, omitting a key leaves its existing value untouched, setting a key's value to `null` removes that key, and passing an empty collection (`{}` or `[]`) removes all keys in that collection. Custom data keys must reference registered `CustomDataField` names (`/api/v1/data-fields`).
+- Tags (`tags`) and secondary groups (`secondary_groups`) on Clusters accept a list of names. Omitting the field leaves existing associations untouched, providing a list replaces the set of associations, and passing `[]` clears all associations. Tags must reference registered `Tag` names (`/api/v1/tags`).
+- Cluster intent (`intent`) accepts the full specification when creating an intent or a partial object when updating an existing intent. The optional `subnet_vlans` field accepts a comma-separated string (`"500,2100"`) or list of VLAN IDs (`[500, 2100]`); omitting it on creation, setting it to `null`, or passing `""` or `[]` stores `null`.
 
 ```bash
 curl -X PUT "http://localhost:8000/api/v1/cluster/id/a1b2c3d4-..." \
@@ -177,10 +181,15 @@ curl -X PUT "http://localhost:8000/api/v1/cluster/id/a1b2c3d4-..." \
      -H "Content-Type: application/json" \
      -d '{
            "description": "Updated via API",
+           "secondary_groups": ["secondary-group-a"],
+           "tags": ["edge-tag"],
+           "fleet_labels": {"environment": "prod", "deprecated_label": null},
+           "data": {"manifest_version": "v1.2.0", "obsolete_field": null},
+           "intent": {"node_count": 5, "subnet_vlans": [500, 2100]},
            "changeset_id": 42
          }'
 ```
-This action creates a **Draft** of the cluster within ChangeSet 42.
+This action creates or updates the draft of the cluster within ChangeSet 42.
 
 #### Step 3: Review Changes
 Retrieve a summary of all pending changes in the ChangeSet.

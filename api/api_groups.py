@@ -25,7 +25,9 @@ This module provides the CRUD operations for Groups, including support for:
 """
 
 import uuid
+from collections import defaultdict
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Prefetch
 from django.http import HttpRequest
@@ -34,10 +36,8 @@ from ninja.errors import HttpError
 from ninja.responses import codes_4xx, codes_5xx
 from ninja.security import django_auth
 
-from parameter_store.models import ChangeSet, CustomDataField, Group, GroupData
-
-from .schema.request import GroupCreateRequest, GroupUpdateRequest
-from .schema.response import (
+from api.schema.request import GroupCreateRequest, GroupUpdateRequest
+from api.schema.response import (
     GroupHistoryItem,
     GroupHistoryResponse,
     GroupResponse,
@@ -45,7 +45,8 @@ from .schema.response import (
     HistoryMetadata,
     MessageResponse,
 )
-from .utils import paginate, require_permissions
+from api.utils import paginate, require_permissions
+from parameter_store.models import ChangeSet, CustomDataField, Group, GroupData
 
 groups_router = Router(tags=["Groups"])
 
@@ -145,34 +146,71 @@ def _apply_group_data(
 ) -> None:
     """Applies custom data field values to a draft Group within a ChangeSet.
 
+    Passing an empty dictionary deletes all draft custom data records for the group.
+    Passing a key with a null value removes that specific custom data record, while
+    passing a key with a string value creates or updates that record.
+
     Args:
         group_obj: The draft Group instance being created or updated.
         changeset: The active DRAFT ChangeSet.
         data: Dictionary mapping data field names to values.
         resolved_fields: Pre-resolved CustomDataField objects keyed by field name.
+
+    Raises:
+        ValidationError: If any custom data value fails field or validator validation.
     """
+    if not data:
+        GroupData.objects.filter(
+            group=group_obj,
+            changeset_id=changeset,
+            is_live=False,
+        ).delete()
+        return
+
+    validation_errors: dict[str, list[ValidationError | str]] = defaultdict(list)
     for field_name, value in data.items():
         field_obj = resolved_fields[field_name]
+        if value is None:
+            GroupData.objects.filter(
+                group=group_obj,
+                field=field_obj,
+                changeset_id=changeset,
+                is_live=False,
+            ).delete()
+            continue
+
         existing = GroupData.objects.filter(
             group=group_obj,
             field=field_obj,
             changeset_id=changeset,
             is_live=False,
         ).first()
-        if existing is not None:
-            existing.value = value
-            existing.full_clean()
-            existing.save()
-        else:
-            group_data = GroupData(
+        target_record = (
+            existing
+            if existing is not None
+            else GroupData(
                 group=group_obj,
                 field=field_obj,
                 value=value,
                 is_live=False,
                 changeset_id=changeset,
             )
-            group_data.full_clean()
-            group_data.save()
+        )
+        target_record.value = value
+        try:
+            target_record.full_clean()
+        except ValidationError as e:
+            if hasattr(e, "error_dict"):
+                for err_key, err_list in e.error_dict.items():
+                    key = field_name if err_key in ("field", "value") else f"{field_name}.{err_key}"
+                    validation_errors[key].extend(err_list)
+            else:
+                validation_errors[field_name].extend(e.error_list)
+            continue
+        target_record.save()
+
+    if validation_errors:
+        raise ValidationError(validation_errors)
 
 
 def _update_group_logic(group_obj: Group, payload: GroupUpdateRequest):
@@ -236,12 +274,13 @@ def _update_group_logic(group_obj: Group, payload: GroupUpdateRequest):
         if payload.data is not None:
             _apply_group_data(group_obj, changeset, payload.data, resolved_fields)
 
+    group_data_qs = group_obj.group_data.select_related("field").all()
     return GroupResponse(
         id=group_obj.shared_entity_id,
         record_id=group_obj.id,
         name=group_obj.name,
         description=group_obj.description,
-        data={d.field.name: d.value for d in group_obj.group_data.all()} if group_obj.group_data.exists() else None,
+        data={d.field.name: d.value for d in group_data_qs} if group_data_qs else None,
         created_at=group_obj.created_at,
         updated_at=group_obj.updated_at,
     )
@@ -424,10 +463,11 @@ def get_groups(request: HttpRequest, limit: int = 250, offset: int = 0):
 )
 @require_permissions("api.params_api_create_group", "api.params_api_create_objects")
 def create_group(request: HttpRequest, payload: GroupCreateRequest):
-    """
-    Initializes a new Group entity within a ChangeSet.
+    """Initializes a new Group entity within a ChangeSet.
 
     The group is created in a DRAFT state and will not be live until the ChangeSet is committed.
+    Optional custom parameter `data` may be supplied as a dictionary mapping registered
+    `CustomDataField` names to string values.
     """
     try:
         changeset = ChangeSet.objects.get(id=payload.changeset_id)
@@ -452,12 +492,13 @@ def create_group(request: HttpRequest, payload: GroupCreateRequest):
         if payload.data is not None:
             _apply_group_data(group, changeset, payload.data, resolved_fields)
 
+    group_data_qs = group.group_data.select_related("field").all()
     return GroupResponse(
         id=group.shared_entity_id,
         record_id=group.id,
         name=group.name,
         description=group.description,
-        data={d.field.name: d.value for d in group.group_data.all()} if group.group_data.exists() else None,
+        data={d.field.name: d.value for d in group_data_qs} if group_data_qs else None,
         created_at=group.created_at,
         updated_at=group.updated_at,
     )
@@ -471,10 +512,11 @@ def create_group(request: HttpRequest, payload: GroupCreateRequest):
 )
 @require_permissions("api.params_api_update_group", "api.params_api_update_objects")
 def update_group_by_name(request: HttpRequest, group_name: str, payload: GroupUpdateRequest):
-    """
-    Modifies a group identified by name within a ChangeSet.
+    """Modifies a group identified by name within a ChangeSet.
 
     Creates a draft version if one does not exist, or updates the existing draft in the specified ChangeSet.
+    For `data`, providing a key creates or updates that key, omitting a key leaves its existing value untouched,
+    setting a key to `null` removes it, and passing `{}` removes all custom data on the group.
     """
     group_obj = _get_group_or_404(group_name)
 
@@ -499,8 +541,10 @@ def update_group_by_name(request: HttpRequest, group_name: str, payload: GroupUp
 )
 @require_permissions("api.params_api_update_group", "api.params_api_update_objects")
 def update_group_by_id(request: HttpRequest, group_id: uuid.UUID, payload: GroupUpdateRequest):
-    """
-    Modifies a group identified by its stable Entity ID (UUID) within a ChangeSet.
+    """Modifies a group identified by its stable Entity ID (UUID) within a ChangeSet.
+
+    For `data`, providing a key creates or updates that key, omitting a key leaves its existing value untouched,
+    setting a key to `null` removes it, and passing `{}` removes all custom data on the group.
     """
     # Try to find a draft first
     try:

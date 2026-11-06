@@ -221,3 +221,37 @@ def test_draft_cluster_visibility_by_changeset_permission(live_objects, user):
     req_super.user = user
     req_super.session = {}
     assert cluster_admin.get_queryset(req_super).filter(pk=svc_draft.pk).exists()
+
+
+def test_editing_or_deleting_existing_draft_does_not_create_spurious_changeset(live_objects, user) -> None:
+    """Tests that a reviewer editing or deleting another user's draft does not create a spurious ChangeSet."""
+    from django.test import RequestFactory
+
+    live_group, _ = live_objects
+    service_user = User.objects.create_user("svc-author", "svc-author@example.com", "password", is_staff=True)
+    svc_changeset = ChangeSet.objects.create(name="svc-author-cs", created_by=service_user)
+    svc_draft = Cluster.objects.create(
+        name="svc-draft-to-edit",
+        group=live_group,
+        is_live=False,
+        changeset_id=svc_changeset,
+    )
+
+    site = admin.AdminSite()
+    cluster_admin = ClusterAdmin(Cluster, site)
+    rf = RequestFactory()
+
+    req = rf.post("/")
+    req.user = user
+    req.session = {}
+
+    class DummyForm:
+        cleaned_data: dict[str, object] = {}
+
+    svc_draft.description = "Edited by reviewer"
+    cluster_admin.save_model(req, svc_draft, DummyForm(), change=True)
+    assert not ChangeSet.objects.filter(created_by=user).exists()
+
+    cluster_admin.delete_model(req, svc_draft)
+    assert not ChangeSet.objects.filter(created_by=user).exists()
+    assert not Cluster.objects.filter(pk=svc_draft.pk).exists()

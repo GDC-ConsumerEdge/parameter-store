@@ -27,7 +27,16 @@ from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 from django.test import Client
 
-from parameter_store.models import ChangeSet, Cluster, ClusterData, CustomDataField, Group, Tag
+from parameter_store.models import (
+    ChangeSet,
+    Cluster,
+    ClusterData,
+    ClusterFleetLabel,
+    ClusterTag,
+    CustomDataField,
+    Group,
+    Tag,
+)
 
 User = get_user_model()
 
@@ -481,3 +490,205 @@ def test_update_cluster_with_relations_and_data(permission_to_grant):
         "manifest_version": "v2.0.0",
         "config_folder": "configs/region-b",
     }
+
+
+@pytest.mark.django_db
+def test_cluster_intent_subnet_vlans_normalization_and_partial_update() -> None:
+    """Tests subnet_vlans normalization (omitted, null, empty string, empty list, VLAN list) and partial updates."""
+    user = User.objects.create_superuser(username="intent-admin", email="intent@example.com", password="password")
+    client = Client()
+    client.force_login(user)
+
+    cs = ChangeSet.objects.create(name="intent-norm-cs", created_by=user, status=ChangeSet.Status.DRAFT)
+    Group.objects.create(name="norm-group", is_live=True)
+
+    base_intent = {
+        "unique_zone_id": "norm-zone-01",
+        "location": "us-central1",
+        "machine_project_id": "proj-m",
+        "fleet_project_id": "proj-f",
+        "secrets_project_id": "proj-s",
+        "node_count": 3,
+        "cluster_ipv4_cidr": "172.16.0.0/17",
+        "services_ipv4_cidr": "192.168.30.0/23",
+        "external_load_balancer_ipv4_address_pools": "10.10.10.244/30",
+        "sync_repo": "https://github.com/example/repo.git",
+        "sync_branch": "main",
+        "sync_dir": "hydrated/clusters/",
+        "git_token_secrets_manager_name": "git-token",
+        "cluster_version": "1.11.0",
+    }
+
+    # 1. Create with subnet_vlans omitted -> stored as None, and response excludes internal fields
+    resp = client.post(
+        "/api/v1/cluster",
+        data={"name": "norm-cluster", "group": "norm-group", "intent": base_intent, "changeset_id": cs.id},
+        content_type="application/json",
+    )
+    assert resp.status_code == 200, resp.content
+    intent_resp = resp.json()["intent"]
+    assert intent_resp["subnet_vlans"] is None
+    assert "is_live" not in intent_resp
+    assert "changeset_id" not in intent_resp
+
+    # 2. Partial update passing a list of VLAN IDs -> normalized to "500,2100"
+    resp = client.put(
+        "/api/v1/cluster/norm-cluster",
+        data={"intent": {"subnet_vlans": [500, 2100]}, "changeset_id": cs.id},
+        content_type="application/json",
+    )
+    assert resp.status_code == 200, resp.content
+    assert resp.json()["intent"]["subnet_vlans"] == "500,2100"
+
+    # 3. Partial update modifying node_count while omitting subnet_vlans -> subnet_vlans remains "500,2100"
+    resp = client.put(
+        "/api/v1/cluster/norm-cluster",
+        data={"intent": {"node_count": 5}, "changeset_id": cs.id},
+        content_type="application/json",
+    )
+    assert resp.status_code == 200, resp.content
+    assert resp.json()["intent"]["node_count"] == 5
+    assert resp.json()["intent"]["subnet_vlans"] == "500,2100"
+
+    # 4. Partial update with empty list [] -> normalized to None
+    resp = client.put(
+        "/api/v1/cluster/norm-cluster",
+        data={"intent": {"subnet_vlans": []}, "changeset_id": cs.id},
+        content_type="application/json",
+    )
+    assert resp.status_code == 200, resp.content
+    assert resp.json()["intent"]["subnet_vlans"] is None
+
+    # 5. Partial update with empty string "" -> normalized to None
+    resp = client.put(
+        "/api/v1/cluster/norm-cluster",
+        data={"intent": {"subnet_vlans": "   "}, "changeset_id": cs.id},
+        content_type="application/json",
+    )
+    assert resp.status_code == 200, resp.content
+    assert resp.json()["intent"]["subnet_vlans"] is None
+
+
+@pytest.mark.django_db
+def test_update_cluster_data_and_fleet_labels_removal_semantics() -> None:
+    """Tests key-level updates, key removal via null, and collection clearing via empty dict/list on Cluster."""
+    user = setup_user_with_permission("api.params_api_update_cluster")
+    client = Client()
+    client.force_login(user)
+
+    group = Group.objects.create(name="sem-primary-group", is_live=True)
+    sec_group = Group.objects.create(name="sem-sec-group", is_live=True)
+    tag = Tag.objects.create(name="sem-tag")
+    field_a = CustomDataField.objects.create(name="field_a")
+    field_b = CustomDataField.objects.create(name="field_b")
+
+    live_cluster = Cluster.objects.create(name="sem-cluster", group=group, is_live=True)
+    live_cluster.secondary_groups.add(sec_group)
+    ClusterTag.objects.create(cluster=live_cluster, tag=tag, is_live=True)
+    ClusterData.objects.create(cluster=live_cluster, field=field_a, value="v1", is_live=True)
+    ClusterData.objects.create(cluster=live_cluster, field=field_b, value="v2", is_live=True)
+    ClusterFleetLabel.objects.create(cluster=live_cluster, key="env", value="dev", is_live=True)
+    ClusterFleetLabel.objects.create(cluster=live_cluster, key="tier", value="edge", is_live=True)
+
+    cs = ChangeSet.objects.create(name="sem-cls-cs", created_by=user, status=ChangeSet.Status.DRAFT)
+
+    # 1. Remove single key from data and fleet_labels using null, while leaving omitted keys untouched
+    resp1 = client.put(
+        "/api/v1/cluster/sem-cluster",
+        data={
+            "data": {"field_a": "v1-updated", "field_b": None},
+            "fleet_labels": {"env": "prod", "tier": None},
+            "changeset_id": cs.id,
+        },
+        content_type="application/json",
+    )
+    assert resp1.status_code == 200, resp1.content
+    body1 = resp1.json()
+    assert body1["data"] == {"field_a": "v1-updated"}
+    assert body1["fleet_labels"] == [{"key": "env", "value": "prod"}]
+    assert body1["secondary_groups"] == ["sem-sec-group"]
+    assert body1["tags"] == ["sem-tag"]
+
+    # 2. Clear all data, fleet_labels, tags, and secondary_groups using empty collections
+    resp2 = client.put(
+        "/api/v1/cluster/sem-cluster",
+        data={
+            "secondary_groups": [],
+            "tags": [],
+            "fleet_labels": {},
+            "data": {},
+            "changeset_id": cs.id,
+        },
+        content_type="application/json",
+    )
+    assert resp2.status_code == 200, resp2.content
+    body2 = resp2.json()
+    assert body2["secondary_groups"] == []
+    assert body2["tags"] == []
+    assert body2["fleet_labels"] == []
+    assert body2["data"] is None
+
+    cs.commit(user)
+    promoted = Cluster.objects.with_related().get(name="sem-cluster", is_live=True)
+    assert list(promoted.secondary_groups.all()) == []
+    assert list(promoted.tags.all()) == []
+    assert not promoted.fleet_labels.filter(is_live=True).exists()
+    assert not promoted.cluster_data.filter(is_live=True).exists()
+
+
+@pytest.mark.django_db
+def test_cluster_rejects_group_staged_for_deletion() -> None:
+    """Tests that creating or updating a cluster with a group staged for deletion in the same ChangeSet returns 409."""
+    user = setup_user_with_permission("api.params_api_create_objects")
+    client = Client()
+    client.force_login(user)
+
+    cs = ChangeSet.objects.create(name="del-grp-cs", created_by=user, status=ChangeSet.Status.DRAFT)
+    live_group = Group.objects.create(name="doomed-group", is_live=True)
+    live_group.create_draft(cs, is_pending_deletion=True)
+    live_group.is_locked = True
+    live_group.locked_by_changeset = cs
+    live_group.save()
+
+    resp = client.post(
+        "/api/v1/cluster",
+        data={"name": "orphan-cluster", "group": "doomed-group", "changeset_id": cs.id},
+        content_type="application/json",
+    )
+    assert resp.status_code == 409
+    assert "staged for deletion" in resp.json()["message"]
+
+
+@pytest.mark.django_db
+def test_cluster_custom_data_validator_error_keyed_by_field_name() -> None:
+    """Tests that custom data validation errors on Cluster return 422 keyed by the custom field name."""
+    from parameter_store.models import CustomDataFieldValidatorAssignment, Validator
+
+    user = setup_user_with_permission("api.params_api_create_cluster")
+    client = Client()
+    client.force_login(user)
+
+    cs = ChangeSet.objects.create(name="val-cls-cs", created_by=user, status=ChangeSet.Status.DRAFT)
+    Group.objects.create(name="val-group", is_live=True)
+    env_field = CustomDataField.objects.create(name="environment")
+    enum_val = Validator.objects.create(
+        name="cls-env-enum",
+        validator="parameter_store.validation.EnumValidator",
+        parameters={"choices": ["dev", "prod"]},
+    )
+    CustomDataFieldValidatorAssignment.objects.create(field=env_field, validator=enum_val)
+
+    resp = client.post(
+        "/api/v1/cluster",
+        data={
+            "name": "invalid-data-cluster",
+            "group": "val-group",
+            "data": {"environment": "invalid-env"},
+            "changeset_id": cs.id,
+        },
+        content_type="application/json",
+    )
+    assert resp.status_code == 422
+    msg = resp.json()["message"]
+    assert "environment" in msg
+    assert "field" not in msg

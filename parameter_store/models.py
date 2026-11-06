@@ -101,7 +101,7 @@ class DynamicValidatingModel(models.Model):
             try:
                 validator.validate(field)
             except ValidationError as e:
-                logger.info("Validation error", e)
+                logger.info("Validation error: %s", e)
                 errors[field_name].append(e)
 
         if errors:
@@ -306,9 +306,13 @@ class ChangeSet(models.Model):
                             fk_name = model.__name__.lower()
                             filter_kwargs = {fk_name: draft_entity, "is_live": False}
                             try:
-                                child_model.objects.filter(**filter_kwargs).update(is_live=True, changeset_id=None)
+                                child_entities = list(child_model.objects.filter(**filter_kwargs))
                             except FieldError:
-                                pass
+                                continue
+                            for child_entity in child_entities:
+                                child_entity.is_live = True
+                                child_entity.changeset_id = None
+                                _save_with_context(child_entity, child_model)
 
                         # Cascade updates
                         if model == Group:
@@ -360,11 +364,12 @@ class ChangeSet(models.Model):
                     entity.locked_by_changeset = None
                     entity.save()
 
-            # Delete draft rows
-            for model in top_level_models:
+            # Delete draft child rows first (to satisfy DO_NOTHING foreign keys such as ClusterTag),
+            # then delete top-level draft rows in reverse dependency order (Cluster before Group).
+            for model in child_models:
                 model.objects.filter(changeset_id=self.id, is_live=False).delete()
 
-            for model in child_models:
+            for model in reversed(top_level_models):
                 model.objects.filter(changeset_id=self.id, is_live=False).delete()
 
             self.status = self.Status.ABANDONED
@@ -812,12 +817,39 @@ class ClusterIntent(ChangeSetAwareChildEntity, DynamicValidatingModel):
     subnet_vlans = models.CharField(
         max_length=128,
         null=True,
+        blank=True,
         verbose_name="Secondary Network VLAN IDs",
         help_text="A comma-separated list of VLAN IDs for secondary networks (e.g., 500,2100,2500)",
     )
     recreate_on_delete = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def _normalize_subnet_vlans(self) -> None:
+        """Normalizes subnet_vlans so empty values become None and lists become comma-separated strings."""
+        if self.subnet_vlans is None:
+            return
+        if isinstance(self.subnet_vlans, (list, tuple, set)):
+            items = [str(item).strip() for item in self.subnet_vlans if item is not None and str(item).strip() != ""]
+            self.subnet_vlans = ",".join(items) if items else None
+        elif isinstance(self.subnet_vlans, str):
+            stripped = self.subnet_vlans.strip()
+            self.subnet_vlans = stripped if stripped else None
+
+    def clean_fields(self, exclude: list[str] | None = None) -> None:
+        """Normalizes fields before standard Django field validation."""
+        self._normalize_subnet_vlans()
+        super().clean_fields(exclude=exclude)
+
+    def clean(self, validator_assignment_model: type[models.Model] | None = None) -> None:
+        """Normalizes fields before running model and custom dynamic validation."""
+        self._normalize_subnet_vlans()
+        super().clean(validator_assignment_model=validator_assignment_model)
+
+    def save(self, *args, **kwargs) -> None:
+        """Normalizes fields before saving the ClusterIntent record."""
+        self._normalize_subnet_vlans()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.cluster.name
@@ -903,7 +935,7 @@ class CustomDataValidatingModel(models.Model):
             try:
                 validator.validate(self.value)
             except ValidationError as e:
-                logger.info("Validation error", e)
+                logger.info("Validation error: %s", e)
                 errors["field"].append(e)
 
         if errors:

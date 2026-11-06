@@ -25,29 +25,82 @@ import enum
 
 from ninja import Field, Schema
 from ninja.orm import create_schema
+from pydantic import field_validator
 
 from parameter_store.models import ClusterIntent
+
+
+def _normalize_subnet_vlans_value(value: str | list[str | int] | None) -> str | None:
+    """Normalizes subnet_vlans input so empty strings or lists become None and lists become comma-separated."""
+    if value is None:
+        return None
+    if isinstance(value, list):
+        items = [str(item).strip() for item in value if item is not None and str(item).strip() != ""]
+        return ",".join(items) if items else None
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped if stripped else None
+    return value
 
 
 class FleetLabelRequest(Schema):
     """Schema representing a fleet-level label key-value pair."""
 
     key: str = Field(..., description="The label key.")
-    value: str = Field(..., description="The label value.")
+    value: str | None = Field(
+        None,
+        description="The label value. Set to null to remove an existing label with this key.",
+    )
 
 
-ClusterIntentRequest: Schema = create_schema(
+_ClusterIntentBaseSchema = create_schema(
     ClusterIntent,
-    name="ClusterIntentRequest",
+    name="_ClusterIntentBaseSchema",
     exclude=("id", "cluster", "is_live", "changeset_id", "created_at", "updated_at"),
 )
 
-ClusterIntentUpdateRequest: Schema = create_schema(
+_ClusterIntentUpdateBaseSchema = create_schema(
     ClusterIntent,
-    name="ClusterIntentUpdateRequest",
+    name="_ClusterIntentUpdateBaseSchema",
     exclude=("id", "cluster", "is_live", "changeset_id", "created_at", "updated_at"),
     optional_fields="__all__",
 )
+
+
+class ClusterIntentRequest(_ClusterIntentBaseSchema):
+    """Schema for creating a cluster configuration intent (spec)."""
+
+    subnet_vlans: str | list[str | int] | None = Field(
+        None,
+        description=(
+            "A comma-separated string (e.g., '500,2100,2500') or list of VLAN IDs for secondary networks. "
+            "Omit, set to null, or pass an empty string or empty list to store null."
+        ),
+    )
+
+    @field_validator("subnet_vlans", mode="after")
+    @classmethod
+    def normalize_subnet_vlans(cls, value: str | list[str | int] | None) -> str | None:
+        """Normalizes empty strings or lists to None and joins VLAN lists into a comma-separated string."""
+        return _normalize_subnet_vlans_value(value)
+
+
+class ClusterIntentUpdateRequest(_ClusterIntentUpdateBaseSchema):
+    """Schema for partially updating a cluster configuration intent (spec)."""
+
+    subnet_vlans: str | list[str | int] | None = Field(
+        None,
+        description=(
+            "A comma-separated string (e.g., '500,2100,2500') or list of VLAN IDs for secondary networks. "
+            "Omit to leave unchanged; set to null or pass an empty string or empty list to clear."
+        ),
+    )
+
+    @field_validator("subnet_vlans", mode="after")
+    @classmethod
+    def normalize_subnet_vlans(cls, value: str | list[str | int] | None) -> str | None:
+        """Normalizes empty strings or lists to None and joins VLAN lists into a comma-separated string."""
+        return _normalize_subnet_vlans_value(value)
 
 
 class ChangeSetStatus(enum.StrEnum):
@@ -89,7 +142,11 @@ class GroupCreateRequest(Schema):
     name: str = Field(..., description="The unique name for the new group.")
     description: str | None = Field(None, description="An optional description of the group's function or scope.")
     data: dict[str, str | None] | None = Field(
-        None, description="An optional dictionary of data field values (field name to value) for the group."
+        None,
+        description=(
+            "Optional dictionary mapping registered CustomDataField names to values for the group. "
+            "Keys with null values are ignored on creation."
+        ),
     )
     changeset_id: int = Field(..., description="The ID of the active ChangeSet to associate with this creation.")
 
@@ -99,7 +156,13 @@ class GroupUpdateRequest(Schema):
 
     description: str | None = Field(None, description="The new description for the group.")
     data: dict[str, str | None] | None = Field(
-        None, description="An optional dictionary of data field values (field name to value) to update on the group."
+        None,
+        description=(
+            "Optional dictionary mapping registered CustomDataField names to values to update on the group. "
+            "Providing a key creates or updates that key; omitting a key leaves its existing value untouched; "
+            "setting a key to null removes that key; passing an empty dictionary ({}) removes all custom data "
+            "from the group."
+        ),
     )
     changeset_id: int = Field(..., description="The ID of the active ChangeSet to associate with this update.")
 
@@ -109,16 +172,28 @@ class ClusterCreateRequest(Schema):
 
     name: str = Field(..., description="The unique name for the new cluster.")
     description: str | None = Field(None, description="An optional description of the cluster.")
-    group: str = Field(..., description="The name of the primary group this cluster will belong to.")
-    secondary_groups: list[str] | None = Field(
-        None, description="An optional list of secondary group names associated with this cluster."
+    group: str = Field(
+        ...,
+        description="The name of the primary group this cluster will belong to (may be live or a draft in the same ChangeSet).",
     )
-    tags: list[str] | None = Field(None, description="An optional list of tag names to apply to this cluster.")
-    fleet_labels: list[FleetLabelRequest] | dict[str, str] | None = Field(
-        None, description="An optional list or dictionary of fleet-level labels assigned to the cluster."
+    secondary_groups: list[str] | None = Field(
+        None,
+        description="Optional list of secondary group names associated with this cluster.",
+    )
+    tags: list[str] | None = Field(
+        None,
+        description="Optional list of registered tag names to apply to this cluster.",
+    )
+    fleet_labels: list[FleetLabelRequest] | dict[str, str | None] | None = Field(
+        None,
+        description=(
+            "Optional list of {key, value} objects or dictionary of key-value pairs for fleet-level labels "
+            "assigned to the cluster."
+        ),
     )
     data: dict[str, str | None] | None = Field(
-        None, description="An optional dictionary of data field values (field name to value) for the cluster."
+        None,
+        description="Optional dictionary mapping registered CustomDataField names to values for the cluster.",
     )
     intent: ClusterIntentRequest | None = Field(
         None, description="An optional configuration intent (spec) for the cluster."
@@ -130,19 +205,49 @@ class ClusterUpdateRequest(Schema):
     """Schema for updating a cluster."""
 
     description: str | None = Field(None, description="The new description for the cluster.")
-    group: str | None = Field(None, description="The name of a new primary group to move the cluster to.")
-    secondary_groups: list[str] | None = Field(
-        None, description="An optional list of secondary group names to replace the cluster's secondary groups."
+    group: str | None = Field(
+        None,
+        description="The name of a new primary group to move the cluster to (may be live or a draft in the same ChangeSet).",
     )
-    tags: list[str] | None = Field(None, description="An optional list of tag names to replace the cluster's tags.")
-    fleet_labels: list[FleetLabelRequest] | dict[str, str] | None = Field(
-        None, description="An optional list or dictionary of fleet-level labels to update on the cluster."
+    secondary_groups: list[str] | None = Field(
+        None,
+        description=(
+            "Optional list of secondary group names to replace the cluster's secondary groups. "
+            "Omit to leave unchanged; pass an empty list ([]) to remove all secondary groups."
+        ),
+    )
+    tags: list[str] | None = Field(
+        None,
+        description=(
+            "Optional list of registered tag names to replace the cluster's tags. "
+            "Omit to leave unchanged; pass an empty list ([]) to remove all tags."
+        ),
+    )
+    fleet_labels: list[FleetLabelRequest] | dict[str, str | None] | None = Field(
+        None,
+        description=(
+            "Optional list of {key, value} objects or dictionary of key-value pairs to update fleet-level labels. "
+            "Providing a key creates or updates that label; omitting a key leaves its existing value untouched; "
+            "setting a key's value to null removes that label; passing an empty collection ({} or []) removes all "
+            "fleet labels from the cluster."
+        ),
     )
     data: dict[str, str | None] | None = Field(
-        None, description="An optional dictionary of data field values (field name to value) to update on the cluster."
+        None,
+        description=(
+            "Optional dictionary mapping registered CustomDataField names to values to update on the cluster. "
+            "Providing a key creates or updates that key; omitting a key leaves its existing value untouched; "
+            "setting a key to null removes that key; passing an empty dictionary ({}) removes all custom data "
+            "from the cluster."
+        ),
     )
     intent: ClusterIntentUpdateRequest | None = Field(
-        None, description="An optional configuration intent (spec) to create or update on the cluster."
+        None,
+        description=(
+            "Optional configuration intent (spec) to create or partially update on the cluster. "
+            "When updating an existing intent, only provided fields are modified; when creating a new intent on a "
+            "cluster that does not yet have one, all required intent fields must be supplied."
+        ),
     )
     changeset_id: int = Field(..., description="The ID of the active ChangeSet to associate with this update.")
 

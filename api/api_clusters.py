@@ -25,7 +25,9 @@ This module provides the CRUD operations for Clusters, including support for:
 """
 
 import uuid
+from collections import defaultdict
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import HttpRequest
 from ninja import Router
@@ -43,6 +45,7 @@ from api.schema.response import (
     HistoryMetadata,
     MessageResponse,
 )
+from api.utils import paginate, require_permissions
 from parameter_store.models import (
     ChangeSet,
     Cluster,
@@ -54,8 +57,6 @@ from parameter_store.models import (
     Group,
     Tag,
 )
-
-from .utils import paginate, require_permissions
 
 clusters_router = Router(tags=["Clusters"])
 
@@ -238,18 +239,26 @@ def get_clusters(request: HttpRequest, limit=250, offset=0):
 def _resolve_group_in_changeset(group_name: str, changeset: ChangeSet) -> Group | tuple[int, dict[str, str]]:
     """Resolves a Group by name from live groups or drafts in the same ChangeSet.
 
+    Rejects groups that are staged for deletion in the target ChangeSet with a 409 error.
+
     Args:
         group_name: The unique name of the group to resolve.
         changeset: The active DRAFT ChangeSet.
 
     Returns:
-        The resolved Group instance, or a 404 error tuple if not found.
+        The resolved Group instance, or a (status_code, response_dict) error tuple.
     """
     try:
-        return Group.objects.get(name=group_name, is_live=True)
+        live_group = Group.objects.get(name=group_name, is_live=True)
+        if Group.objects.filter(draft_of=live_group, changeset_id=changeset, is_pending_deletion=True).exists():
+            return 409, {"message": f"Group '{group_name}' is staged for deletion in ChangeSet {changeset.id}."}
+        return live_group
     except Group.DoesNotExist:
         try:
-            return Group.objects.get(name=group_name, changeset_id=changeset, is_live=False)
+            draft_group = Group.objects.get(name=group_name, changeset_id=changeset, is_live=False)
+            if draft_group.is_pending_deletion:
+                return 409, {"message": f"Group '{group_name}' is staged for deletion in ChangeSet {changeset.id}."}
+            return draft_group
         except Group.DoesNotExist:
             return 404, {"message": f"Group {group_name} not found."}
 
@@ -312,6 +321,12 @@ def _apply_cluster_relations(
 ) -> None:
     """Applies secondary groups, tags, fleet labels, data, and intent to a draft Cluster.
 
+    For `fleet_labels` and `data`:
+    - Omitting the top-level field leaves existing records untouched.
+    - Passing an empty collection (`{}` or `[]`) deletes all existing draft records for that collection.
+    - Providing a key with a non-null value creates or updates that record.
+    - Setting a key's value to `null` removes the record for that key.
+
     Args:
         cluster: The draft Cluster instance being created or updated.
         payload: The incoming cluster create or update request payload.
@@ -319,6 +334,9 @@ def _apply_cluster_relations(
         secondary_groups: Pre-resolved secondary Group instances.
         tags: Pre-resolved Tag instances.
         data_fields: Pre-resolved CustomDataField instances keyed by field name.
+
+    Raises:
+        ValidationError: If any relation or custom data field fails validation.
     """
     if payload.secondary_groups is not None:
         cluster.secondary_groups.set(secondary_groups)
@@ -337,55 +355,100 @@ def _apply_cluster_relations(
 
     if payload.fleet_labels is not None:
         label_items = (
-            payload.fleet_labels.items()
+            list(payload.fleet_labels.items())
             if isinstance(payload.fleet_labels, dict)
             else [(item.key, item.value) for item in payload.fleet_labels]
         )
-        for key, value in label_items:
-            existing_label = ClusterFleetLabel.objects.filter(
+        if not label_items:
+            ClusterFleetLabel.objects.filter(
                 cluster=cluster,
-                key=key,
                 changeset_id=changeset,
                 is_live=False,
-            ).first()
-            if existing_label is not None:
-                existing_label.value = value
-                existing_label.full_clean()
-                existing_label.save()
-            else:
-                fleet_label = ClusterFleetLabel(
+            ).delete()
+        else:
+            for key, value in label_items:
+                if value is None:
+                    ClusterFleetLabel.objects.filter(
+                        cluster=cluster,
+                        key=key,
+                        changeset_id=changeset,
+                        is_live=False,
+                    ).delete()
+                    continue
+
+                existing_label = ClusterFleetLabel.objects.filter(
                     cluster=cluster,
                     key=key,
-                    value=value,
-                    is_live=False,
                     changeset_id=changeset,
-                )
-                fleet_label.full_clean()
-                fleet_label.save()
+                    is_live=False,
+                ).first()
+                if existing_label is not None:
+                    existing_label.value = value
+                    existing_label.full_clean()
+                    existing_label.save()
+                else:
+                    fleet_label = ClusterFleetLabel(
+                        cluster=cluster,
+                        key=key,
+                        value=value,
+                        is_live=False,
+                        changeset_id=changeset,
+                    )
+                    fleet_label.full_clean()
+                    fleet_label.save()
 
     if payload.data is not None:
-        for field_name, value in payload.data.items():
-            field_obj = data_fields[field_name]
-            existing_data = ClusterData.objects.filter(
+        if not payload.data:
+            ClusterData.objects.filter(
                 cluster=cluster,
-                field=field_obj,
                 changeset_id=changeset,
                 is_live=False,
-            ).first()
-            if existing_data is not None:
-                existing_data.value = value
-                existing_data.full_clean()
-                existing_data.save()
-            else:
-                cluster_data = ClusterData(
+            ).delete()
+        else:
+            validation_errors: dict[str, list[ValidationError | str]] = defaultdict(list)
+            for field_name, value in payload.data.items():
+                field_obj = data_fields[field_name]
+                if value is None:
+                    ClusterData.objects.filter(
+                        cluster=cluster,
+                        field=field_obj,
+                        changeset_id=changeset,
+                        is_live=False,
+                    ).delete()
+                    continue
+
+                existing_data = ClusterData.objects.filter(
                     cluster=cluster,
                     field=field_obj,
-                    value=value,
-                    is_live=False,
                     changeset_id=changeset,
+                    is_live=False,
+                ).first()
+                target_data = (
+                    existing_data
+                    if existing_data is not None
+                    else ClusterData(
+                        cluster=cluster,
+                        field=field_obj,
+                        value=value,
+                        is_live=False,
+                        changeset_id=changeset,
+                    )
                 )
-                cluster_data.full_clean()
-                cluster_data.save()
+                target_data.value = value
+                try:
+                    target_data.full_clean()
+                except ValidationError as e:
+                    if hasattr(e, "error_dict"):
+                        for err_key, err_list in e.error_dict.items():
+                            key = field_name if err_key in ("field", "value") else f"{field_name}.{err_key}"
+                            validation_errors[key].extend(err_list)
+                    else:
+                        validation_errors[field_name].extend(e.error_list)
+                    continue
+                target_data.save()
+
+            if validation_errors:
+                raise ValidationError(validation_errors)
 
     if payload.intent is not None:
         intent_values = payload.intent.model_dump(exclude_unset=True)
@@ -416,11 +479,10 @@ def _apply_cluster_relations(
 )
 @require_permissions("api.params_api_create_cluster", "api.params_api_create_objects")
 def create_cluster(request: HttpRequest, payload: ClusterCreateRequest):
-    """
-    Creates a new Cluster draft.
+    """Creates a new Cluster draft within a ChangeSet.
 
-    Validates that the provided `changeset_id` exists and is in DRAFT status.
-    The new cluster will be created as a draft associated with that ChangeSet.
+    Validates that the provided `changeset_id` exists and is in DRAFT status, and resolves
+    `group`, `secondary_groups`, `tags`, `fleet_labels`, `data`, and `intent` on the draft cluster.
     """
     try:
         changeset = ChangeSet.objects.get(id=payload.changeset_id)
@@ -462,11 +524,14 @@ def create_cluster(request: HttpRequest, payload: ClusterCreateRequest):
 )
 @require_permissions("api.params_api_update_cluster", "api.params_api_update_objects")
 def update_cluster_by_name(request: HttpRequest, cluster_name: str, payload: ClusterUpdateRequest):
-    """
-    Updates a Cluster by name within a ChangeSet.
+    """Updates a Cluster by name within a ChangeSet.
 
-    If a draft already exists in the specified ChangeSet, it updates the draft.
-    If a live version exists, it creates a new draft (and locks the live version).
+    If a draft already exists in the specified ChangeSet, it updates the draft; if a live version
+    exists, it creates a new draft and locks the live version.
+    For `data` and `fleet_labels`, providing a key creates or updates that key, omitting a key
+    leaves it untouched, setting a key to `null` removes it, and passing an empty collection (`{}`
+    or `[]`) removes all items in that collection. For `tags` and `secondary_groups`, providing a
+    list replaces the set of items, and passing `[]` removes all items.
     """
     cluster_obj = _get_cluster_or_404(cluster_name)
     if isinstance(cluster_obj, tuple) and payload.changeset_id:
@@ -488,11 +553,14 @@ def update_cluster_by_name(request: HttpRequest, cluster_name: str, payload: Clu
 )
 @require_permissions("api.params_api_update_cluster", "api.params_api_update_objects")
 def update_cluster_by_id(request: HttpRequest, cluster_id: uuid.UUID, payload: ClusterUpdateRequest):
-    """
-    Updates a Cluster by its stable Entity ID (UUID) within a ChangeSet.
+    """Updates a Cluster by its stable Entity ID (UUID) within a ChangeSet.
 
-    Prioritizes finding an existing draft for the ID. If none exists, falls back
-    to the live version to create a new draft.
+    Prioritizes finding an existing draft for the ID; if none exists, falls back to the live
+    version to create a new draft.
+    For `data` and `fleet_labels`, providing a key creates or updates that key, omitting a key
+    leaves it untouched, setting a key to `null` removes it, and passing an empty collection (`{}`
+    or `[]`) removes all items in that collection. For `tags` and `secondary_groups`, providing a
+    list replaces the set of items, and passing `[]` removes all items.
     """
     # Try to find a draft first
     try:

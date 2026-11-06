@@ -465,3 +465,101 @@ def test_update_group_with_data(permission_to_grant):
         "manifest_version": "v2.0.0",
         "support_contact": "ops-team@example.com",
     }
+
+
+@pytest.mark.django_db
+def test_update_group_data_null_and_empty_removal() -> None:
+    """Tests key-level removal via null and full collection removal via empty dict on Group data."""
+    user = setup_user_with_permission("api.params_api_update_group")
+    client = Client()
+    client.force_login(user)
+
+    field_a = CustomDataField.objects.create(name="field_a")
+    field_b = CustomDataField.objects.create(name="field_b")
+    CustomDataField.objects.create(name="field_c")
+
+    live_group = Group.objects.create(name="semantics-group", is_live=True)
+    GroupData.objects.create(group=live_group, field=field_a, value="val_a", is_live=True)
+    GroupData.objects.create(group=live_group, field=field_b, value="val_b", is_live=True)
+
+    cs = ChangeSet.objects.create(name="semantics-grp-cs", created_by=user, status=ChangeSet.Status.DRAFT)
+
+    # 1. Update field_a, omit field_b (untouched), remove field_b in next step, add field_c
+    resp1 = client.put(
+        "/api/v1/group/semantics-group",
+        data={
+            "data": {"field_a": "val_a_v2", "field_c": "val_c"},
+            "changeset_id": cs.id,
+        },
+        content_type="application/json",
+    )
+    assert resp1.status_code == 200
+    assert resp1.json()["data"] == {
+        "field_a": "val_a_v2",
+        "field_b": "val_b",
+        "field_c": "val_c",
+    }
+
+    # 2. Explicitly remove field_b by setting it to None; omit field_a and field_c
+    resp2 = client.put(
+        "/api/v1/group/semantics-group",
+        data={
+            "data": {"field_b": None},
+            "changeset_id": cs.id,
+        },
+        content_type="application/json",
+    )
+    assert resp2.status_code == 200
+    assert resp2.json()["data"] == {
+        "field_a": "val_a_v2",
+        "field_c": "val_c",
+    }
+
+    # 3. Clear all custom data by passing an empty dict {}
+    resp3 = client.put(
+        "/api/v1/group/semantics-group",
+        data={
+            "data": {},
+            "changeset_id": cs.id,
+        },
+        content_type="application/json",
+    )
+    assert resp3.status_code == 200
+    assert resp3.json()["data"] is None
+
+    cs.commit(user)
+    promoted = Group.objects.get(name="semantics-group", is_live=True)
+    assert not promoted.group_data.filter(is_live=True).exists()
+
+
+@pytest.mark.django_db
+def test_group_custom_data_validator_error_keyed_by_field_name() -> None:
+    """Tests that custom data validation errors on Group return 422 keyed by the custom field name."""
+    from parameter_store.models import CustomDataFieldValidatorAssignment, Validator
+
+    user = setup_user_with_permission("api.params_api_create_group")
+    client = Client()
+    client.force_login(user)
+
+    cs = ChangeSet.objects.create(name="val-grp-cs", created_by=user, status=ChangeSet.Status.DRAFT)
+    env_field = CustomDataField.objects.create(name="environment")
+    enum_val = Validator.objects.create(
+        name="env-enum",
+        validator="parameter_store.validation.EnumValidator",
+        parameters={"choices": ["dev", "prod"]},
+    )
+    CustomDataFieldValidatorAssignment.objects.create(field=env_field, validator=enum_val)
+
+    resp = client.post(
+        "/api/v1/group",
+        data={
+            "name": "invalid-data-group",
+            "data": {"environment": "invalid-env"},
+            "changeset_id": cs.id,
+        },
+        content_type="application/json",
+    )
+    assert resp.status_code == 422
+    msg = resp.json()["message"]
+    assert "environment" in msg
+    assert "field" not in msg

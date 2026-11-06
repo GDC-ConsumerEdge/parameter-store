@@ -172,9 +172,8 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
           applies the changes to the draft, and locks the live object.
         - For existing draft objects, it saves the changes normally.
         """
-        changeset = get_or_create_changeset(request, create_if_none=True)
-
         if not change:
+            changeset = get_or_create_changeset(request, create_if_none=True)
             # This is a new object; create it as a draft
             obj.is_live = False
             obj.changeset_id = changeset
@@ -194,6 +193,8 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
                     level=messages.ERROR,
                 )
                 return
+
+            changeset = get_or_create_changeset(request, create_if_none=True)
 
             try:
                 with transaction.atomic():
@@ -289,7 +290,7 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
     @admin.action(description="Delete / Stage for Deletion")
     def stage_for_deletion_action(self, request, queryset):
         """Stages selected live entities for deletion or deletes drafts."""
-        changeset = get_or_create_changeset(request, create_if_none=True)
+        changeset = None
 
         success_count = 0
         with transaction.atomic():
@@ -298,6 +299,9 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
                     if obj.is_locked:
                         self.message_user(request, f"Skipping locked entity: {obj}", level=messages.WARNING)
                         continue
+
+                    if changeset is None:
+                        changeset = get_or_create_changeset(request, create_if_none=True)
 
                     # Create deletion draft
                     obj.create_draft(changeset, is_pending_deletion=True)
@@ -339,8 +343,6 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
         If the object is live, stage it for deletion in the active changeset.
         If the object is a draft, delete it (discard changes).
         """
-        changeset = get_or_create_changeset(request, create_if_none=True)
-
         if obj.is_live:
             if obj.is_locked:
                 self.message_user(
@@ -349,6 +351,8 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
                     level=messages.ERROR,
                 )
                 return
+
+            changeset = get_or_create_changeset(request, create_if_none=True)
 
             try:
                 with transaction.atomic():

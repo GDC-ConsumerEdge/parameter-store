@@ -163,11 +163,38 @@ def setup_intra_cs_group_name_conflict(user):
     return cs, "name", "violates the unique constraint"
 
 
+def setup_updated_cluster_intent_conflict_with_live(user):
+    """
+    Scenario:
+    1. Live Cluster C1 has Intent Z1; Live Cluster C2 has Intent Z2.
+    2. ChangeSet updates Live Cluster C2's draft Intent to Z1.
+    Commit -> Conflict on Z1 returns 422 enriched with C2 context instead of 500.
+    """
+    g = Group.objects.create(name="G-Live", is_live=True)
+    c1 = Cluster.objects.create(name="C1-Live", group=g, is_live=True)
+    create_intent(c1, "Z1", is_live=True)
+
+    c2 = Cluster.objects.create(name="C2-Live", group=g, is_live=True)
+    create_intent(c2, "Z2", is_live=True)
+
+    cs = ChangeSet.objects.create(name="CS-Update-Intent-Conflict", created_by=user)
+    c2_draft = c2.create_draft(cs)
+    c2.is_locked = True
+    c2.locked_by_changeset = cs
+    c2.save()
+
+    c2_draft.intent.unique_zone_id = "Z1"
+    c2_draft.intent.save()
+
+    return cs, "unique_zone_id", "violates the unique constraint"
+
+
 @pytest.mark.django_db
 @pytest.mark.parametrize(
     "setup_func",
     [
         setup_intent_conflict_with_live,
+        setup_updated_cluster_intent_conflict_with_live,
         setup_group_name_conflict_with_live,
         setup_intra_cs_group_name_conflict,
         setup_group_data_conflict_with_live,

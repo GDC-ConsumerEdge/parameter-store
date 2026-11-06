@@ -52,7 +52,10 @@ class FleetLabelResponse(Schema):
     value: str = Field(..., description="The label value.")
 
 
-ClusterIntentResponse: Schema = create_schema(ClusterIntent, exclude=("id", "cluster", "created_at", "updated_at"))
+ClusterIntentResponse: Schema = create_schema(
+    ClusterIntent,
+    exclude=("id", "cluster", "is_live", "changeset_id", "created_at", "updated_at"),
+)
 
 
 class LogicalExpression(enum.StrEnum):
