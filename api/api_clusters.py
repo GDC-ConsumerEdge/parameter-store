@@ -612,6 +612,9 @@ def _update_cluster_logic(cluster_obj: Cluster, payload: ClusterUpdateRequest):
         # Case: cluster_obj is a draft but NOT in the requested changeset
         return 409, {"message": f"Cluster '{cluster_obj.name}' is already a draft in another ChangeSet."}
 
+    if cluster_obj.is_pending_deletion:
+        return 409, {"message": f"Cluster '{cluster_obj.name}' is staged for deletion in ChangeSet {changeset.id}."}
+
     new_group_obj: Group | None = None
     if payload.group is not None:
         resolved_group = _resolve_group_in_changeset(payload.group, changeset)

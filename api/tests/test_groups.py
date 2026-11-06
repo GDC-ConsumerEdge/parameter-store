@@ -563,3 +563,35 @@ def test_group_custom_data_validator_error_keyed_by_field_name() -> None:
     msg = resp.json()["message"]
     assert "environment" in msg
     assert "field" not in msg
+
+
+@pytest.mark.django_db
+def test_update_group_staged_for_deletion_returns_409() -> None:
+    """Tests that updating a group already staged for deletion in the same ChangeSet returns 409 Conflict."""
+    user = User.objects.create_superuser("del_upd_grp_admin", "del_upd_grp@example.com", "password")
+    client = Client()
+    client.force_login(user)
+
+    cs = ChangeSet.objects.create(name="del-upd-grp-cs", created_by=user, status=ChangeSet.Status.DRAFT)
+    live_group = Group.objects.create(name="doomed-update-group", description="Original", is_live=True)
+
+    del_resp = client.delete(f"/api/v1/group/doomed-update-group?changeset_id={cs.id}")
+    assert del_resp.status_code == 200
+
+    # Attempt update by name in the same ChangeSet
+    upd_by_name = client.put(
+        "/api/v1/group/doomed-update-group",
+        data={"description": "Should fail", "changeset_id": cs.id},
+        content_type="application/json",
+    )
+    assert upd_by_name.status_code == 409
+    assert "staged for deletion" in upd_by_name.json()["message"]
+
+    # Attempt update by shared_entity_id in the same ChangeSet
+    upd_by_id = client.put(
+        f"/api/v1/group/id/{live_group.shared_entity_id}",
+        data={"description": "Should also fail", "changeset_id": cs.id},
+        content_type="application/json",
+    )
+    assert upd_by_id.status_code == 409
+    assert "staged for deletion" in upd_by_id.json()["message"]

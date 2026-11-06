@@ -157,6 +157,49 @@ class ChangeSet(models.Model):
     def __str__(self):
         return f"{self.name or f'ChangeSet {self.id}'} ({self.get_status_display()})"
 
+    def _save_with_context(self, entity: models.Model, model_cls: type[models.Model]) -> None:
+        """Saves an entity within a savepoint and enriches any IntegrityError with root entity context.
+
+        Args:
+            entity: The model instance to save.
+            model_cls: The Django model class of the entity.
+
+        Raises:
+            ValidationError: If a database integrity error occurs, enriched with entity context.
+        """
+        from django.db import transaction
+
+        try:
+            with transaction.atomic():
+                with capture_db_errors(model_class=model_cls):
+                    entity.save()
+        except ValidationError as e:
+            # Determine the root entity (Cluster or Group) to provide better context in the error message.
+            root = entity
+            if hasattr(entity, "cluster"):
+                root = entity.cluster
+            elif hasattr(entity, "group"):
+                root = entity.group
+
+            # Use the string representation of the root entity for the description.
+            root_desc = str(root)
+
+            # Enrich the ValidationError with more descriptive keys.
+            new_errors = {}
+            if hasattr(e, "message_dict"):
+                for field, errs in e.message_dict.items():
+                    # Key format: "EntityClass 'EntityName' (field_name)"
+                    # This makes the error key unique per entity and highly descriptive for the user.
+                    new_key = f"{root.__class__.__name__} '{root_desc}' ({field})"
+                    new_errors[new_key] = errs
+            else:
+                # Fallback if there is no message_dict (non-field errors).
+                new_key = f"{root.__class__.__name__} '{root_desc}'"
+                new_errors[new_key] = e.messages
+
+            # Re-raise as a new ValidationError, chaining from the original.
+            raise ValidationError(new_errors) from e
+
     def commit(self, user):
         """
         Commits the ChangeSet, applying all staged changes to the live state.
@@ -180,52 +223,6 @@ class ChangeSet(models.Model):
 
         if self.status != self.Status.DRAFT:
             raise ValueError(f"ChangeSet '{self.name}' is not in draft state.")
-
-        def _save_with_context(entity, model_cls):
-            """
-            Helper to save an entity within a database error capturing context.
-
-            This wraps the save operation with `capture_db_errors` to catch integrity
-            violations and transform them into descriptive `ValidationError`s that
-            include context about the root entity (Cluster or Group) being affected.
-
-            Args:
-                entity: The model instance to save.
-                model_cls: The Django model class of the entity.
-
-            Raises:
-                ValidationError: If a database integrity error occurs, enriched with entity context.
-            """
-            try:
-                with transaction.atomic():
-                    with capture_db_errors(model_class=model_cls):
-                        entity.save()
-            except ValidationError as e:
-                # Determine the root entity (Cluster or Group) to provide better context in the error message.
-                root = entity
-                if hasattr(entity, "cluster"):
-                    root = entity.cluster
-                elif hasattr(entity, "group"):
-                    root = entity.group
-
-                # Use the string representation of the root entity for the description.
-                root_desc = str(root)
-
-                # Enrich the ValidationError with more descriptive keys.
-                new_errors = {}
-                if hasattr(e, "message_dict"):
-                    for field, errs in e.message_dict.items():
-                        # Key format: "EntityClass 'EntityName' (field_name)"
-                        # This makes the error key unique per entity and highly descriptive for the user.
-                        new_key = f"{root.__class__.__name__} '{root_desc}' ({field})"
-                        new_errors[new_key] = errs
-                else:
-                    # Fallback if there is no message_dict (non-field errors).
-                    new_key = f"{root.__class__.__name__} '{root_desc}'"
-                    new_errors[new_key] = e.messages
-
-                # Re-raise as a new ValidationError, chaining from the original.
-                raise ValidationError(new_errors) from e
 
         top_level_models = [Group, Cluster]
         child_models = [ClusterTag, ClusterIntent, ClusterFleetLabel, ClusterData, GroupData]
@@ -299,7 +296,7 @@ class ChangeSet(models.Model):
                         draft_entity.is_locked = False
                         draft_entity.locked_by_changeset = None
                         draft_entity.draft_of = None
-                        _save_with_context(draft_entity, model)
+                        self._save_with_context(draft_entity, model)
 
                         # Promote all child entities of the newly live parent
                         for child_model in child_models:
@@ -312,7 +309,7 @@ class ChangeSet(models.Model):
                             for child_entity in child_entities:
                                 child_entity.is_live = True
                                 child_entity.changeset_id = None
-                                _save_with_context(child_entity, child_model)
+                                self._save_with_context(child_entity, child_model)
 
                         # Cascade updates
                         if model == Group:
@@ -328,7 +325,7 @@ class ChangeSet(models.Model):
                         draft_entity.is_locked = False
                         draft_entity.locked_by_changeset = None
                         draft_entity.draft_of = None
-                        _save_with_context(draft_entity, model)
+                        self._save_with_context(draft_entity, model)
 
             # Process child entities (that were drafted directly, e.g. edits to children)
             for model in child_models:
@@ -336,7 +333,7 @@ class ChangeSet(models.Model):
                 for draft_entity in draft_entities:
                     draft_entity.is_live = True
                     draft_entity.changeset_id = None
-                    _save_with_context(draft_entity, model)
+                    self._save_with_context(draft_entity, model)
 
             self.status = self.Status.COMMITTED
             self.committed_at = timezone.now()
@@ -381,6 +378,8 @@ class ChangeSet(models.Model):
 
         from .models import Cluster, ClusterData, ClusterFleetLabel, ClusterIntent, ClusterTag, Group, GroupData
 
+        if self.pk == target_changeset.pk:
+            raise ValueError("Cannot coalesce a ChangeSet into itself.")
         if self.status != self.Status.DRAFT:
             raise ValueError(f"Source ChangeSet '{self.name}' is not in draft state.")
         if target_changeset.status != self.Status.DRAFT:
@@ -394,12 +393,33 @@ class ChangeSet(models.Model):
             for model in top_level_models:
                 model.objects.filter(locked_by_changeset=self).update(locked_by_changeset=target_changeset)
 
-            # Move draft entities
+            # Move draft entities with conflict and constraint checking
             for model in top_level_models:
-                model.objects.filter(changeset_id=self.id).update(changeset_id=target_changeset.id)
+                for draft_entity in model.objects.filter(changeset_id=self.id):
+                    if (
+                        model.objects.filter(
+                            changeset_id=target_changeset.id,
+                            is_live=False,
+                            name=draft_entity.name,
+                        )
+                        .exclude(pk=draft_entity.pk)
+                        .exists()
+                    ):
+                        raise ValidationError(
+                            {
+                                f"{model.__name__} '{draft_entity.name}' (name)": [
+                                    f"A draft {model.__name__.lower()} with name '{draft_entity.name}' "
+                                    f"already exists in target ChangeSet '{target_changeset.name}'."
+                                ]
+                            }
+                        )
+                    draft_entity.changeset_id = target_changeset
+                    self._save_with_context(draft_entity, model)
 
             for model in child_models:
-                model.objects.filter(changeset_id=self.id).update(changeset_id=target_changeset.id)
+                for child_entity in model.objects.filter(changeset_id=self.id):
+                    child_entity.changeset_id = target_changeset
+                    self._save_with_context(child_entity, model)
 
             self.delete()
 

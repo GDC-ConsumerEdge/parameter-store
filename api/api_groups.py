@@ -265,6 +265,9 @@ def _update_group_logic(group_obj: Group, payload: GroupUpdateRequest):
             # This will now fail because we require the changeset_id in the payload to match.
             return 409, {"message": f"Group '{group_obj.name}' is already a draft in another ChangeSet."}
 
+        if group_obj.is_pending_deletion:
+            return 409, {"message": f"Group '{group_obj.name}' is staged for deletion in ChangeSet {changeset.id}."}
+
         if payload.description is not None:
             group_obj.description = payload.description
 

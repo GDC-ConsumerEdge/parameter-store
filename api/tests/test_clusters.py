@@ -692,3 +692,41 @@ def test_cluster_custom_data_validator_error_keyed_by_field_name() -> None:
     msg = resp.json()["message"]
     assert "environment" in msg
     assert "field" not in msg
+
+
+@pytest.mark.django_db
+def test_update_cluster_staged_for_deletion_returns_409() -> None:
+    """Tests that updating a cluster already staged for deletion in the same ChangeSet returns 409 Conflict."""
+    user = User.objects.create_superuser("del_upd_cls_admin", "del_upd_cls@example.com", "password")
+    client = Client()
+    client.force_login(user)
+
+    cs = ChangeSet.objects.create(name="del-upd-cls-cs", created_by=user, status=ChangeSet.Status.DRAFT)
+    group = Group.objects.create(name="del-upd-cls-group", is_live=True)
+    live_cluster = Cluster.objects.create(
+        name="doomed-update-cluster",
+        group=group,
+        description="Original",
+        is_live=True,
+    )
+
+    del_resp = client.delete(f"/api/v1/cluster/doomed-update-cluster?changeset_id={cs.id}")
+    assert del_resp.status_code == 200
+
+    # Attempt update by name in the same ChangeSet
+    upd_by_name = client.put(
+        "/api/v1/cluster/doomed-update-cluster",
+        data={"description": "Should fail", "changeset_id": cs.id},
+        content_type="application/json",
+    )
+    assert upd_by_name.status_code == 409
+    assert "staged for deletion" in upd_by_name.json()["message"]
+
+    # Attempt update by shared_entity_id in the same ChangeSet
+    upd_by_id = client.put(
+        f"/api/v1/cluster/id/{live_cluster.shared_entity_id}",
+        data={"description": "Should also fail", "changeset_id": cs.id},
+        content_type="application/json",
+    )
+    assert upd_by_id.status_code == 409
+    assert "staged for deletion" in upd_by_id.json()["message"]
