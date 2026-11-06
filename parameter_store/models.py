@@ -101,7 +101,7 @@ class DynamicValidatingModel(models.Model):
             try:
                 validator.validate(field)
             except ValidationError as e:
-                logger.info("Validation error", e)
+                logger.info("Validation error: %s", e)
                 errors[field_name].append(e)
 
         if errors:
@@ -157,6 +157,49 @@ class ChangeSet(models.Model):
     def __str__(self):
         return f"{self.name or f'ChangeSet {self.id}'} ({self.get_status_display()})"
 
+    def _save_with_context(self, entity: models.Model, model_cls: type[models.Model]) -> None:
+        """Saves an entity within a savepoint and enriches any IntegrityError with root entity context.
+
+        Args:
+            entity: The model instance to save.
+            model_cls: The Django model class of the entity.
+
+        Raises:
+            ValidationError: If a database integrity error occurs, enriched with entity context.
+        """
+        from django.db import transaction
+
+        try:
+            with transaction.atomic():
+                with capture_db_errors(model_class=model_cls):
+                    entity.save()
+        except ValidationError as e:
+            # Determine the root entity (Cluster or Group) to provide better context in the error message.
+            root = entity
+            if hasattr(entity, "cluster"):
+                root = entity.cluster
+            elif hasattr(entity, "group"):
+                root = entity.group
+
+            # Use the string representation of the root entity for the description.
+            root_desc = str(root)
+
+            # Enrich the ValidationError with more descriptive keys.
+            new_errors = {}
+            if hasattr(e, "message_dict"):
+                for field, errs in e.message_dict.items():
+                    # Key format: "EntityClass 'EntityName' (field_name)"
+                    # This makes the error key unique per entity and highly descriptive for the user.
+                    new_key = f"{root.__class__.__name__} '{root_desc}' ({field})"
+                    new_errors[new_key] = errs
+            else:
+                # Fallback if there is no message_dict (non-field errors).
+                new_key = f"{root.__class__.__name__} '{root_desc}'"
+                new_errors[new_key] = e.messages
+
+            # Re-raise as a new ValidationError, chaining from the original.
+            raise ValidationError(new_errors) from e
+
     def commit(self, user):
         """
         Commits the ChangeSet, applying all staged changes to the live state.
@@ -180,52 +223,6 @@ class ChangeSet(models.Model):
 
         if self.status != self.Status.DRAFT:
             raise ValueError(f"ChangeSet '{self.name}' is not in draft state.")
-
-        def _save_with_context(entity, model_cls):
-            """
-            Helper to save an entity within a database error capturing context.
-
-            This wraps the save operation with `capture_db_errors` to catch integrity
-            violations and transform them into descriptive `ValidationError`s that
-            include context about the root entity (Cluster or Group) being affected.
-
-            Args:
-                entity: The model instance to save.
-                model_cls: The Django model class of the entity.
-
-            Raises:
-                ValidationError: If a database integrity error occurs, enriched with entity context.
-            """
-            try:
-                with transaction.atomic():
-                    with capture_db_errors(model_class=model_cls):
-                        entity.save()
-            except ValidationError as e:
-                # Determine the root entity (Cluster or Group) to provide better context in the error message.
-                root = entity
-                if hasattr(entity, "cluster"):
-                    root = entity.cluster
-                elif hasattr(entity, "group"):
-                    root = entity.group
-
-                # Use the string representation of the root entity for the description.
-                root_desc = str(root)
-
-                # Enrich the ValidationError with more descriptive keys.
-                new_errors = {}
-                if hasattr(e, "message_dict"):
-                    for field, errs in e.message_dict.items():
-                        # Key format: "EntityClass 'EntityName' (field_name)"
-                        # This makes the error key unique per entity and highly descriptive for the user.
-                        new_key = f"{root.__class__.__name__} '{root_desc}' ({field})"
-                        new_errors[new_key] = errs
-                else:
-                    # Fallback if there is no message_dict (non-field errors).
-                    new_key = f"{root.__class__.__name__} '{root_desc}'"
-                    new_errors[new_key] = e.messages
-
-                # Re-raise as a new ValidationError, chaining from the original.
-                raise ValidationError(new_errors) from e
 
         top_level_models = [Group, Cluster]
         child_models = [ClusterTag, ClusterIntent, ClusterFleetLabel, ClusterData, GroupData]
@@ -299,16 +296,20 @@ class ChangeSet(models.Model):
                         draft_entity.is_locked = False
                         draft_entity.locked_by_changeset = None
                         draft_entity.draft_of = None
-                        _save_with_context(draft_entity, model)
+                        self._save_with_context(draft_entity, model)
 
                         # Promote all child entities of the newly live parent
                         for child_model in child_models:
                             fk_name = model.__name__.lower()
                             filter_kwargs = {fk_name: draft_entity, "is_live": False}
                             try:
-                                child_model.objects.filter(**filter_kwargs).update(is_live=True, changeset_id=None)
+                                child_entities = list(child_model.objects.filter(**filter_kwargs))
                             except FieldError:
-                                pass
+                                continue
+                            for child_entity in child_entities:
+                                child_entity.is_live = True
+                                child_entity.changeset_id = None
+                                self._save_with_context(child_entity, child_model)
 
                         # Cascade updates
                         if model == Group:
@@ -324,7 +325,7 @@ class ChangeSet(models.Model):
                         draft_entity.is_locked = False
                         draft_entity.locked_by_changeset = None
                         draft_entity.draft_of = None
-                        _save_with_context(draft_entity, model)
+                        self._save_with_context(draft_entity, model)
 
             # Process child entities (that were drafted directly, e.g. edits to children)
             for model in child_models:
@@ -332,7 +333,7 @@ class ChangeSet(models.Model):
                 for draft_entity in draft_entities:
                     draft_entity.is_live = True
                     draft_entity.changeset_id = None
-                    _save_with_context(draft_entity, model)
+                    self._save_with_context(draft_entity, model)
 
             self.status = self.Status.COMMITTED
             self.committed_at = timezone.now()
@@ -360,11 +361,12 @@ class ChangeSet(models.Model):
                     entity.locked_by_changeset = None
                     entity.save()
 
-            # Delete draft rows
-            for model in top_level_models:
+            # Delete draft child rows first (to satisfy DO_NOTHING foreign keys such as ClusterTag),
+            # then delete top-level draft rows in reverse dependency order (Cluster before Group).
+            for model in child_models:
                 model.objects.filter(changeset_id=self.id, is_live=False).delete()
 
-            for model in child_models:
+            for model in reversed(top_level_models):
                 model.objects.filter(changeset_id=self.id, is_live=False).delete()
 
             self.status = self.Status.ABANDONED
@@ -376,6 +378,8 @@ class ChangeSet(models.Model):
 
         from .models import Cluster, ClusterData, ClusterFleetLabel, ClusterIntent, ClusterTag, Group, GroupData
 
+        if self.pk == target_changeset.pk:
+            raise ValueError("Cannot coalesce a ChangeSet into itself.")
         if self.status != self.Status.DRAFT:
             raise ValueError(f"Source ChangeSet '{self.name}' is not in draft state.")
         if target_changeset.status != self.Status.DRAFT:
@@ -389,12 +393,33 @@ class ChangeSet(models.Model):
             for model in top_level_models:
                 model.objects.filter(locked_by_changeset=self).update(locked_by_changeset=target_changeset)
 
-            # Move draft entities
+            # Move draft entities with conflict and constraint checking
             for model in top_level_models:
-                model.objects.filter(changeset_id=self.id).update(changeset_id=target_changeset.id)
+                for draft_entity in model.objects.filter(changeset_id=self.id):
+                    if (
+                        model.objects.filter(
+                            changeset_id=target_changeset.id,
+                            is_live=False,
+                            name=draft_entity.name,
+                        )
+                        .exclude(pk=draft_entity.pk)
+                        .exists()
+                    ):
+                        raise ValidationError(
+                            {
+                                f"{model.__name__} '{draft_entity.name}' (name)": [
+                                    f"A draft {model.__name__.lower()} with name '{draft_entity.name}' "
+                                    f"already exists in target ChangeSet '{target_changeset.name}'."
+                                ]
+                            }
+                        )
+                    draft_entity.changeset_id = target_changeset
+                    self._save_with_context(draft_entity, model)
 
             for model in child_models:
-                model.objects.filter(changeset_id=self.id).update(changeset_id=target_changeset.id)
+                for child_entity in model.objects.filter(changeset_id=self.id):
+                    child_entity.changeset_id = target_changeset
+                    self._save_with_context(child_entity, model)
 
             self.delete()
 
@@ -812,12 +837,39 @@ class ClusterIntent(ChangeSetAwareChildEntity, DynamicValidatingModel):
     subnet_vlans = models.CharField(
         max_length=128,
         null=True,
+        blank=True,
         verbose_name="Secondary Network VLAN IDs",
         help_text="A comma-separated list of VLAN IDs for secondary networks (e.g., 500,2100,2500)",
     )
     recreate_on_delete = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def _normalize_subnet_vlans(self) -> None:
+        """Normalizes subnet_vlans so empty values become None and lists become comma-separated strings."""
+        if self.subnet_vlans is None:
+            return
+        if isinstance(self.subnet_vlans, (list, tuple, set)):
+            items = [str(item).strip() for item in self.subnet_vlans if item is not None and str(item).strip() != ""]
+            self.subnet_vlans = ",".join(items) if items else None
+        elif isinstance(self.subnet_vlans, str):
+            stripped = self.subnet_vlans.strip()
+            self.subnet_vlans = stripped if stripped else None
+
+    def clean_fields(self, exclude: list[str] | None = None) -> None:
+        """Normalizes fields before standard Django field validation."""
+        self._normalize_subnet_vlans()
+        super().clean_fields(exclude=exclude)
+
+    def clean(self, validator_assignment_model: type[models.Model] | None = None) -> None:
+        """Normalizes fields before running model and custom dynamic validation."""
+        self._normalize_subnet_vlans()
+        super().clean(validator_assignment_model=validator_assignment_model)
+
+    def save(self, *args, **kwargs) -> None:
+        """Normalizes fields before saving the ClusterIntent record."""
+        self._normalize_subnet_vlans()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.cluster.name
@@ -903,7 +955,7 @@ class CustomDataValidatingModel(models.Model):
             try:
                 validator.validate(self.value)
             except ValidationError as e:
-                logger.info("Validation error", e)
+                logger.info("Validation error: %s", e)
                 errors["field"].append(e)
 
         if errors:

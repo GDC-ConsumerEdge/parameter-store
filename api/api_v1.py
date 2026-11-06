@@ -32,27 +32,26 @@ from ninja.pagination import paginate as ninja_paginate
 from ninja.responses import codes_4xx
 from ninja.security import django_auth
 
-from parameter_store.models import CustomDataField, Tag
-
-from .api_changesets import changesets_router
-from .api_clusters import clusters_router
-from .api_groups import groups_router
-from .exc import validation_errors
-from .schema.request import (
+from api.api_changesets import changesets_router
+from api.api_clusters import clusters_router
+from api.api_groups import groups_router
+from api.exc import validation_errors
+from api.schema.request import (
     CustomDataFieldCreateRequest,
     CustomDataFieldUpdateRequest,
     TagCreateRequest,
     TagUpdateRequest,
 )
-from .schema.response import (
+from api.schema.response import (
     HealthResponse,
     MessageResponse,
     NameDescResponse,
     PingResponse,
 )
-from .utils import require_permissions
+from api.utils import require_permissions
+from parameter_store.models import CustomDataField, Tag
 
-api_v1 = NinjaAPI(title="Parameter Store API", version="1.1.0", docs_decorator=staff_member_required, auth=django_auth)
+api_v1 = NinjaAPI(title="Parameter Store API", version="3.1.0", docs_decorator=staff_member_required, auth=django_auth)
 
 api_v1.add_router("", changesets_router)
 api_v1.add_router("", groups_router)
@@ -69,8 +68,20 @@ def ping(request: HttpRequest):
     return {"status": "ok"}
 
 
-@api_v1.get("/status", response=HealthResponse, summary="Deep health check with database status", tags=["General"])
-@api_v1.get("/healthz", response=HealthResponse, summary="Deep health check with database status", tags=["General"])
+@api_v1.get(
+    "/status",
+    response=HealthResponse,
+    summary="Deep health check with database status",
+    tags=["General"],
+    operation_id="api_v1_status",
+)
+@api_v1.get(
+    "/healthz",
+    response=HealthResponse,
+    summary="Deep health check with database status",
+    tags=["General"],
+    operation_id="api_v1_healthz",
+)
 def health(request: HttpRequest):
     """
     A comprehensive health check that verifies database connectivity and ensures all migrations have been applied.

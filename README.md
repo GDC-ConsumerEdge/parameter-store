@@ -76,18 +76,16 @@ EPS organizes your fleet using a flexible hierarchical model.
 
 ### Custom Data: User-Defined Extensibility
 While EPS provides a prescriptive core, it is highly extensible to meet unique business needs. This custom data is often the primary focus for tools like the [Hydrator](https://github.com/GDC-ConsumerEdge/hydrator), which consumes both prescriptive and user-defined parameters to configure cluster workloads.
-*   **Custom Data Fields**: Define your own fields (e.g., `back-office-ip`, `local-manager-name`) via the Admin UI.
-*   **Entity Association**: Attach these custom fields to either **Clusters** or **Groups**. Group-level custom data is particularly powerful for defining parameters shared by all clusters within that group.
+
+Custom Data Fields (such as `back-office-ip` or `local-manager-name`) can be defined via the Admin UI or REST API (`POST /api/v1/data-fields`) and attached to either Clusters or Groups through the Admin UI or the Group and Cluster REST endpoints (`data`). Group-level custom data defines parameters shared by all clusters within that group.
 
 ### GDC Connected: Prescriptive Intent
 EPS is designed specifically for the **Google Distributed Cloud (GDC) Connected** retail use case.
-*   **Cluster Intent**: This provides the prescriptive technical parameters required by the [Cluster Provisioner](https://github.com/GDC-ConsumerEdge/automated-cluster-provisioner) to bootstrap new clusters.
-*   **Direct Mapping**: Fields like `unique_zone_id`, `cluster_ipv4_cidr`, and `sync_repo` map directly to GDC Connected requirements, ensuring that the data you manage in EPS is ready for downstream automation without translation.
+
+Cluster Intent provides the prescriptive technical parameters required by the [Cluster Provisioner](https://github.com/GDC-ConsumerEdge/automated-cluster-provisioner) to bootstrap new clusters. Fields like `unique_zone_id`, `cluster_ipv4_cidr`, `sync_repo`, and `subnet_vlans` map directly to GDC Connected requirements and can be created or partially updated via the Cluster REST API (`intent`).
 
 ### Fleet Labels & Tags
-Organize your clusters at scale.
-*   **Fleet Labels**: Key/value pairs (e.g., `region: northeast`) that allow you to group clusters for specific operations.
-*   **Tags**: String-based identifiers used for advanced filtering via the REST API.
+Organize your clusters at scale through the Admin UI or Cluster REST API (`fleet_labels` and `tags`). Fleet Labels are key-value pairs (such as `region: northeast`) that group clusters for specific operations, while Tags are registered string identifiers (`POST /api/v1/tags`) used for filtering.
 
 ### Data Validation
 Never deploy a bad config again. EPS uses **Validators** to enforce rules on field values. Whether it's a simple enum or complex logic, EPS ensures your data conforms to your requirements before it ever hits production.
@@ -438,11 +436,9 @@ files from `/workspace` into it, and then commits and pushes these files to a ne
 
 ### ChangeSet Workflow
 
-Parameter Store uses a **ChangeSet** system for all data modifications.
-- **Staging**: Every create, update, or delete is first staged as a "Draft" in a ChangeSet.
-- **Atomicity**: Multiple changes can be grouped and committed to the "Live" environment at once.
-- **Versioning**: Committing a change promotes the draft to live and preserves the previous version in the history trail.
-- **Error Handling**: During commit, if a database constraint is violated (e.g., a unique constraint), the system returns a detailed `422 Unprocessable Entity` response. Error keys are enriched to pinpoint the specific entity and field causing the issue, formatted as: `EntityClass 'EntityName' (field_name)`.
+Parameter Store uses a ChangeSet system for all data modifications. Every create, update, or delete is first staged as a draft in a ChangeSet so multiple modifications can be grouped and committed atomically to the live environment, preserving previous versions in the history trail. Entities staged for deletion in a ChangeSet cannot be updated or referenced as a cluster's group within that same ChangeSet (`409 Conflict`).
+
+During commit or ChangeSet coalesce operations, if a draft entity name or database constraint collides with existing target state, the transaction rolls back atomically and returns a `422 Unprocessable Entity` response with error keys formatted as `EntityClass 'EntityName' (field_name)`.
 
 For a detailed walkthrough, see the [User Guide](docs/user-guide.md).
 

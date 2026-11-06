@@ -84,22 +84,29 @@ http --session=admin POST "$HOST/changeset" name="Initial Setup"
 export CS_ID=1
 ```
 
-**2. Create a Group (Draft)**
+**2. Register a Tag and Data Field, then Create a Group (Draft)**
 ```bash
+http --session=admin POST "$HOST/tags" name="edge" description="Edge clusters"
+http --session=admin POST "$HOST/data-fields" name="manifest_version" description="Workload manifest version"
+
 http --session=admin POST "$HOST/group" \
     name="prod-group" \
     description="Production Environment" \
-    changeset_id=$CS_ID
+    data:='{"manifest_version": "v1.0.0"}' \
+    changeset_id:=$CS_ID
 ```
 
 **3. Create a Cluster (Draft)**
-Note that we can reference the `prod-group` even though it isn't live yet!
+Note that we can reference `prod-group` even though it is still a draft in the same ChangeSet, and attach `tags`, `fleet_labels`, `data`, and `intent` directly:
 ```bash
 http --session=admin POST "$HOST/cluster" \
     name="cluster-01" \
     group="prod-group" \
     description="Primary Cluster" \
-    changeset_id=$CS_ID
+    tags:='["edge"]' \
+    fleet_labels:='{"environment": "prod"}' \
+    data:='{"manifest_version": "v1.0.0"}' \
+    changeset_id:=$CS_ID
 ```
 *Copy the `id` (UUID) from the response.*
 ```bash

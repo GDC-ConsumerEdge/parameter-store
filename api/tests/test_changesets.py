@@ -453,3 +453,87 @@ def test_coalesce_changeset_api(permission_to_grant):
     assert not ChangeSet.objects.filter(id=source_cs.id).exists()
     # Target should remain
     assert ChangeSet.objects.filter(id=target_cs.id).exists()
+
+
+@pytest.mark.django_db
+def test_coalesce_changeset_conflict_returns_422() -> None:
+    """Tests that coalescing two ChangeSets with conflicting draft ClusterIntents returns 422 instead of 500."""
+    from parameter_store.models import Cluster, ClusterIntent, Group
+
+    user = setup_user_with_permission("api.params_api_update_changeset")
+    client = Client()
+    client.force_login(user)
+
+    group = Group.objects.create(name="coalesce-group", is_live=True)
+    source_cs = ChangeSet.objects.create(name="source-conflict-cs", created_by=user, status=ChangeSet.Status.DRAFT)
+    target_cs = ChangeSet.objects.create(name="target-conflict-cs", created_by=user, status=ChangeSet.Status.DRAFT)
+
+    c_source = Cluster.objects.create(name="c-source", group=group, is_live=False, changeset_id=source_cs)
+    ClusterIntent.objects.create(
+        cluster=c_source,
+        unique_zone_id="zone-collision",
+        location="us-central1",
+        machine_project_id="proj-1",
+        fleet_project_id="proj-1",
+        secrets_project_id="proj-1",
+        cluster_ipv4_cidr="10.0.0.0/24",
+        services_ipv4_cidr="10.0.1.0/24",
+        external_load_balancer_ipv4_address_pools="10.0.2.0/24",
+        sync_repo="https://example.com/repo.git",
+        git_token_secrets_manager_name="token",
+        cluster_version="1.0.0",
+        is_live=False,
+        changeset_id=source_cs,
+    )
+
+    c_target = Cluster.objects.create(name="c-target", group=group, is_live=False, changeset_id=target_cs)
+    ClusterIntent.objects.create(
+        cluster=c_target,
+        unique_zone_id="zone-collision",
+        location="us-central1",
+        machine_project_id="proj-2",
+        fleet_project_id="proj-2",
+        secrets_project_id="proj-2",
+        cluster_ipv4_cidr="10.1.0.0/24",
+        services_ipv4_cidr="10.1.1.0/24",
+        external_load_balancer_ipv4_address_pools="10.1.2.0/24",
+        sync_repo="https://example.com/repo.git",
+        git_token_secrets_manager_name="token",
+        cluster_version="1.0.0",
+        is_live=False,
+        changeset_id=target_cs,
+    )
+
+    response = client.post(
+        f"/api/v1/changeset/{source_cs.id}/coalesce",
+        data={"target_changeset_id": target_cs.id},
+        content_type="application/json",
+    )
+    assert response.status_code == 422
+    assert "Cluster 'c-source' (unique_zone_id)" in response.json()["message"]
+    assert ChangeSet.objects.filter(id=source_cs.id).exists()
+
+
+@pytest.mark.django_db
+def test_coalesce_changeset_duplicate_draft_name_returns_422() -> None:
+    """Tests that coalescing two ChangeSets containing drafts with the same entity name returns 422."""
+    from parameter_store.models import Group
+
+    user = setup_user_with_permission("api.params_api_update_changeset")
+    client = Client()
+    client.force_login(user)
+
+    source_cs = ChangeSet.objects.create(name="source-dup-name-cs", created_by=user, status=ChangeSet.Status.DRAFT)
+    target_cs = ChangeSet.objects.create(name="target-dup-name-cs", created_by=user, status=ChangeSet.Status.DRAFT)
+
+    Group.objects.create(name="dup-draft-group", is_live=False, changeset_id=source_cs)
+    Group.objects.create(name="dup-draft-group", is_live=False, changeset_id=target_cs)
+
+    response = client.post(
+        f"/api/v1/changeset/{source_cs.id}/coalesce",
+        data={"target_changeset_id": target_cs.id},
+        content_type="application/json",
+    )
+    assert response.status_code == 422
+    assert "Group 'dup-draft-group' (name)" in response.json()["message"]
+    assert ChangeSet.objects.filter(id=source_cs.id).exists()

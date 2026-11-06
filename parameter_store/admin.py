@@ -533,6 +533,13 @@ class ChangeSetAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
                     success_count += 1
                 except ValueError as e:
                     self.message_user(request, str(e), level="warning")
+                except ValidationError as e:
+                    self.message_user(
+                        request,
+                        f"Validation Error coalescing {changeset.name}: "
+                        f"{e.message_dict if hasattr(e, 'message_dict') else e.messages}",
+                        level="error",
+                    )
 
             if success_count > 0:
                 self.message_user(request, f"Coalesced {success_count} ChangeSets into '{target_changeset}'.")
