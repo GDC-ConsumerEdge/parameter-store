@@ -80,8 +80,10 @@ Once you have reviewed your edits, creations, and deletions, you can apply them 
 **Success!** All drafts in the ChangeSet are now Live. Previous versions are archived in the history.
 
 ### 5. Additional ChangeSet Actions
-*   **Abandon**: If a ChangeSet is no longer needed or contains errors, select it and choose **Abandon selected ChangeSets**. This deletes all associated drafts and unlocks the items for others.
-*   **Coalesce**: If you have multiple ChangeSets that should be merged into a single update, select them all and choose **Coalesce selected ChangeSets**. They will be merged into the first selected ChangeSet.
+
+If a ChangeSet is no longer needed or contains errors, select it and choose _Abandon selected ChangeSets_ (or `POST /api/v1/changeset/{id}/abandon`) to delete all associated drafts and unlock parent live entities.
+
+If multiple ChangeSets should be combined into a single update, select them and choose _Coalesce selected ChangeSets_ (or `POST /api/v1/changeset/{id}/coalesce`). If the source and target ChangeSets contain conflicting draft entity names or unique constraint values (such as duplicate draft `unique_zone_id` values), the coalesce operation rolls back without modifying either ChangeSet and returns `422 Unprocessable Entity` with entity-contextualized error keys.
 
 ---
 
@@ -189,7 +191,7 @@ curl -X PUT "http://localhost:8000/api/v1/cluster/id/a1b2c3d4-..." \
            "changeset_id": 42
          }'
 ```
-This action creates or updates the draft of the cluster within ChangeSet 42.
+This action creates or updates the draft of the cluster within ChangeSet 42. Note that an entity already staged for deletion (`DELETE /api/v1/group/...` or `DELETE /api/v1/cluster/...`) in a ChangeSet cannot be updated or assigned to a cluster in that same ChangeSet; attempting to do so returns `409 Conflict`.
 
 #### Step 3: Review Changes
 Retrieve a summary of all pending changes in the ChangeSet.

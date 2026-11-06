@@ -436,11 +436,9 @@ files from `/workspace` into it, and then commits and pushes these files to a ne
 
 ### ChangeSet Workflow
 
-Parameter Store uses a **ChangeSet** system for all data modifications.
-- **Staging**: Every create, update, or delete is first staged as a "Draft" in a ChangeSet.
-- **Atomicity**: Multiple changes can be grouped and committed to the "Live" environment at once.
-- **Versioning**: Committing a change promotes the draft to live and preserves the previous version in the history trail.
-- **Error Handling**: During commit, if a database constraint is violated (e.g., a unique constraint), the system returns a detailed `422 Unprocessable Entity` response. Error keys are enriched to pinpoint the specific entity and field causing the issue, formatted as: `EntityClass 'EntityName' (field_name)`.
+Parameter Store uses a ChangeSet system for all data modifications. Every create, update, or delete is first staged as a draft in a ChangeSet so multiple modifications can be grouped and committed atomically to the live environment, preserving previous versions in the history trail. Entities staged for deletion in a ChangeSet cannot be updated or referenced as a cluster's group within that same ChangeSet (`409 Conflict`).
+
+During commit or ChangeSet coalesce operations, if a draft entity name or database constraint collides with existing target state, the transaction rolls back atomically and returns a `422 Unprocessable Entity` response with error keys formatted as `EntityClass 'EntityName' (field_name)`.
 
 For a detailed walkthrough, see the [User Guide](docs/user-guide.md).
 
