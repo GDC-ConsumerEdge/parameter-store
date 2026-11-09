@@ -19,6 +19,10 @@ locals {
     var.app_fqdn,
     join(",", var.csrf_trusted_origins)
   ]))
+  eps_superusers = distinct(compact(concat(
+    var.superusers,
+    var.enable_gdc_order_sync ? [local.gdc_sync_account_id] : []
+  )))
 }
 
 resource "random_bytes" "eps-run" {
@@ -144,10 +148,10 @@ resource "google_cloud_run_v2_service" "eps" {
       }
 
       dynamic "env" {
-        for_each = length(var.superusers) > 0 ? [true] : []
+        for_each = length(local.eps_superusers) > 0 ? [true] : []
         content {
           name  = "PARAM_STORE_SUPERUSERS"
-          value = join(",", var.superusers)
+          value = join(",", local.eps_superusers)
         }
       }
 

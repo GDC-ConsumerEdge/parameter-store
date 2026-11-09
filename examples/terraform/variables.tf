@@ -274,3 +274,15 @@ variable "github_pat_token" {
   type        = string
   sensitive   = true
 }
+
+variable "enable_gdc_order_sync" {
+  description = "Whether to provision an optional Service Account and IAM bindings for syncing GDC hardware orders into EPS. Disabled by default for UI-only deployments."
+  type        = bool
+  default     = false
+}
+
+variable "gdc_order_project_ids" {
+  description = "Optional list of GDC GCP project IDs on which to grant roles/gdchardwaremanagement.reader to the GDC sync Service Account (when enable_gdc_order_sync is true). Leave empty if cross-project IAM is managed externally."
+  type        = list(string)
+  default     = []
+}
