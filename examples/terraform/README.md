@@ -35,3 +35,11 @@ a preconfigured environment from which to load data through EPS into the Cloud S
 
 The Google Cloud Build Service Account email (which looks like `gcb-eps-data-loader@my-project.iam.gserviceaccount.com`) requires
 read access to the Artifact Registry location of the EPS image.  Consider using [Artifact Registry Reader](https://cloud.google.com/artifact-registry/docs/access-control#roles).
+
+### Optional GDC Order Sync Service Account
+
+File: `terraform/optional-gdc-order-sync.tf` ([here](./optional-gdc-order-sync.tf))
+
+Disabled by default (`enable_gdc_order_sync = false`) so UI-only EPS deployments do not create extra service accounts or cross-project IAM bindings.
+
+When `enable_gdc_order_sync = true`, Terraform provisions a dedicated Google Service Account (`<app_name_short>-gdc-sync@<eps_project_id>.iam.gserviceaccount.com`), grants it IAP/Cloud Run invocation and self-signed JWT permissions (`roles/iam.serviceAccountTokenCreator`), and adds its username to `PARAM_STORE_SUPERUSERS` so it can sync GDC orders into EPS via the REST API. If the Terraform service account also has IAM admin access on the target GDC project(s), set `gdc_order_project_ids` to automatically bind `roles/gdchardwaremanagement.reader`; otherwise leave `gdc_order_project_ids = []` and grant `roles/gdchardwaremanagement.reader` externally to the `gdc_sync_service_account_email` output.

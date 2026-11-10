@@ -82,8 +82,11 @@ resource "google_project_iam_member" "iap-run" {
 
 data "google_iam_policy" "admin" {
   binding {
-    role    = "roles/iap.httpsResourceAccessor"
-    members = var.eps_allowed_accessors
+    role = "roles/iap.httpsResourceAccessor"
+    members = distinct(concat(
+      var.eps_allowed_accessors,
+      var.enable_gdc_order_sync ? ["serviceAccount:${google_service_account.gdc_sync[0].email}"] : []
+    ))
   }
 }
 
@@ -91,7 +94,8 @@ resource "google_iap_web_iam_policy" "policy" {
   project     = var.eps_project_id
   policy_data = data.google_iam_policy.admin.policy_data
   depends_on = [
-    google_project_service.default
+    google_project_service.default,
+    time_sleep.wait_for_gdc_sync_gsa,
   ]
 }
 
