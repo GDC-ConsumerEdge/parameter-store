@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.1.0](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v4.0.0...v4.1.0) (2026-11-10)
+
+
+### Features
+
+* **terraform:** add optional GDC order sync service account ([#149](https://github.com/GDC-ConsumerEdge/parameter-store/issues/149)) ([1b67918](https://github.com/GDC-ConsumerEdge/parameter-store/commit/1b679188f6f83308eebd1394ce3a00feb423f367))
+
 ## [4.0.0](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v3.0.0...v4.0.0) (2026-11-06)
 
 
