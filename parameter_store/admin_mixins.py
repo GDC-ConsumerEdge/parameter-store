@@ -15,12 +15,14 @@
 #
 ###############################################################################
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 import unfold.admin as uadmin
 from django.contrib import admin, messages
+from django.contrib.admin.utils import unquote
+from django.core.exceptions import PermissionDenied
 from django.db import models, transaction
-from django.http import HttpResponseRedirect
+from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import redirect
 from django.urls import reverse
 
@@ -45,6 +47,45 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
         if "delete_selected" in actions:
             del actions["delete_selected"]
         return actions
+
+    def has_delete_permission(
+        self,
+        request: HttpRequest,
+        obj: Optional[models.Model] = None,
+    ) -> bool:
+        """Checks delete permission for live entities or change/delete permission for drafts.
+
+        Args:
+            request: Incoming HTTP request.
+            obj: Target model instance, or None for model-level checks.
+
+        Returns:
+            True if the user is authorized to stage a live deletion or discard a draft.
+        """
+        if obj is not None and not getattr(obj, "is_live", True):
+            return super().has_delete_permission(request, obj) or self.has_change_permission(request, obj)
+        return super().has_delete_permission(request, obj)
+
+    def get_deleted_objects(
+        self,
+        objs: list[models.Model],
+        request: HttpRequest,
+    ) -> tuple[list[Any], dict[Any, Any], set[str], list[Any]]:
+        """Computes nested objects for deletion and clears child permission gates for authorized drafts.
+
+        Args:
+            objs: Model instances targeted for deletion.
+            request: Incoming HTTP request.
+
+        Returns:
+            Tuple of (deleted_objects, model_count, perms_needed, protected).
+        """
+        deleted_objects, model_count, perms_needed, protected = super().get_deleted_objects(objs, request)
+        non_null_objs = [obj for obj in objs if obj is not None]
+        if non_null_objs and all(not getattr(obj, "is_live", True) for obj in non_null_objs):
+            if all(self.has_delete_permission(request, obj) for obj in non_null_objs):
+                perms_needed = set()
+        return deleted_objects, model_count, perms_needed, protected
 
     def change_view(self, request, object_id, form_url="", extra_context=None):
         if object_id:
@@ -113,8 +154,8 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
     # The `stage_for_deletion_action` is for bulk actions on the list view.
     # The `delete_model` and `delete_view` methods handle single object deletions.
 
-    @admin.action(description="Create Draft & Edit")
-    def create_draft_action(self, request, queryset) -> Optional[HttpResponseRedirect]:
+    @admin.action(description="Create Draft & Edit", permissions=["change"])
+    def create_draft_action(self, request: HttpRequest, queryset: models.QuerySet) -> Optional[HttpResponseRedirect]:
         """Creates a draft copy of a live entity within a changeset context.
 
         This Django admin action is intended for a single, live, unlocked entity. It will
@@ -127,12 +168,17 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
 
         Returns:
             An HttpResponseRedirect to the new draft's change page on success, otherwise None.
+
+        Raises:
+            PermissionDenied: If the user lacks change permission for the selected entity.
         """
         if queryset.count() != 1:
             self.message_user(request, "Please select exactly one entity to create a draft.", level=messages.WARNING)
             return
 
         instance = queryset.first()
+        if not self.has_change_permission(request, instance):
+            raise PermissionDenied
 
         if not instance.is_live:
             self.message_user(request, "You can only create a draft from a live entity.", level=messages.WARNING)
@@ -287,14 +333,26 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
             )
         return super().response_change(request, obj)
 
-    @admin.action(description="Delete / Stage for Deletion")
-    def stage_for_deletion_action(self, request, queryset):
-        """Stages selected live entities for deletion or deletes drafts."""
+    @admin.action(description="Delete / Stage for Deletion", permissions=["change", "delete"])
+    def stage_for_deletion_action(self, request: HttpRequest, queryset: models.QuerySet) -> None:
+        """Stages selected live entities for deletion or deletes drafts.
+
+        Args:
+            request: Incoming HTTP request.
+            queryset: Selected model instances from the changelist.
+        """
         changeset = None
 
         success_count = 0
         with transaction.atomic():
             for obj in queryset:
+                if not self.has_delete_permission(request, obj):
+                    self.message_user(
+                        request,
+                        f"Permission denied: cannot delete or stage {obj} for deletion.",
+                        level=messages.ERROR,
+                    )
+                    continue
                 if obj.is_live:
                     if obj.is_locked:
                         self.message_user(request, f"Skipping locked entity: {obj}", level=messages.WARNING)
@@ -319,16 +377,32 @@ class ChangeSetAwareAdminMixin(uadmin.ModelAdmin):
         if success_count > 0:
             self.message_user(request, f"Successfully processed {success_count} items.", level=messages.SUCCESS)
 
-    def delete_view(self, request, object_id, extra_context=None):
-        """
-        Overrides the default delete view to handle changeset-aware staging for deletion.
-        This prevents the standard 'deleted successfully' message from appearing when
-        we only staged the item.
+    def delete_view(
+        self,
+        request: HttpRequest,
+        object_id: str,
+        extra_context: Optional[dict[str, Any]] = None,
+    ) -> HttpResponse:
+        """Stages live entities for deletion in the active ChangeSet on POST.
+
+        Args:
+            request: Incoming HTTP request.
+            object_id: Primary key of the target entity from the URL path.
+            extra_context: Optional template context dictionary.
+
+        Returns:
+            Redirect to the model changelist when staging a live entity on POST, or the
+            upstream delete view response otherwise.
+
+        Raises:
+            PermissionDenied: If the user lacks permission to stage a live deletion or discard a draft.
         """
         if request.method == "POST":
-            obj = self.get_object(request, object_id)
+            obj = self.get_object(request, unquote(object_id))
+            if not self.has_delete_permission(request, obj):
+                raise PermissionDenied
             if obj and obj.is_live:
-                # Bypass standard deletion logic for live objects
+                # Stage live entities without emitting Django's hard-deletion flash message.
                 self.delete_model(request, obj)
                 # Redirect to the changelist (or wherever successful deletion goes)
                 return HttpResponseRedirect(

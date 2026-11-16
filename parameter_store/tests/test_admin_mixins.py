@@ -255,3 +255,64 @@ def test_editing_or_deleting_existing_draft_does_not_create_spurious_changeset(l
     cluster_admin.delete_model(req, svc_draft)
     assert not ChangeSet.objects.filter(created_by=user).exists()
     assert not Cluster.objects.filter(pk=svc_draft.pk).exists()
+
+
+def test_changelist_actions_enforce_viewer_editor_and_deleter_permissions(live_objects) -> None:
+    """Verifies that create_draft_action and stage_for_deletion_action enforce persona permissions."""
+    from django.contrib.auth.models import Permission
+    from django.contrib.messages.storage.fallback import FallbackStorage
+    from django.core.exceptions import PermissionDenied
+    from django.test import RequestFactory
+
+    from parameter_store.admin import param_admin_site
+
+    _, live_cluster = live_objects
+    cluster_admin = ClusterAdmin(Cluster, param_admin_site)
+    rf = RequestFactory()
+
+    viewer = User.objects.create_user("viewer", "viewer@example.com", "password", is_staff=True)
+    view_perm = Permission.objects.get(codename="view_cluster", content_type__app_label="parameter_store")
+    viewer.user_permissions.add(view_perm)
+
+    editor = User.objects.create_user("editor_action", "editor_action@example.com", "password", is_staff=True)
+    change_perm = Permission.objects.get(codename="change_cluster", content_type__app_label="parameter_store")
+    editor.user_permissions.add(view_perm, change_perm)
+
+    # 1. Viewer sees neither create_draft_action nor stage_for_deletion_action in get_actions
+    req_viewer = rf.get("/")
+    req_viewer.user = viewer
+    req_viewer.session = {}
+    viewer_actions = cluster_admin.get_actions(req_viewer)
+    assert "create_draft_action" not in viewer_actions
+    assert "stage_for_deletion_action" not in viewer_actions
+
+    # Direct invocation of create_draft_action by viewer raises PermissionDenied
+    with pytest.raises(PermissionDenied):
+        cluster_admin.create_draft_action(req_viewer, Cluster.objects.filter(pk=live_cluster.pk))
+
+    # 2. Editor sees both actions, can create a draft and discard a draft, but cannot stage a live cluster for deletion
+    req_editor = rf.post("/")
+    req_editor.user = editor
+    req_editor.session = {}
+    setattr(req_editor, "_messages", FallbackStorage(req_editor))
+    editor_actions = cluster_admin.get_actions(req_editor)
+    assert "create_draft_action" in editor_actions
+    assert "stage_for_deletion_action" in editor_actions
+
+    # Editor attempting to stage a LIVE cluster for deletion via stage_for_deletion_action is denied
+    cluster_admin.stage_for_deletion_action(req_editor, Cluster.objects.filter(pk=live_cluster.pk))
+    live_cluster.refresh_from_db()
+    assert live_cluster.is_locked is False
+    assert not Cluster.objects.filter(is_live=False).exists()
+
+    # Editor creating a draft and then discarding that draft via stage_for_deletion_action succeeds
+    redirect_resp = cluster_admin.create_draft_action(req_editor, Cluster.objects.filter(pk=live_cluster.pk))
+    assert redirect_resp is not None and redirect_resp.status_code == 302
+    live_cluster.refresh_from_db()
+    assert live_cluster.is_locked is True
+    draft_cluster = Cluster.objects.get(draft_of=live_cluster, is_live=False)
+
+    cluster_admin.stage_for_deletion_action(req_editor, Cluster.objects.filter(pk=draft_cluster.pk))
+    assert not Cluster.objects.filter(pk=draft_cluster.pk).exists()
+    live_cluster.refresh_from_db()
+    assert live_cluster.is_locked is False
