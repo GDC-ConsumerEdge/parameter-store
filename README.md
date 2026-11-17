@@ -645,6 +645,10 @@ uv run pytest -vv parameter_store/tests/test_changeset_actions.py
 uv run pytest -vv -k "test_commit_changeset"
 ```
 
+## Release management
+
+Releases are automated with `release-please` via [.github/workflows/release-please.yaml](.github/workflows/release-please.yaml) and [release-please-config.json](release-please-config.json). Merging Conventional Commits to `main` opens or updates a release pull request that bumps the version in lockstep across [pyproject.toml](pyproject.toml), [.release-please-manifest.json](.release-please-manifest.json), [parameter_store/settings.py](parameter_store/settings.py), and [api/api_v1.py](api/api_v1.py) using `x-release-please-version` markers.
+
 ## Additional Documentation
 
 Please see [docs](./docs) for more documentation:
