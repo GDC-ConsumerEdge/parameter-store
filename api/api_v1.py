@@ -53,7 +53,7 @@ from parameter_store.models import CustomDataField, Tag
 
 api_v1 = NinjaAPI(
     title="Parameter Store API",
-    version="4.0.0",  # x-release-please-version
+    version="4.1.0",  # x-release-please-version
     docs_decorator=staff_member_required,
     auth=django_auth,
 )

@@ -1,5 +1,19 @@
 # Changelog
 
+## [4.1.0](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v4.0.0...v4.1.0) (2026-11-17)
+
+
+### Features
+
+* **terraform:** add optional GDC order sync service account ([#149](https://github.com/GDC-ConsumerEdge/parameter-store/issues/149)) ([1b67918](https://github.com/GDC-ConsumerEdge/parameter-store/commit/1b679188f6f83308eebd1394ce3a00feb423f367))
+
+
+### Bug Fixes
+
+* **admin:** enforce delete and change permissions in ChangeSetAwareAdminMixin ([#151](https://github.com/GDC-ConsumerEdge/parameter-store/issues/151)) ([defc0ff](https://github.com/GDC-ConsumerEdge/parameter-store/commit/defc0ffde56f274554f18b8fa1fbdaae6fb459ee))
+* **deps:** upgrade dependencies to Django 6.1.3 and Unfold 0.110.1 ([#152](https://github.com/GDC-ConsumerEdge/parameter-store/issues/152)) ([23ac725](https://github.com/GDC-ConsumerEdge/parameter-store/commit/23ac725ece710cc2dd00ffc4ddd3996c681ce4f4))
+* **release:** unify EPS, API, and package versions in release-please ([#153](https://github.com/GDC-ConsumerEdge/parameter-store/issues/153)) ([d96bd77](https://github.com/GDC-ConsumerEdge/parameter-store/commit/d96bd77f83d32cbacc0e807854c9452b3c27b602))
+
 ## [4.0.0](https://github.com/GDC-ConsumerEdge/parameter-store/compare/v3.0.0...v4.0.0) (2026-11-06)
 
 
