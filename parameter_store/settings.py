@@ -53,7 +53,9 @@ SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "django-insecure-%yzr3^+)s&c2$4
 
 ALLOWED_HOSTS = ["*"]
 
-CSRF_TRUSTED_ORIGINS = ["https://" + x.strip() for x in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",")]
+CSRF_TRUSTED_ORIGINS = [
+    f"https://{x.strip()}" for x in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",") if x.strip()
+]
 
 # Application definition
 INSTALLED_APPS = [
@@ -245,9 +247,6 @@ UNFOLD = {
         # Enabling support for Unfold Tailwind customization:
         # https://unfoldadmin.com/docs/styles-scripts/customizing-tailwind/
         lambda request: static("css/styles.css"),
-    ],
-    "USER_LINKS": [
-        {"template": "unfold/helpers/userlinks.html"},
     ],
     "SITE_HEADER": "Parameter Store",
     "SITE_TITLE": "Parameter Store",

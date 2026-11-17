@@ -7,8 +7,8 @@ line-length  = 120
 indent-width = 4
 
 [lint]
-  # Sort imports
-  extend-select = ["I"]
+  # Preserve standard pycodestyle/Pyflakes rules plus import sorting across Ruff versions
+  select = ["E4", "E7", "E9", "F", "I"]
 
   # Allow fix for all enabled rules (when `--fix`) is provided.
   fixable   = ["ALL"]

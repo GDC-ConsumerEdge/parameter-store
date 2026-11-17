@@ -25,6 +25,7 @@ from django.contrib.auth.models import Group as AuthGroupModel
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from guardian.admin import GuardedModelAdmin
+from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 
 from .admin_inlines import (
     ClusterDataInline,
@@ -549,7 +550,9 @@ class ChangeSetAdmin(GuardedModelAdmin, uadmin.ModelAdmin):
 
 @admin.register(User, site=param_admin_site)
 class UserAdmin(BaseUserAdmin, uadmin.ModelAdmin):
-    pass
+    form = UserChangeForm
+    add_form = UserCreationForm
+    change_password_form = AdminPasswordChangeForm
 
 
 @admin.register(AuthGroupModel, site=param_admin_site)
