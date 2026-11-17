@@ -49,7 +49,7 @@ When you add or edit a Group or Cluster, the system automatically handles the ve
 Just like adding a cluster, this creates a **Draft** copy. The original "Live" cluster remains unchanged until you Commit.
 
 ### 3. Deleting Data
-Deleting items is a safe, staged process.
+Deleting items is a safe, staged process. Staging a live Cluster or Group for deletion requires the corresponding model delete permission (`delete_cluster` or `delete_group`), while discarding an uncommitted draft requires either change or delete permissions on the model.
 
 1.  Select the items you want to delete in the list view, or click **Delete** on a specific item page.
 2.  Confirm the deletion.

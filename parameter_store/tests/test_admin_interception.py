@@ -131,3 +131,111 @@ def test_delete_view_allows_draft_deletion(group_admin, rf, user):
     assert response.status_code == 302
     # Verify draft is actually deleted
     assert not Group.objects.filter(pk=draft.pk).exists()
+
+
+def test_delete_view_denies_zero_permission_staff_user_on_post(group_admin: MockGroupAdmin, rf: RequestFactory) -> None:
+    """Verifies that a zero-permission staff user is denied on POST to delete_view."""
+    from django.contrib.auth.models import Permission
+    from django.core.exceptions import PermissionDenied
+    from django.test import Client
+
+    from parameter_store.models import Cluster, ClusterData, CustomDataField
+
+    admin_user = User.objects.create_superuser("super", "super@example.com", "password")
+    admin_cs = ChangeSet.objects.create(name="Admin Draft CS", created_by=admin_user)
+    live_group = Group.objects.create(name="Protected Live Group", is_live=True)
+    live_cluster = Cluster.objects.create(name="Protected Live Cluster", group=live_group, is_live=True)
+
+    attacker = User.objects.create_user("lowpriv", "lowpriv@example.com", "password", is_staff=True)
+    assert list(attacker.get_all_permissions()) == []
+
+    # Direct view call with attacker's session pointing at admin's ChangeSet
+    request = rf.post(reverse("param_admin:parameter_store_group_delete", args=[live_group.pk]), data={"post": "yes"})
+    request.user = attacker
+    request.session = {"active_changeset_id": admin_cs.id}
+    setattr(request, "_messages", FallbackStorage(request))
+
+    with pytest.raises(PermissionDenied):
+        group_admin.delete_view(request, str(live_group.pk))
+
+    # Non-existent object_id also raises PermissionDenied without leaking existence
+    with pytest.raises(PermissionDenied):
+        group_admin.delete_view(request, "999999")
+
+    # Full HTTP client verification across both GET and POST for Cluster and Group
+    http_client = Client()
+    http_client.force_login(attacker)
+
+    for model_name, pk in [("cluster", live_cluster.pk), ("group", live_group.pk)]:
+        delete_url = reverse(f"param_admin:parameter_store_{model_name}_delete", args=[pk])
+        get_resp = http_client.get(delete_url)
+        assert get_resp.status_code == 403
+
+        post_resp = http_client.post(delete_url, data={"post": "yes"})
+        assert post_resp.status_code == 403
+
+    live_group.refresh_from_db()
+    live_cluster.refresh_from_db()
+    assert live_group.is_locked is False
+    assert live_cluster.is_locked is False
+    assert not Group.objects.filter(is_live=False).exists()
+    assert not Cluster.objects.filter(is_live=False).exists()
+    assert not ChangeSet.objects.filter(created_by=attacker).exists()
+
+    # Verify CSRF enforcement rejects tokenless POST requests
+    csrf_client = Client(enforce_csrf_checks=True)
+    csrf_client.force_login(admin_user)
+    csrf_resp = csrf_client.post(
+        reverse("param_admin:parameter_store_cluster_delete", args=[live_cluster.pk]),
+        data={"post": "yes"},
+    )
+    assert csrf_resp.status_code == 403
+
+    # Verify Editor (view + change, no delete) cannot stage live deletion but CAN discard a draft
+    editor = User.objects.create_user("editor", "editor@example.com", "password", is_staff=True)
+    for codename in ["view_cluster", "add_cluster", "change_cluster", "view_group", "change_group"]:
+        perm = Permission.objects.get(codename=codename, content_type__app_label="parameter_store")
+        editor.user_permissions.add(perm)
+
+    editor_client = Client()
+    editor_client.force_login(editor)
+
+    # Editor POST to live cluster delete_view -> 403 Forbidden
+    live_del_url = reverse("param_admin:parameter_store_cluster_delete", args=[live_cluster.pk])
+    assert editor_client.get(live_del_url).status_code == 403
+    assert editor_client.post(live_del_url, data={"post": "yes"}).status_code == 403
+    live_cluster.refresh_from_db()
+    assert live_cluster.is_locked is False
+
+    # Editor creates a draft with child data, then discards that draft via delete_view
+    editor_cs = ChangeSet.objects.create(name="Editor CS", created_by=editor)
+    draft_cluster = live_cluster.create_draft(editor_cs)
+    live_cluster.is_locked = True
+    live_cluster.locked_by_changeset = editor_cs
+    live_cluster.save()
+    cdf = CustomDataField.objects.create(name="editor_field")
+    ClusterData.objects.create(
+        cluster=draft_cluster, field=cdf, value="draft_val", is_live=False, changeset_id=editor_cs
+    )
+
+    draft_del_url = reverse("param_admin:parameter_store_cluster_delete", args=[draft_cluster.pk])
+    assert editor_client.get(draft_del_url).status_code == 200
+    draft_post_resp = editor_client.post(draft_del_url, data={"post": "yes"})
+    assert draft_post_resp.status_code == 302
+    assert not Cluster.objects.filter(pk=draft_cluster.pk).exists()
+    live_cluster.refresh_from_db()
+    assert live_cluster.is_locked is False
+
+    # Verify user granted delete_cluster permission succeeds in staging live cluster for deletion
+    deleter = User.objects.create_user("deleter", "deleter@example.com", "password", is_staff=True)
+    for codename in ["view_cluster", "delete_cluster"]:
+        perm = Permission.objects.get(codename=codename, content_type__app_label="parameter_store")
+        deleter.user_permissions.add(perm)
+
+    deleter_client = Client()
+    deleter_client.force_login(deleter)
+    del_resp = deleter_client.post(live_del_url, data={"post": "yes"})
+    assert del_resp.status_code == 302
+    live_cluster.refresh_from_db()
+    assert live_cluster.is_locked is True
+    assert Cluster.objects.filter(draft_of=live_cluster, is_pending_deletion=True).exists()
