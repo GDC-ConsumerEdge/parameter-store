@@ -51,7 +51,12 @@ from api.schema.response import (
 from api.utils import require_permissions
 from parameter_store.models import CustomDataField, Tag
 
-api_v1 = NinjaAPI(title="Parameter Store API", version="3.1.0", docs_decorator=staff_member_required, auth=django_auth)
+api_v1 = NinjaAPI(
+    title="Parameter Store API",
+    version="4.0.0",  # x-release-please-version
+    docs_decorator=staff_member_required,
+    auth=django_auth,
+)
 
 api_v1.add_router("", changesets_router)
 api_v1.add_router("", groups_router)

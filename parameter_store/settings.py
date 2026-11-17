@@ -38,7 +38,7 @@ from django.utils.translation import gettext_lazy as _
 from parameter_store.customerconfig import img_path, primary_color_hex
 from parameter_store.util import str_to_bool
 
-version = "v1.0.0"
+version = "v4.0.0"  # x-release-please-version
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
